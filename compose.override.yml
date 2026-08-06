@@ -1,0 +1,43 @@
+# Auto-merged by Compose. Dev-only: published ports and hot reload.
+# Nothing here should be needed in CI or production.
+
+services:
+  db:
+    ports:
+      - "5432:5432"
+
+  redis:
+    ports:
+      - "6379:6379"
+
+  api:
+    ports:
+      - "8000:8000"
+    command: ["fastapi", "dev", "apps/api/src/api/main.py", "--host", "0.0.0.0", "--port", "8000"]
+    develop:
+      watch:
+        # Do NOT add a bind mount for these paths — a bind mount and a watch sync
+        # fight over the same directory.
+        - action: sync
+          path: ./apps
+          target: /app/apps
+          ignore: [__pycache__/]
+        - action: sync
+          path: ./packages
+          target: /app/packages
+          ignore: [__pycache__/]
+        - action: rebuild
+          path: ./uv.lock
+
+  worker:
+    develop:
+      watch:
+        # Celery has no reloader, so sync then bounce the process.
+        - action: sync+restart
+          path: ./apps
+          target: /app/apps
+          ignore: [__pycache__/]
+        - action: sync+restart
+          path: ./packages
+          target: /app/packages
+          ignore: [__pycache__/]

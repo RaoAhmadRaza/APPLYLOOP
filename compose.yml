@@ -1,0 +1,95 @@
+# `make up` boots this whole stack. No `version:` key — removed from the spec.
+name: applyloop
+
+x-app: &app
+  build:
+    context: .
+    dockerfile: infra/Dockerfile
+  env_file:
+    - path: .env
+      required: true
+  environment:
+    # Overrides .env: inside the network the hosts are service names, not localhost.
+    DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:?set POSTGRES_USER in .env}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/${POSTGRES_DB:?set POSTGRES_DB in .env}
+    REDIS_URL: redis://redis:6379/0
+
+services:
+  db:
+    image: pgvector/pgvector:0.8.6-pg18-trixie
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB in .env}
+    volumes:
+      # Postgres 18 moved PGDATA to a version-scoped path. Mounting the historical
+      # /var/lib/postgresql/data here means the volume is silently ignored and every
+      # `compose down` loses the database. Do not "fix" this to the old path.
+      - db-data:/var/lib/postgresql
+    healthcheck:
+      # -U and -d matter: a bare pg_isready reports ready during initdb's temporary
+      # internal server, so the migrate job would start against the wrong cluster.
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    # No persistence: this is a dev broker, there is nothing worth fsyncing.
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # One-shot. Exactly one service runs migrations: two racing `alembic upgrade head`
+  # both take ACCESS EXCLUSIVE on alembic_version, and while that blocks rather than
+  # corrupts, it presents as a mystifying startup stall.
+  # (Compose >= 5.3 offers `pre_start:` for this; installed here is 5.0.2.)
+  migrate:
+    <<: *app
+    restart: "no"
+    command: ["alembic", "-c", "packages/db/alembic.ini", "upgrade", "head"]
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    <<: *app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      # Points at /health, which touches nothing. Aiming a container healthcheck at a
+      # DB-backed endpoint means a slow query gets the container killed, which makes
+      # the slow query worse.
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  worker:
+    <<: *app
+    restart: unless-stopped
+    # Default concurrency is CPU count — 8 forked Python processes on an 8 GB machine.
+    command: ["celery", "-A", "workers.app", "worker", "-l", "info", "--concurrency", "2"]
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  db-data:
