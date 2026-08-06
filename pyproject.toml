@@ -1,0 +1,73 @@
+# APPLYLOOP — uv workspace root.
+#
+# Virtual root: no [project] table, so nothing is built from here. Members live in
+# apps/* and packages/*, share one lockfile and one .venv, and depend on each other
+# via [tool.uv.sources] below.
+#
+# Dependency direction is one-way and enforced by CLAUDE.md §3.1:
+#   api -> db, schemas   |   workers -> db, schemas   |   db -> schemas   |   schemas -> nothing
+# api must never depend on workers; it enqueues by task name instead.
+
+[tool.uv.workspace]
+members = ["apps/*", "packages/*"]
+
+[tool.uv.sources]
+db = { workspace = true }
+schemas = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    # No [redis] extra: it requires redis>=7 while Celery's kombu[redis] caps
+    # redis<6.5. The Redis test container uses the generic DockerContainer instead,
+    # which carries no client-version constraint.
+    "testcontainers[postgres]>=4.15.0",
+    "httpx>=0.28.1",
+    "asgi-lifespan>=2.1.0",
+    "ruff>=0.16.1",
+    "mypy>=2.3.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+asyncio_default_test_loop_scope = "function"
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+extend-exclude = ["packages/db/src/db/migrations/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "N", "C4", "PTH"]
+
+[tool.mypy]
+python_version = "3.13"
+files = ["apps", "packages", "tests"]
+check_untyped_defs = true
+disallow_untyped_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_unreachable = true
+
+[[tool.mypy.overrides]]
+# Alembic's generated scripts are templated, not hand-typed.
+module = "db.migrations.*"
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+# Celery ships no py.typed marker.
+module = ["celery.*", "asgi_lifespan.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# The CRUD router factory builds endpoint signatures from runtime values —
+# `payload: create_schema` where create_schema is a parameter. FastAPI requires the
+# real class in the annotation, and mypy has no way to model that. This is the
+# narrowest possible exemption: one module, whose job is precisely this.
+module = "api.crud"
+ignore_errors = true
