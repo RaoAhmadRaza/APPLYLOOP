@@ -1,0 +1,16 @@
+[project]
+name = "workers"
+version = "0.1.0"
+description = "Celery workers, one package per pipeline stage."
+requires-python = ">=3.13"
+dependencies = [
+    # 5.6.3 declares Python support up to 3.13 only; 3.14 is CI-only "initial support".
+    "celery[redis]>=5.6.3",
+    "pydantic-settings>=2.14.2",
+    "db",
+    "schemas",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
