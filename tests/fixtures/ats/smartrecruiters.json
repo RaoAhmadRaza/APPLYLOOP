@@ -1,0 +1,171 @@
+{
+  "offset": 0,
+  "limit": 3,
+  "totalFound": 2,
+  "content": [
+    {
+      "id": "744000133907678",
+      "name": "Sr. Manager",
+      "uuid": "267d47c7-29af-4c8f-a19d-c112895329df",
+      "jobAdId": "2132a049-8eb1-4bef-bc4c-13b6d21c05e3",
+      "defaultJobAd": true,
+      "refNumber": "REF97395W",
+      "company": {
+        "identifier": "Visa",
+        "name": "Visa"
+      },
+      "releasedDate": "2026-06-24T10:00:11.853Z",
+      "location": {
+        "city": "Austin",
+        "region": "TX",
+        "country": "us",
+        "remote": false,
+        "hybrid": false,
+        "latitude": "30.267153",
+        "longitude": "-97.7430608",
+        "fullLocation": "Austin, TX, United States"
+      },
+      "industry": {
+        "id": "it_and_services",
+        "label": "Information Technology And Services"
+      },
+      "department": {
+        "id": "868639",
+        "label": "Software Development/Engineering"
+      },
+      "function": {
+        "id": "engineering",
+        "label": "Engineering"
+      },
+      "typeOfEmployment": {
+        "id": "permanent",
+        "label": "Full-time"
+      },
+      "experienceLevel": {
+        "id": "mid_senior_level",
+        "label": "Mid-Senior Level"
+      },
+      "customField": [
+        {
+          "fieldId": "58b7e4d1e4b0885c92cd9895",
+          "fieldLabel": "Department",
+          "valueId": "868639",
+          "valueLabel": "Software Development/Engineering"
+        },
+        {
+          "fieldId": "COUNTRY",
+          "fieldLabel": "Country/Region",
+          "valueId": "us",
+          "valueLabel": "United States"
+        },
+        {
+          "fieldId": "5bd89e45b1f60b7aea922c5b",
+          "fieldLabel": "Visa Inc. or Visa in Europe job?",
+          "valueId": "3a568048-d1c9-4741-be56-36b4f3addff7",
+          "valueLabel": "Visa Inc."
+        },
+        {
+          "fieldId": "58914413e4b04f807e6ee84f",
+          "fieldLabel": "Brands",
+          "valueId": "default",
+          "valueLabel": "Visa"
+        },
+        {
+          "fieldId": "57ac0c81e4b06e7ab19310e1",
+          "fieldLabel": "Job Family Group",
+          "valueId": "TEC",
+          "valueLabel": "Engineering and Technology"
+        }
+      ],
+      "visibility": "PUBLIC",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Visa/postings/744000133907678",
+      "language": {
+        "code": "en",
+        "label": "English",
+        "labelNative": "English (US)"
+      }
+    },
+    {
+      "id": "744000129971988",
+      "name": "Director",
+      "uuid": "e8e945af-fcb8-42b4-85f3-d20392aab09b",
+      "jobAdId": "a81a2bd7-c69c-473d-b845-8c745bd95c88",
+      "defaultJobAd": true,
+      "refNumber": "REF97388Z",
+      "company": {
+        "identifier": "Visa",
+        "name": "Visa"
+      },
+      "releasedDate": "2026-06-03T11:08:12.368Z",
+      "location": {
+        "city": "Bengaluru",
+        "region": "KA",
+        "country": "in",
+        "remote": false,
+        "hybrid": false,
+        "latitude": "12.9628957",
+        "longitude": "77.57754",
+        "fullLocation": "Bengaluru, KA, India"
+      },
+      "industry": {
+        "id": "it_and_services",
+        "label": "Information Technology And Services"
+      },
+      "department": {
+        "id": "1146555",
+        "label": "Cyber Security"
+      },
+      "function": {
+        "id": "information_technology",
+        "label": "Information Technology"
+      },
+      "typeOfEmployment": {
+        "id": "permanent",
+        "label": "Full-time"
+      },
+      "experienceLevel": {
+        "id": "not_applicable",
+        "label": "Not Applicable"
+      },
+      "customField": [
+        {
+          "fieldId": "58b7e4d1e4b0885c92cd9895",
+          "fieldLabel": "Department",
+          "valueId": "1146555",
+          "valueLabel": "Cyber Security"
+        },
+        {
+          "fieldId": "COUNTRY",
+          "fieldLabel": "Country/Region",
+          "valueId": "in",
+          "valueLabel": "India"
+        },
+        {
+          "fieldId": "5bd89e45b1f60b7aea922c5b",
+          "fieldLabel": "Visa Inc. or Visa in Europe job?",
+          "valueId": "3a568048-d1c9-4741-be56-36b4f3addff7",
+          "valueLabel": "Visa Inc."
+        },
+        {
+          "fieldId": "58914413e4b04f807e6ee84f",
+          "fieldLabel": "Brands",
+          "valueId": "default",
+          "valueLabel": "Visa"
+        },
+        {
+          "fieldId": "57ac0c81e4b06e7ab19310e1",
+          "fieldLabel": "Job Family Group",
+          "valueId": "TEC",
+          "valueLabel": "Engineering and Technology"
+        }
+      ],
+      "visibility": "PUBLIC",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Visa/postings/744000129971988",
+      "language": {
+        "code": "en",
+        "label": "English",
+        "labelNative": "English (US)"
+      }
+    }
+  ]
+}

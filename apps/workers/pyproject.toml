@@ -6,6 +6,9 @@ requires-python = ">=3.13"
 dependencies = [
     # 5.6.3 declares Python support up to 3.13 only; 3.14 is CI-only "initial support".
     "celery[redis]>=5.6.3",
+    # M1's ATS adapters. Sync Client only — Celery is the concurrency, so asyncio stays
+    # out of the worker. Retries come from Celery's autoretry_for, not tenacity.
+    "httpx>=0.28.1",
     "pydantic-settings>=2.14.2",
     "db",
     "schemas",

@@ -1746,6 +1746,7 @@ source = { editable = "apps/workers" }
 dependencies = [
     { name = "celery", extra = ["redis"] },
     { name = "db" },
+    { name = "httpx" },
     { name = "pydantic-settings" },
     { name = "schemas" },
 ]
@@ -1754,6 +1755,7 @@ dependencies = [
 requires-dist = [
     { name = "celery", extras = ["redis"], specifier = ">=5.6.3" },
     { name = "db", editable = "packages/db" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "pydantic-settings", specifier = ">=2.14.2" },
     { name = "schemas", editable = "packages/schemas" },
 ]

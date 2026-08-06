@@ -1,0 +1,110 @@
+{
+  "id": "744000133907678",
+  "name": "Sr. Manager",
+  "uuid": "267d47c7-29af-4c8f-a19d-c112895329df",
+  "jobId": "98046ec5-df31-450d-88c2-ec312f81c151",
+  "jobAdId": "2132a049-8eb1-4bef-bc4c-13b6d21c05e3",
+  "defaultJobAd": true,
+  "refNumber": "REF97395W",
+  "company": {
+    "name": "Visa",
+    "identifier": "Visa"
+  },
+  "location": {
+    "city": "Austin",
+    "region": "TX",
+    "country": "us",
+    "remote": false,
+    "hybrid": false,
+    "latitude": "30.267153",
+    "longitude": "-97.7430608",
+    "fullLocation": "Austin, TX, United States"
+  },
+  "customField": [
+    {
+      "fieldId": "COUNTRY",
+      "fieldLabel": "Country/Region",
+      "valueId": "us",
+      "valueLabel": "United States"
+    },
+    {
+      "fieldId": "5bd89e45b1f60b7aea922c5b",
+      "fieldLabel": "Visa Inc. or Visa in Europe job?",
+      "valueId": "3a568048-d1c9-4741-be56-36b4f3addff7",
+      "valueLabel": "Visa Inc."
+    },
+    {
+      "fieldId": "58914413e4b04f807e6ee84f",
+      "fieldLabel": "Brands",
+      "valueId": "default",
+      "valueLabel": "Visa"
+    },
+    {
+      "fieldId": "57ac0c81e4b06e7ab19310e1",
+      "fieldLabel": "Job Family Group",
+      "valueId": "TEC",
+      "valueLabel": "Engineering and Technology"
+    },
+    {
+      "fieldId": "58b7e4d1e4b0885c92cd9895",
+      "fieldLabel": "Department",
+      "valueId": "868639",
+      "valueLabel": "Software Development/Engineering"
+    }
+  ],
+  "releasedDate": "2026-06-24T10:00:11.853Z",
+  "creator": {
+    "name": "",
+    "avatarUrl": ""
+  },
+  "postingUrl": "https://jobs.smartrecruiters.com/Visa/744000133907678-sr-manager",
+  "applyUrl": "https://jobs.smartrecruiters.com/Visa/744000133907678-sr-manager?oga=true",
+  "referralUrl": "https://jobs.smartrecruiters.com/external-referrals/company/Visa/publication/267d47c7-29af-4c8f-a19d-c112895329df?dcr_ci=Visa",
+  "jobAd": {
+    "sections": {
+      "companyDescription": {
+        "title": "Company Description",
+        "text": ""
+      },
+      "jobDescription": {
+        "title": "Job Description",
+        "text": ""
+      },
+      "qualifications": {
+        "title": "Qualifications",
+        "text": ""
+      },
+      "additionalInformation": {
+        "title": "Additional Information",
+        "text": "<p>All your information will be kept confidential according to EEO guidelines.</p>"
+      }
+    }
+  },
+  "active": true,
+  "visibility": "PUBLIC",
+  "industry": {
+    "id": "it_and_services",
+    "label": "Information Technology And Services"
+  },
+  "function": {
+    "id": "engineering",
+    "label": "Engineering"
+  },
+  "department": {
+    "id": 868639,
+    "label": "Software Development/Engineering"
+  },
+  "experienceLevel": {
+    "id": "mid_senior_level",
+    "label": "Mid-Senior Level"
+  },
+  "typeOfEmployment": {
+    "id": "permanent",
+    "label": "Full-time"
+  },
+  "language": {
+    "code": "en",
+    "label": "English",
+    "labelNative": "English (US)"
+  }
+}
