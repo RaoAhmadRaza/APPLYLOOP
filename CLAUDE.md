@@ -300,10 +300,31 @@ freshness, working apply links, clean dedupe, overwhelmingly tech employers, fre
 Greenhouse : https://boards-api.greenhouse.io/v1/boards/{token}/jobs?content=true
 Lever      : https://api.lever.co/v0/postings/{company}?mode=json
 Ashby      : https://api.ashbyhq.com/posting-api/job-board/{name}?includeCompensation=true
-Workable   : https://apply.workable.com/api/v3/accounts/{account}/jobs   (POST, public)
-SmartRecr. : https://api.smartrecruiters.com/v1/companies/{company}/postings
+Workable   : https://apply.workable.com/api/v1/widget/accounts/{account}?details=true
+SmartRecr. : https://api.smartrecruiters.com/v1/companies/{company}/postings?limit=100&offset=N
 Recruitee  : https://{company}.recruitee.com/api/offers/
 ```
+
+**Verified against live responses, 2026-08-06** (M1). Where a provider's own docs
+disagree with its endpoint, the endpoint wins — all six adapters are built to what these
+actually return:
+
+- **Only Greenhouse exposes an update timestamp.** The other five expose creation or
+  publication dates only, so change detection is a payload diff, never a timestamp
+  comparison. See §6.2.
+- **Greenhouse's list response has no `meta` object** (the docs promise `meta.total`) but
+  *does* carry `first_published` (the docs call it detail-only). No per-job detail call
+  is needed, and nothing may read `meta`.
+- **Workable** — the v3 `accounts/{account}/jobs` endpoint above was replaced with the v1
+  widget GET. Both are public and return the same postings; v3 needs a POST body and
+  `nextPage` paging, v1 returns everything plus descriptions in one call. Also: every
+  Workable job's `id` is `null` — `shortcode` is the identifier.
+- **SmartRecruiters is the only paginated provider, and the only one that withholds
+  descriptions** from its list response. Full text needs
+  `GET .../postings/{id}` per posting, so ingest fetches detail only for postings the
+  upsert reports as changed.
+- **Recruitee returns three non-exclusive booleans** (`remote`, `hybrid`, `on_site`),
+  which is why `jobs.remote_mode` is not a boolean.
 
 **Layer 2 — Aggregators via JobSpy.** LinkedIn, Indeed, Glassdoor, Google, ZipRecruiter.
 Catches enterprise and anything not on an ATS above. **This is the only layer that needs
@@ -466,13 +487,15 @@ for which user, three days ago, and can I replay just that step?"* and can't.
 
 ```sql
 companies    (id, name, domain, ats_type, ats_slug, last_seen_ok,
-              jobs_last_run, status)              -- the slug registry, §4.3
+              jobs_last_run, status, consecutive_failures)
+                                                  -- the slug registry, §4.3
 users        (id, email, auth_id, plan, created_at)
 profiles     (id, user_id, master_resume, parsed_json, prefs_json,
               work_auth, locations[], seniority, salary_floor)
-jobs         (id, source, external_id, title, company, location,
-              locations[], remote_mode, description, url, ats_type,
-              posted_at, raw_json)
+jobs         (id, source, external_id, title, company, company_id,
+              location, locations[], remote_mode, description, url,
+              ats_type, posted_at, closed_at, raw_json)
+                                                  -- closed_at NULL = still listed
 job_embeddings (job_id, model, embedding halfvec)  -- pgvector, PK (job_id, model)
 matches      (id, user_id, job_id, score, label, reasons_json, status)
 documents    (id, match_id, type, storage_url, gdrive_url, version)
@@ -517,6 +540,20 @@ Nothing may skip a transition. The apply stages act only on `approved` — never
   `packages/schemas`, never a native Postgres `ENUM`. A native enum cannot `ADD VALUE`
   inside the transaction Alembic wraps migrations in, and removing a value rewrites the
   table. Adding a value here is a drop-and-re-add of one constraint.
+
+## 6.3 Two ingest invariants (M1) — do not relax either
+
+- **`jobs.external_id` is always `f"{slug}:{native_id}"`.** Greenhouse integers and
+  Lever/Ashby UUIDs are provably unique across tenants; Recruitee's integer `id` and
+  Workable's `shortcode` are not. Without the prefix a collision makes
+  `uq_jobs_source_external_id` overwrite one employer's posting with another's — the
+  constraint causing corruption instead of preventing it. The bare id stays in `raw_json`.
+
+- **`raw_json` holds exactly what the list endpoint returned, and nothing else.** It is
+  the value the next run diffs against, so enriching it — merging in a detail payload,
+  adding a computed field, reordering it through a model — makes every run find a
+  difference, rewrite every row, and quietly stop "writing only diffs". Data from a
+  second request belongs in its own column.
 
 ---
 
