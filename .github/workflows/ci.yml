@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# The default token scope is broader than anything here needs.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Lint, types, and the pytest suite. Postgres and Redis come from testcontainers,
+  # which works out of the box because Docker is preinstalled on ubuntu-latest — so
+  # local and CI run one code path, not two.
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      # Pinned to an exact version: setup-uv stopped publishing floating @v9-style
+      # major tags at v8 as a supply-chain measure, so `@v9` does not resolve.
+      - name: Install uv
+        uses: astral-sh/setup-uv@v9.0.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+          python-version-file: .python-version
+
+      # --locked, not --frozen: CI must fail if the lockfile is stale.
+      - name: Sync
+        run: uv sync --locked --all-packages
+
+      - name: Lint
+        run: uv run ruff check --output-format=github .
+
+      - name: Format
+        run: uv run ruff format --check .
+
+      - name: Types
+        run: uv run mypy
+
+      - name: Test
+        run: uv run pytest -q
+
+  # The job that actually proves M0 gate item 1: one command boots the stack.
+  compose-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Seed a throwaway .env
+        run: |
+          cp .env.example .env
+          sed -i 's/change-me-locally/ci-ephemeral-not-a-secret/g' .env
+
+      - name: Boot
+        run: docker compose up -d --wait
+
+      - name: Liveness
+        run: curl -fsS localhost:8000/health
+
+      - name: Readiness (db + redis)
+        run: curl -fsS localhost:8000/health/ready
+
+      - name: Worker answers on the broker
+        run: docker compose exec -T worker celery -A workers.app inspect ping
+
+      # PG18 moved PGDATA to a version-scoped path. If the volume were mounted at the
+      # old /var/lib/postgresql/data it would be silently ignored and this row would
+      # vanish across the restart.
+      - name: Volume actually persists across a restart
+        run: |
+          JOB=$(curl -fsS -X POST localhost:8000/jobs \
+            -H 'content-type: application/json' \
+            -d '{"source":"ci","external_id":"persist-1","title":"T","company":"C","url":"https://e.test","raw_json":{}}')
+          ID=$(echo "$JOB" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+          docker compose restart db
+          docker compose up -d --wait
+          curl -fsS "localhost:8000/jobs/$ID"
+
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs
+
+      - name: Teardown
+        if: always()
+        run: docker compose down -v
