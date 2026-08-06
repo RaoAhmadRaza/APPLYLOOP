@@ -5,9 +5,8 @@ source gave, for display; the array is what M4 filters on with `&&`. Ashby retur
 `secondaryLocations[]` and Recruitee/Workable return `locations[]`, so a single scalar
 drops every multi-location posting.
 
-Known M1 addition: `company` is raw text with no FK to `companies`. `company_id` lands
-in M1 alongside the registry code that resolves it — there is no resolver to populate
-it today.
+`closed_at` is read-only over HTTP: a job is never *created* closed, and only the
+ingest stage decides a posting has stopped being listed.
 """
 
 from datetime import datetime
@@ -27,6 +26,7 @@ class JobBase(Schema):
     external_id: str
     title: str
     company: str
+    company_id: UUID | None = None
     location: str | None = None
     locations: list[str] = Field(default_factory=list)
     remote_mode: RemoteMode | None = None
@@ -44,6 +44,7 @@ class JobCreate(JobBase):
 class JobUpdate(Schema):
     title: str | None = None
     company: str | None = None
+    company_id: UUID | None = None
     location: str | None = None
     locations: list[str] | None = None
     remote_mode: RemoteMode | None = None
@@ -56,5 +57,6 @@ class JobUpdate(Schema):
 
 class JobRead(JobBase):
     id: UUID
+    closed_at: datetime | None = None
     created_at: datetime
     updated_at: datetime

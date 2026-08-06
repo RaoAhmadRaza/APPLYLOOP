@@ -28,11 +28,13 @@ class CompanyUpdate(Schema):
     status: CompanyStatus | None = None
     last_seen_ok: datetime | None = None
     jobs_last_run: datetime | None = None
+    consecutive_failures: int | None = None
 
 
 class CompanyRead(CompanyBase):
     id: UUID
     last_seen_ok: datetime | None = None
     jobs_last_run: datetime | None = None
+    consecutive_failures: int = 0
     created_at: datetime
     updated_at: datetime

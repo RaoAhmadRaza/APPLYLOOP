@@ -1,15 +1,10 @@
-"""`jobs` — normalized postings from every source.
+"""`jobs` — normalized postings from every source."""
 
-Known M1 addition: `company` is raw text with no FK to `companies`. `company_id` lands
-in M1 alongside the registry code that resolves it — adding the column now would give
-it no writer. §6.2 blesses column adds, and this table is the one that stays cheap to
-extend.
-"""
-
+import uuid
 from datetime import datetime
 
 from schemas.enums import AtsType, RemoteMode
-from sqlalchemy import DateTime, Index, Text, UniqueConstraint, text
+from sqlalchemy import DateTime, ForeignKey, Index, Text, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -27,6 +22,11 @@ class Job(Base, UUIDv7PK, Timestamps):
     external_id: Mapped[str] = mapped_column(Text)
     title: Mapped[str] = mapped_column(Text)
     company: Mapped[str] = mapped_column(Text)
+    # Nullable because M2's aggregator rows name a company we may have no registry row
+    # for. SET NULL rather than CASCADE: retiring a board should not delete its history.
+    company_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("companies.id", ondelete="SET NULL")
+    )
     # Whatever string the source gave, for display.
     location: Mapped[str | None] = mapped_column(Text)
     # What M4 filters on, with && against profiles.locations. Ashby returns
@@ -42,6 +42,10 @@ class Job(Base, UUIDv7PK, Timestamps):
     # Nullable: SmartRecruiters' list endpoint omits it, and Lever/Workable/Recruitee
     # each use a different date format that M1's adapters must parse per-source.
     posted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # NULL = still listed. Set when a board stops returning the posting. A timestamp
+    # rather than a status enum: it answers "when", which a boolean throws away, and it
+    # needs no CHECK to drop and re-add later.
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # No default: an empty raw payload means the adapter dropped something.
     raw_json: Mapped[dict] = mapped_column(JSONB)
 
@@ -51,4 +55,11 @@ class Job(Base, UUIDv7PK, Timestamps):
         check_in_or_null("ats_type", AtsType, name="ats_type"),
         check_in_or_null("remote_mode", RemoteMode, name="remote_mode"),
         Index("ix_jobs_locations", "locations", postgresql_using="gin"),
+        # The access path for "close everything this board stopped returning", and for
+        # M4's "score only open jobs". Partial, so it stays small as closed rows pile up.
+        Index(
+            "ix_jobs_company_id_open",
+            "company_id",
+            postgresql_where=text("closed_at IS NULL"),
+        ),
     )

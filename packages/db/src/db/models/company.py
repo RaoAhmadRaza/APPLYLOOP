@@ -3,7 +3,7 @@
 from datetime import datetime
 
 from schemas.enums import AtsType, CompanyStatus
-from sqlalchemy import DateTime, Index, Text, UniqueConstraint, text
+from sqlalchemy import DateTime, Index, Integer, Text, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db.base import Base
@@ -21,6 +21,9 @@ class Company(Base, UUIDv7PK, Timestamps):
     last_seen_ok: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     jobs_last_run: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     status: Mapped[str] = mapped_column(Text, server_default=CompanyStatus.ACTIVE.value)
+    # §4.3: "auto-retire slugs that 404 for N runs" needs somewhere to count. Reset to
+    # zero on any successful fetch, so only *consecutive* failures accumulate.
+    consecutive_failures: Mapped[int] = mapped_column(Integer, server_default=text("0"))
 
     __table_args__ = (
         # The registry's natural key. Two rows for the same board would split the
