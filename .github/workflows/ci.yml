@@ -32,7 +32,8 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: uv.lock
-          python-version-file: .python-version
+          # No python-version input: that is not a valid setup-uv key, and uv reads
+          # .python-version on its own.
 
       # --locked, not --frozen: CI must fail if the lockfile is stale.
       - name: Sync

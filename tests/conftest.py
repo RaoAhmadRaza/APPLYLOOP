@@ -49,7 +49,13 @@ def redis_url() -> Iterator[str]:
     try:
         host = container.get_container_host_ip()
         port = container.get_exposed_port(6379)
-        yield f"redis://{host}:{port}/0"
+        url = f"redis://{host}:{port}/0"
+        # Exported for the same reason migrated_url exports DATABASE_URL: importing
+        # api.main runs `app = create_app()` at module scope, and that entrypoint is
+        # supposed to demand a complete environment. Without this the suite passes
+        # only on a machine that happens to have a .env.
+        os.environ["REDIS_URL"] = url
+        yield url
     finally:
         container.stop()
 

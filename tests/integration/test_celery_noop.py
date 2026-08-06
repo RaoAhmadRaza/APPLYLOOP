@@ -20,12 +20,15 @@ def celery_app(redis_url: str, migrated_url: str, monkeypatch: pytest.MonkeyPatc
     monkeypatch.setenv("DATABASE_URL", migrated_url)
 
     # Imported inside the fixture so the patched env is in place when the module-level
-    # Settings() runs.
+    # get_settings() runs.
     import importlib
 
     import workers.app
+    import workers.settings
     import workers.tasks.health
 
+    # get_settings is lru_cached; without this the reload reuses the stale Settings.
+    workers.settings.get_settings.cache_clear()
     importlib.reload(workers.app)
     importlib.reload(workers.tasks.health)
     return workers.app.app

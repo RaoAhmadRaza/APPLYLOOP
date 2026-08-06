@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from redis.asyncio import Redis
 
 from api.routers import build_crud_routers, health
-from api.settings import Settings, settings
+from api.settings import Settings, get_settings
 
 
 @asynccontextmanager
@@ -27,7 +27,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 def create_app(cfg: Settings | None = None) -> FastAPI:
-    cfg = cfg or settings
+    # Resolved here, not at import: a bad environment still kills the process at boot
+    # because `app = create_app()` runs at module scope below.
+    cfg = cfg or get_settings()
     app = FastAPI(
         title=cfg.project_name,
         version="0.1.0",

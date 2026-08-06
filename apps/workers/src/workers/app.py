@@ -12,7 +12,10 @@ The API never imports this module. It enqueues by task name with
 from celery import Celery
 from db.session import make_sync_engine, make_sync_sessionmaker
 
-from workers.settings import settings
+from workers.settings import get_settings
+
+# Module scope: this IS the worker entrypoint, so a bad environment must fail here.
+settings = get_settings()
 
 app = Celery("applyloop", broker=str(settings.redis_url), backend=str(settings.redis_url))
 

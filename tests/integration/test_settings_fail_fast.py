@@ -12,6 +12,27 @@ from pydantic import ValidationError
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
+def test_settings_modules_import_without_any_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression guard.
+
+    Both settings modules used to build a Settings() at import time. That made them
+    unimportable whenever the environment was incomplete — including inside the test
+    suite, which builds its own Settings against a throwaway container. It passed
+    locally only because a developer's .env happened to fill the gaps, and failed the
+    moment CI ran without one. Fail-fast belongs at app boot (main.py, workers/app.py),
+    never at module import.
+    """
+    import importlib
+
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("REDIS_URL", raising=False)
+
+    for module in ("api.settings", "workers.settings"):
+        importlib.reload(importlib.import_module(module))
+
+
 def test_missing_database_url_raises_at_construction(monkeypatch: pytest.MonkeyPatch) -> None:
     from api.settings import Settings
 

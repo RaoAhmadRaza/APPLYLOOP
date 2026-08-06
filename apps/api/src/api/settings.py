@@ -1,13 +1,18 @@
 """API configuration.
 
-`settings` is instantiated at import time on purpose: a missing DATABASE_URL should
-kill the container at boot with a clear ValidationError, not surface as a 500 on the
-first request that happens to touch the database.
-
 Required fields carry no default. pydantic-settings validates defaults too, so a
 placeholder default would pass validation and then fail at connect time — which is
 exactly the failure mode this is meant to prevent.
+
+Settings are read through `get_settings()`, not built at import time. `main.py` calls
+it while constructing the app at module scope, so a misconfigured container still dies
+at boot rather than on the first request — but importing this module no longer
+*requires* a complete environment. Import-time instantiation made the module
+unimportable in any context that wanted to build its own Settings, which is exactly
+what the test suite does.
 """
+
+from functools import lru_cache
 
 from pydantic import PostgresDsn, RedisDsn
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -34,4 +39,6 @@ class Settings(BaseSettings):
     max_page_size: int = 100
 
 
-settings = Settings()  # type: ignore[call-arg]
+@lru_cache(maxsize=1)
+def get_settings() -> Settings:
+    return Settings()  # type: ignore[call-arg]

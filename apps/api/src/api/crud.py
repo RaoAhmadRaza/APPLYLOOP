@@ -19,7 +19,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
 from api.deps import SessionDep
-from api.settings import settings
+from api.settings import get_settings
 
 # Anything with an `id` column; the models are not a common base class beyond
 # db.base.Base, so this stays loose on purpose.
@@ -37,6 +37,7 @@ def make_crud_router(
     id_type: type = UUID,
 ) -> APIRouter:
     router = APIRouter(prefix=f"/{prefix}", tags=[tag])
+    max_page_size = get_settings().max_page_size
 
     @router.post("", response_model=read_schema, status_code=status.HTTP_201_CREATED)
     async def create(payload: create_schema, session: SessionDep) -> Model:  # type: ignore[valid-type]
@@ -66,7 +67,7 @@ def make_crud_router(
     @router.get("", response_model=Page[read_schema])  # type: ignore[valid-type]
     async def read_many(
         session: SessionDep,
-        limit: Annotated[int, Query(ge=1, le=settings.max_page_size)] = 50,
+        limit: Annotated[int, Query(ge=1, le=max_page_size)] = 50,
         offset: Annotated[int, Query(ge=0)] = 0,
     ) -> Page[Any]:
         total = await session.scalar(select(func.count()).select_from(model))

@@ -1,5 +1,12 @@
-"""Worker configuration. Same fail-fast rule as the API: no defaults on required
-values, instantiated at import so a misconfigured worker dies at start."""
+"""Worker configuration.
+
+Same rule as the API: no defaults on required values, and read through
+`get_settings()` rather than built at import. `workers/app.py` calls it at module
+scope, so a misconfigured worker still dies at start — but this module stays
+importable without a complete environment.
+"""
+
+from functools import lru_cache
 
 from pydantic import PostgresDsn, RedisDsn
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -18,4 +25,6 @@ class Settings(BaseSettings):
     redis_url: RedisDsn
 
 
-settings = Settings()  # type: ignore[call-arg]
+@lru_cache(maxsize=1)
+def get_settings() -> Settings:
+    return Settings()  # type: ignore[call-arg]
