@@ -64,6 +64,11 @@ jobs:
         run: |
           cp .env.example .env
           sed -i 's/change-me-locally/ci-ephemeral-not-a-secret/g' .env
+          # Beat's real interval is six hours. The M1 gate says a scheduled run must
+          # populate jobs *unattended*, and the only honest way to prove that is to
+          # watch a tick happen — so CI shortens the clock rather than firing the task
+          # by hand, which would prove the opposite.
+          sed -i 's/^INGEST_INTERVAL_MINUTES=.*/INGEST_INTERVAL_MINUTES=1/' .env
 
       - name: Boot
         run: docker compose up -d --wait
@@ -77,6 +82,22 @@ jobs:
       - name: Worker answers on the broker
         run: docker compose exec -T worker celery -A workers.app inspect ping
 
+      # `inspect ping` passes even when no task is registered — that is exactly how a
+      # broken autodiscover survived M0. This asks the running worker what it will
+      # actually accept, which is the only layer where the answer is real: a unit test
+      # has to import the task module to check it, and importing is what registers it.
+      - name: Worker has every task registered
+        run: |
+          REGISTERED=$(docker compose exec -T worker celery -A workers.app inspect registered)
+          echo "$REGISTERED"
+          for TASK in workers.tasks.health.ping \
+                      workers.tasks.scraping.ingest_all \
+                      workers.tasks.scraping.ingest_company \
+                      workers.tasks.scraping.detect_company \
+                      workers.tasks.scraping.seed_registry; do
+            echo "$REGISTERED" | grep -q "$TASK" || { echo "MISSING: $TASK"; exit 1; }
+          done
+
       # PG18 moved PGDATA to a version-scoped path. If the volume were mounted at the
       # old /var/lib/postgresql/data it would be silently ignored and this row would
       # vanish across the restart.
@@ -89,6 +110,33 @@ jobs:
           docker compose restart db
           docker compose up -d --wait
           curl -fsS "localhost:8000/jobs/$ID"
+
+      # M1 gate item 4: a scheduled run populates jobs unattended.
+      #
+      # One small real board is registered through the public API, then nothing else is
+      # typed — beat fires ingest_all on its own and the rows appear. Registering one
+      # board rather than running `make seed` keeps this to a single live ATS request
+      # from CI; Part 13 rule 12 means that request is direct and unproxied, so being
+      # sparing with it is the whole politeness budget.
+      - name: A scheduled run ingests a real board with no manual trigger
+        run: |
+          curl -fsS -X POST localhost:8000/companies \
+            -H 'content-type: application/json' \
+            -d '{"name":"PostHog","ats_type":"ashby","ats_slug":"posthog"}'
+
+          for _ in $(seq 1 40); do
+            COUNT=$(curl -fsS 'localhost:8000/jobs?limit=1' \
+              | python3 -c 'import json,sys; print(json.load(sys.stdin)["total"])')
+            if [ "$COUNT" -gt 1 ]; then
+              echo "beat ingested $COUNT jobs unattended"
+              exit 0
+            fi
+            sleep 5
+          done
+
+          echo "no jobs after 200s — beat never fired or ingestion failed"
+          docker compose logs beat worker
+          exit 1
 
       - name: Logs on failure
         if: failure()

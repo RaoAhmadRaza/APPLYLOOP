@@ -24,6 +24,12 @@ class Settings(BaseSettings):
     database_url: PostgresDsn
     redis_url: RedisDsn
 
+    # How often beat fires the ATS ingest pass. Six hours by default: boards change on
+    # the order of a day, and Part 13 rule 12 forbids proxying this layer, so how often
+    # we ask *is* the politeness budget. Overridable because the compose smoke has to
+    # watch a tick actually happen, and it cannot wait six hours to do it.
+    ingest_interval_minutes: int = 360
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

@@ -91,5 +91,19 @@ services:
       migrate:
         condition: service_completed_successfully
 
+  # The scheduler for M1 gate item 4. Enqueues only — every task it fires runs on the
+  # worker above. Exactly one replica: two beats would double-enqueue every tick.
+  # Schedule state goes to /tmp rather than the read-only working directory.
+  beat:
+    <<: *app
+    restart: unless-stopped
+    command:
+      ["celery", "-A", "workers.app", "beat", "-l", "info", "-s", "/tmp/celerybeat-schedule"]
+    depends_on:
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
 volumes:
   db-data:
