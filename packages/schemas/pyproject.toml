@@ -1,0 +1,10 @@
+[project]
+name = "schemas"
+version = "0.1.0"
+description = "Wire format shared across stages — pydantic types and the enum source of truth."
+requires-python = ">=3.13"
+dependencies = ["pydantic[email]>=2.13.4"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
