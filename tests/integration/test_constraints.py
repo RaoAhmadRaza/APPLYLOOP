@@ -7,7 +7,7 @@ both are only true if these constraints actually exist and actually fire.
 """
 
 import pytest
-from db.models import Application, Approval, Company, Document, Job, Match, User
+from db.models import Application, Approval, Company, Document, Job, Match, Profile, User
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -96,6 +96,37 @@ def test_matches_reject_a_duplicate_user_job(session: Session) -> None:
     session.add(Match(user_id=user.id, job_id=job.id))
     with pytest.raises(IntegrityError):
         session.flush()
+
+
+def test_profiles_reject_a_second_profile_for_one_user(session: Session) -> None:
+    """One profile per user. `matches` is unique on (user_id, job_id) and has no
+    profile_id, so a second profile would have nowhere to record its own scores."""
+    user = _user(session)
+    session.add(Profile(user_id=user.id))
+    session.flush()
+    session.add(Profile(user_id=user.id))
+    with pytest.raises(IntegrityError):
+        session.flush()
+
+
+def test_check_constraint_rejects_an_illegal_remote_mode(session: Session) -> None:
+    job = _job(session, "bad-mode")
+    with pytest.raises(IntegrityError):
+        session.execute(
+            text("UPDATE jobs SET remote_mode = 'sometimes' WHERE id = :id"), {"id": job.id}
+        )
+        session.flush()
+
+
+def test_remote_mode_records_hybrid(session: Session) -> None:
+    """The reason the boolean was replaced: hybrid is a real, common third state."""
+    job = _job(session, "hybrid-role")
+    job.remote_mode = "hybrid"
+    job.locations = ["Berlin", "Amsterdam"]
+    session.flush()
+    session.refresh(job)
+    assert job.remote_mode == "hybrid"
+    assert job.locations == ["Berlin", "Amsterdam"]
 
 
 def test_companies_reject_a_duplicate_ats_slug(session: Session) -> None:

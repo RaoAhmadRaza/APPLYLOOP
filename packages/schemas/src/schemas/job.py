@@ -1,22 +1,23 @@
 """`jobs` — normalized postings from every source. Dedupe key is (source, external_id).
 
-Known M1 additions, verified against live responses from all six ATS APIs. All three
-are additive column adds on a zero-row table, which §6.2 blesses:
-  - `remote: bool` is lossy. Ashby has isRemote + workplaceType, Recruitee has three
-    non-exclusive booleans, SmartRecruiters has remote + hybrid. Hybrid can't be
-    represented. M1 replaces it with `remote_mode`.
-  - `location: str` is lossy. Ashby has secondaryLocations[], Recruitee and Workable
-    have locations[]. M1 adds `locations: list[str]`.
-  - `company` is raw text with no FK to `companies`. M1 adds `company_id`; nothing
-    resolves companies until the registry exists.
+`location` and `locations` are both here on purpose: the scalar is whatever string the
+source gave, for display; the array is what M4 filters on with `&&`. Ashby returns
+`secondaryLocations[]` and Recruitee/Workable return `locations[]`, so a single scalar
+drops every multi-location posting.
+
+Known M1 addition: `company` is raw text with no FK to `companies`. `company_id` lands
+in M1 alongside the registry code that resolves it — there is no resolver to populate
+it today.
 """
 
 from datetime import datetime
 from typing import Any
 from uuid import UUID
 
+from pydantic import Field
+
 from schemas.common import Schema
-from schemas.enums import AtsType
+from schemas.enums import AtsType, RemoteMode
 
 
 class JobBase(Schema):
@@ -27,7 +28,8 @@ class JobBase(Schema):
     title: str
     company: str
     location: str | None = None
-    remote: bool | None = None
+    locations: list[str] = Field(default_factory=list)
+    remote_mode: RemoteMode | None = None
     description: str | None = None
     url: str
     ats_type: AtsType | None = None
@@ -43,7 +45,8 @@ class JobUpdate(Schema):
     title: str | None = None
     company: str | None = None
     location: str | None = None
-    remote: bool | None = None
+    locations: list[str] | None = None
+    remote_mode: RemoteMode | None = None
     description: str | None = None
     url: str | None = None
     ats_type: AtsType | None = None

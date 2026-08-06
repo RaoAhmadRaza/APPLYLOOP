@@ -471,8 +471,9 @@ users        (id, email, auth_id, plan, created_at)
 profiles     (id, user_id, master_resume, parsed_json, prefs_json,
               work_auth, locations[], seniority, salary_floor)
 jobs         (id, source, external_id, title, company, location,
-              remote, description, url, ats_type, posted_at,
-              raw_json, embedding vector)          -- pgvector
+              locations[], remote_mode, description, url, ats_type,
+              posted_at, raw_json)
+job_embeddings (job_id, model, embedding halfvec)  -- pgvector, PK (job_id, model)
 matches      (id, user_id, job_id, score, label, reasons_json, status)
 documents    (id, match_id, type, storage_url, gdrive_url, version)
 applications (id, match_id, method, status, submitted_at,
@@ -503,6 +504,19 @@ Nothing may skip a transition. The apply stages act only on `approved` — never
 - `jobs.embedding` uses an HNSW index. Don't change the distance metric without
   re-embedding and re-running the golden set (§8.2).
 - `applications` gets a unique constraint on `(match_id, method)`. See §3.4.
+- Four more uniqueness rules exist for the same reason, and each has a test that proves
+  the database refuses the duplicate: `jobs(source, external_id)` (ingest dedupe),
+  `matches(user_id, job_id)`, `documents(match_id, type, version)`, and a **partial**
+  unique on `approvals(match_id, channel) WHERE decided_at IS NULL` — at most one
+  *undecided* request per channel, so a retry cannot double-message a human.
+- `profiles.user_id` is unique: **one profile per user.** `matches` is keyed on
+  `(user_id, job_id)` and carries no `profile_id`, so a second profile would have
+  nowhere to record its own scores. Supporting multiple target-role profiles is a real
+  design change, not a relaxed constraint.
+- Bounded string columns are `TEXT` + a named `CHECK` generated from a `StrEnum` in
+  `packages/schemas`, never a native Postgres `ENUM`. A native enum cannot `ADD VALUE`
+  inside the transaction Alembic wraps migrations in, and removing a value rewrites the
+  table. Adding a value here is a drop-and-re-add of one constraint.
 
 ---
 
@@ -604,7 +618,9 @@ Stack: Sentry (errors) + Grafana/Prometheus (system) + Langfuse (LLM traces and 
 down is a strict chain.** Do not start a milestone before the one it depends on is
 *proven* — not written, proven, by its E2E test.
 
-> **CURRENT MILESTONE: M0**
+> **CURRENT MILESTONE: M1** — ATS ingestion + company slug registry.
+> M0 landed 2026-08-06; its gate is green in CI (both `test` and `compose-smoke`).
+> M1, M2 and M3 depend only on M0 and may be built in parallel.
 > *(update this line as milestones land; it tells Claude what "in scope" means today)*
 
 ```

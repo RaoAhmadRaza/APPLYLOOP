@@ -15,9 +15,15 @@ from db.mixins import Timestamps, UUIDv7PK
 class Profile(Base, UUIDv7PK, Timestamps):
     __tablename__ = "profiles"
 
-    # Deliberately NOT unique: multiple target-role profiles per user is plausible,
-    # and nothing at M0 depends on the constraint either way.
-    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    # One profile per user. The rest of the schema already assumes this: `matches` is
+    # unique on (user_id, job_id) and carries no profile_id, so with two profiles a job
+    # could be a good fit for one and a poor fit for the other with nowhere to record
+    # the difference, and M4 would have no way to choose which profile to score against.
+    # Supporting multiple target-role profiles is a real design change — it needs
+    # matches.profile_id and a different unique key — not a relaxed constraint here.
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), unique=True
+    )
     master_resume: Mapped[str | None] = mapped_column(Text)
     parsed_json: Mapped[dict] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
     prefs_json: Mapped[dict] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
@@ -32,6 +38,6 @@ class Profile(Base, UUIDv7PK, Timestamps):
     __table_args__ = (
         check_in_or_null("work_auth", WorkAuth, name="work_auth"),
         check_in_or_null("seniority", Seniority, name="seniority"),
-        Index("ix_profiles_user_id", "user_id"),
+        # No separate index on user_id — the unique constraint above already provides one.
         Index("ix_profiles_locations", "locations", postgresql_using="gin"),
     )

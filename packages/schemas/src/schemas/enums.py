@@ -23,6 +23,23 @@ class AtsType(StrEnum):
     OTHER = "other"
 
 
+class RemoteMode(StrEnum):
+    """How a role is located.
+
+    A boolean cannot express this. Verified against live payloads from all six ATS
+    providers: Recruitee returns three non-exclusive booleans (remote/hybrid/on_site),
+    Ashby has `isRemote` plus a separate `workplaceType`, SmartRecruiters has `remote`
+    plus `hybrid`. Hybrid roles are common and a bool silently flattens them.
+
+    NULL means "the source did not say" — that is what NULL is for, so there is no
+    UNKNOWN member.
+    """
+
+    REMOTE = "remote"
+    HYBRID = "hybrid"
+    ONSITE = "onsite"
+
+
 class CompanyStatus(StrEnum):
     ACTIVE = "active"
     RETIRED = "retired"  # board 404'd for N runs — §4.3 auto-retire
