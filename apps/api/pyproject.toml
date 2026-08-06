@@ -1,0 +1,20 @@
+[project]
+name = "api"
+version = "0.1.0"
+description = "Core API — the DB contract surface."
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi[standard]>=0.141.1",
+    "pydantic-settings>=2.14.2",
+    # Upper bound left to the resolver: the worker's kombu[redis] caps this at <6.5
+    # and both share one workspace venv.
+    "redis>=5.0",
+    "db",
+    "schemas",
+    # Deliberately NOT `workers`: the API enqueues by task name via send_task, which
+    # keeps Celery out of this image and honours CLAUDE.md §3.1.
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
