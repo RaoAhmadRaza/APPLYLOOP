@@ -6,9 +6,11 @@ build ourselves — which is exactly why §4.3 calls the registry the moat.
 Three tiers, cheapest first, stopping at the first hit:
 
 1. **Parse the URL.** Zero network. Works when someone hands us a board link directly.
-2. **Read the page.** The case that actually matters for a *real* careers URL: most
-   companies serve their board from their own domain via an iframe or script tag, so
-   `https://www.vanta.com/careers` only resolves once you look at the HTML.
+2. **Read the page.** The case that actually matters for a *real* careers URL: companies
+   serve the board from their own domain, so `https://www.vanta.com/careers` only
+   resolves once you look at the markup — and usually what is in there is the *API*
+   endpoint the page fetches client-side, not a board link. See `_URL_PATTERNS`.
+   A page that references no board at all stays unresolved; that is what tier 3 is for.
 3. **Probe.** §4.3's pseudocode — slugify the name and ask each provider in turn.
 
 Tier 3 is last because it is the only one that can be wrong: a slug guess that happens
@@ -27,7 +29,33 @@ from schemas.enums import AtsType
 # Ordered: whichever pattern matches first wins, and the more specific host comes first.
 # Greenhouse serves boards from three hosts (the legacy one, the current one, and the EU
 # region); Lever has a matching EU host. Missing any of them silently drops that board.
+#
+# Two families here, and tier 2 needs both. The board hosts are what a human links to.
+# The *API* hosts are what a JavaScript-rendered careers page contains — the board is
+# fetched client-side, so the markup holds the endpoint rather than a board link. Real
+# example: vanta.com/careers has no jobs.ashbyhq.com anywhere in it, only
+# api.ashbyhq.com/posting-api/job-board/vanta. Matching board hosts alone resolves the
+# minority of pages.
 _URL_PATTERNS: list[tuple[AtsType, re.Pattern[str]]] = [
+    # --- API hosts, as embedded in client-rendered careers pages ---
+    (
+        AtsType.GREENHOUSE,
+        re.compile(r"https?://boards-api(?:\.eu)?\.greenhouse\.io/v1/boards/([A-Za-z0-9_-]+)"),
+    ),
+    (AtsType.LEVER, re.compile(r"https?://api(?:\.eu)?\.lever\.co/v0/postings/([A-Za-z0-9_-]+)")),
+    (
+        AtsType.ASHBY,
+        re.compile(r"https?://api\.ashbyhq\.com/posting-api/job-board/([A-Za-z0-9_.-]+)"),
+    ),
+    (
+        AtsType.WORKABLE,
+        re.compile(r"https?://apply\.workable\.com/api/v\d+/(?:widget/)?accounts/([A-Za-z0-9_-]+)"),
+    ),
+    (
+        AtsType.SMARTRECRUITERS,
+        re.compile(r"https?://api\.smartrecruiters\.com/v1/companies/([A-Za-z0-9_-]+)"),
+    ),
+    # --- Board hosts, as linked by humans ---
     # The embed form must come first and be matched exactly: the slug lives in a query
     # parameter, and the generic pattern below would otherwise capture "embed".
     # Both /embed/job_board?for=X and /embed/job_board/js?for=X are in the wild.

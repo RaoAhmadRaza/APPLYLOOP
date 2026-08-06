@@ -31,6 +31,26 @@ URLS = [
     ("https://channable.recruitee.com/o/engineer", AtsType.RECRUITEE, "channable"),
 ]
 
+# The API hosts, which is what a client-rendered careers page actually contains: the
+# board is fetched in the browser, so the markup holds the endpoint and never a board
+# link. Matching only the board hosts above resolves the minority of real pages.
+API_URLS = [
+    ("https://boards-api.greenhouse.io/v1/boards/vercel/jobs", AtsType.GREENHOUSE, "vercel"),
+    ("https://api.lever.co/v0/postings/gopuff?mode=json", AtsType.LEVER, "gopuff"),
+    ("https://api.ashbyhq.com/posting-api/job-board/vanta", AtsType.ASHBY, "vanta"),
+    (
+        "https://apply.workable.com/api/v1/widget/accounts/blueground?details=true",
+        AtsType.WORKABLE,
+        "blueground",
+    ),
+    ("https://apply.workable.com/api/v3/accounts/blueground/jobs", AtsType.WORKABLE, "blueground"),
+    (
+        "https://api.smartrecruiters.com/v1/companies/Visa/postings",
+        AtsType.SMARTRECRUITERS,
+        "Visa",
+    ),
+]
+
 
 def _client(handler: Any) -> httpx.Client:
     return httpx.Client(transport=httpx.MockTransport(handler))
@@ -60,6 +80,20 @@ def test_a_plain_careers_url_matches_nothing_on_its_own() -> None:
 
 
 # ------------------------------------------------------------------ tier 2: embedded board
+
+
+@pytest.mark.parametrize(("url", "ats", "slug"), API_URLS)
+def test_api_urls_resolve_too(url: str, ats: AtsType, slug: str) -> None:
+    assert detect.from_url(url) == (ats, slug)
+
+
+def test_a_client_rendered_page_resolves_from_the_api_url_it_fetches() -> None:
+    """Verified against the real vanta.com/careers: 250KB of markup containing no
+    jobs.ashbyhq.com link anywhere, only the API endpoint its JavaScript calls."""
+    page = '<script>fetch("https://api.ashbyhq.com/posting-api/job-board/vanta")</script>'
+    client = _client(lambda _r: httpx.Response(200, text=page))
+
+    assert detect.detect(client, "https://www.vanta.com/careers") == (AtsType.ASHBY, "vanta")
 
 
 def test_a_real_careers_page_resolves_from_its_embedded_board() -> None:
