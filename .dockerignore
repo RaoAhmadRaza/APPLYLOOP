@@ -1,0 +1,16 @@
+.git
+.venv
+node_modules
+__pycache__
+*.py[cod]
+.pytest_cache
+.ruff_cache
+.mypy_cache
+.env
+.env.*
+!.env.example
+tests
+docs
+evals
+.github
+.DS_Store

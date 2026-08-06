@@ -1,0 +1,22 @@
+# Secrets — CLAUDE.md §3.7, Part 13 rule 9.
+# The negation matters: a bare `.env*` would silently exclude the template too.
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Node (the ponytail Claude Code plugin lives here)
+node_modules/
+
+# macOS
+.DS_Store
