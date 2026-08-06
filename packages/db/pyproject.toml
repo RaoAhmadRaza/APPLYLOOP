@@ -1,0 +1,22 @@
+[project]
+name = "db"
+version = "0.1.0"
+description = "SQLAlchemy models + Alembic migrations. The single source of truth for the schema."
+requires-python = ">=3.13"
+dependencies = [
+    # The [asyncio] extra is NOT optional: SQLAlchemy's default greenlet marker lists
+    # aarch64 but not arm64, so a bare install on Apple Silicon silently omits greenlet
+    # and every async ORM call raises MissingGreenlet.
+    "sqlalchemy[asyncio]>=2.0.51",
+    # psycopg3 serves both sync and async off the same URL string.
+    "psycopg[binary,pool]>=3.3.4",
+    "alembic>=1.19.0",
+    # 0.5.0 is a breaking release (returns plain lists, requires SQLAlchemy 2).
+    "pgvector>=0.5.0,<0.6",
+    "pydantic-settings>=2.14.2",
+    "schemas",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
