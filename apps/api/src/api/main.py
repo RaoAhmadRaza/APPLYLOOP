@@ -1,0 +1,45 @@
+"""Core API — the DB contract surface (CLAUDE.md §5.1)."""
+
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
+from db.session import make_async_engine, make_async_sessionmaker
+from fastapi import FastAPI
+from redis.asyncio import Redis
+
+from api.routers import build_crud_routers, health
+from api.settings import Settings, settings
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    cfg: Settings = app.state.settings
+    engine = make_async_engine(str(cfg.database_url))
+    app.state.engine = engine
+    app.state.sessionmaker = make_async_sessionmaker(engine)
+    app.state.redis = Redis.from_url(str(cfg.redis_url), decode_responses=True)
+
+    yield
+
+    await app.state.redis.aclose()
+    # Without this you get "Event loop is closed" noise on every reload.
+    await engine.dispose()
+
+
+def create_app(cfg: Settings | None = None) -> FastAPI:
+    cfg = cfg or settings
+    app = FastAPI(
+        title=cfg.project_name,
+        version="0.1.0",
+        lifespan=lifespan,
+    )
+    app.state.settings = cfg
+
+    app.include_router(health.router)
+    for router in build_crud_routers():
+        app.include_router(router)
+
+    return app
+
+
+app = create_app()
