@@ -15,11 +15,11 @@ from uuid import UUID
 
 import httpx
 from db.models import Company
-from schemas.enums import CompanyStatus
+from schemas.enums import AtsType, CompanyStatus
 from sqlalchemy import select
 
 from workers.app import SessionLocal, app
-from workers.scraping import dedupe, feed, http, ingest, registry
+from workers.scraping import dedupe, feed, grow, http, ingest, registry
 from workers.scraping import detect as detection
 from workers.scraping.feeds import FEEDS
 from workers.settings import get_settings
@@ -30,7 +30,17 @@ def ingest_all() -> int:
     """Fan out one `ingest_company` per active board. Holds no business logic itself."""
     with SessionLocal() as session:
         company_ids = list(
-            session.scalars(select(Company.id).where(Company.status == CompanyStatus.ACTIVE.value))
+            session.scalars(
+                select(Company.id).where(
+                    Company.status == CompanyStatus.ACTIVE.value,
+                    # §4.3's negative cache writes `other` rows for employers whose ATS
+                    # we could not find. They are written as `error` and so already
+                    # excluded, but there is no adapter behind `other` and reaching
+                    # ADAPTERS[AtsType.OTHER] is a KeyError in production — one clause
+                    # makes that impossible rather than merely unlikely.
+                    Company.ats_type != AtsType.OTHER.value,
+                )
+            )
         )
 
     for company_id in company_ids:
@@ -105,6 +115,27 @@ def dedupe_jobs() -> dict[str, int]:
     """Collapse the same role seen on several sources onto one canonical row (§4.2)."""
     with SessionLocal() as session:
         result = dedupe.dedupe_jobs(session)
+        session.commit()
+        return asdict(result)
+
+
+@app.task(name="workers.tasks.scraping.grow_registry")
+def grow_registry() -> dict[str, int]:
+    """§4.3's reverse-index: resolve employers layers 2 and 3 named, and link their rows.
+
+    One detection unlocks that employer's whole board on the next `ingest_all`, which is
+    what makes coverage compound rather than plateau.
+    """
+    settings = get_settings()
+    with SessionLocal() as session, http.client() as client:
+        result = grow.grow(
+            session,
+            client,
+            batch=settings.grow_batch,
+            min_jobs=settings.grow_min_jobs,
+            retry_days=settings.grow_retry_days,
+            delay=settings.grow_delay_seconds,
+        )
         session.commit()
         return asdict(result)
 
