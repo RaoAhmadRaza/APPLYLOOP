@@ -19,7 +19,7 @@ from schemas.enums import AtsType, CompanyStatus
 from sqlalchemy import select
 
 from workers.app import SessionLocal, app
-from workers.scraping import dedupe, feed, grow, http, ingest, registry
+from workers.scraping import aggregator, dedupe, feed, grow, http, ingest, registry
 from workers.scraping import detect as detection
 from workers.scraping.feeds import FEEDS
 from workers.settings import get_settings
@@ -117,6 +117,76 @@ def dedupe_jobs() -> dict[str, int]:
         result = dedupe.dedupe_jobs(session)
         session.commit()
         return asdict(result)
+
+
+@app.task(name="workers.tasks.scraping.aggregate_all")
+def aggregate_all() -> int:
+    """Fan out one search per (site, term, location). Holds no business logic itself.
+
+    No-ops when JOBSPY_PROXIES is empty. That is a safety interlock, not a guard clause:
+    §7.4 scopes proxies to this layer precisely because it is the layer that gets
+    blocked, and running LinkedIn or Indeed from a bare datacentre or a developer's home
+    IP burns that IP and inflates §8.2's block rate for everyone. There is deliberately
+    no override flag — a developer who wants to try it unproxied can do so in a shell;
+    the *scheduled* path stays interlocked.
+    """
+    if not get_settings().jobspy_proxies:
+        with SessionLocal() as session:
+            # §3.7: a layer that quietly does nothing is the failure mode, so say so.
+            ingest.record(session, "aggregate.skipped", {"reason": "no proxy configured"})
+            session.commit()
+        return 0
+
+    dispatched = 0
+    for site in aggregator.SITES:
+        for term, location in aggregator.SEARCHES:
+            aggregate_search.delay(site, term, location)
+            dispatched += 1
+    return dispatched
+
+
+@app.task(
+    name="workers.tasks.scraping.aggregate_search",
+    # Per worker node. ponytail: a Redis token bucket if a second node ever appears.
+    rate_limit="6/m",
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_jitter=True,
+    # Two rather than three: a retry re-runs the whole search against a host that has
+    # already shown signs of not wanting us.
+    max_retries=2,
+)
+def aggregate_search(site: str, term: str, location: str) -> dict[str, int]:
+    """One aggregator search, upserted through M1's diff engine."""
+    settings = get_settings()
+    # Read from settings inside the task, never passed as an argument: Celery logs task
+    # arguments at INFO and writes them to the Redis result backend, so a proxy
+    # parameter would print `user:pass@host` into both (Part 13 rule 9).
+    proxies = [proxy.get_secret_value() for proxy in settings.jobspy_proxies]
+
+    jobs = aggregator.scrape(site, term, location, proxies)
+    with SessionLocal() as session:
+        # No company_id: §4.3's reverse-index resolves the employer later, from the
+        # job_url_direct this layer stores.
+        _, inserted, updated = ingest.upsert(session, jobs, None)
+        # `close_missing` is deliberately NOT called. An aggregator search is a query,
+        # not a board — "this job did not come back in today's python developer search"
+        # means it fell off page two, not that it closed. Closing on absence here would
+        # mass-close live jobs on the first throttled run.
+        ingest.record(
+            session,
+            "aggregate.run",
+            {
+                "site": site,
+                "term": term,
+                "location": location,
+                "fetched": len(jobs),
+                "inserted": inserted,
+                "updated": updated,
+            },
+        )
+        session.commit()
+    return {"fetched": len(jobs), "inserted": inserted, "updated": updated}
 
 
 @app.task(name="workers.tasks.scraping.grow_registry")
