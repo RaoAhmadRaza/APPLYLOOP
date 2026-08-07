@@ -19,6 +19,9 @@ from schemas.enums import Seniority, WorkAuth
 class ProfileBase(Schema):
     user_id: UUID
     master_resume: str | None = None
+    # Set by the upload endpoint, not by a client. Exposed because the dashboard needs
+    # to know whether a résumé is on file at all.
+    resume_url: str | None = None
     parsed_json: dict[str, Any] = Field(default_factory=dict)
     prefs_json: dict[str, Any] = Field(default_factory=dict)
     work_auth: WorkAuth | None = None
@@ -33,6 +36,7 @@ class ProfileCreate(ProfileBase):
 
 class ProfileUpdate(Schema):
     master_resume: str | None = None
+    resume_url: str | None = None
     parsed_json: dict[str, Any] | None = None
     prefs_json: dict[str, Any] | None = None
     work_auth: WorkAuth | None = None

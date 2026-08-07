@@ -24,7 +24,14 @@ class Profile(Base, UUIDv7PK, Timestamps):
     user_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), unique=True
     )
+    # The extracted text, which is half the evidence vault (§3.3) and the string every
+    # `evidence` row must be findable in. Written by the parse stage, not by the upload.
     master_resume: Mapped[str | None] = mapped_column(Text)
+    # Object-storage key for the raw upload, e.g. `resumes/<profile_id>/<uuid>.pdf`.
+    # A key rather than a full URL: the bucket and endpoint are deployment config, and
+    # baking them into a row makes moving buckets a data migration. The extension is
+    # part of the key because the extractor needs the format hint.
+    resume_url: Mapped[str | None] = mapped_column(Text)
     parsed_json: Mapped[dict] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
     prefs_json: Mapped[dict] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
     work_auth: Mapped[str | None] = mapped_column(Text)

@@ -10,6 +10,7 @@ from db.models.approval import Approval
 from db.models.company import Company
 from db.models.document import Document
 from db.models.event import Event
+from db.models.evidence import Evidence
 from db.models.job import Job
 from db.models.job_embedding import JobEmbedding
 from db.models.match import Match
@@ -22,6 +23,7 @@ __all__ = [
     "Company",
     "Document",
     "Event",
+    "Evidence",
     "Job",
     "JobEmbedding",
     "Match",
