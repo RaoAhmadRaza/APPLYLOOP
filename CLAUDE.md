@@ -103,6 +103,40 @@ The three questions that change the answer to almost everything here:
 
 If the answer to any is yes and the code you're about to write doesn't handle it, stop and say so.
 
+## 1.6 Keep the record current
+
+Two files carry what this one cannot, because they change every session:
+
+| File | Holds | Update it |
+|---|---|---|
+| `docs/PROJECT_STATE.md` | What is *true* right now — milestone status with its evidence, what runs, what is known broken, what is unproven | **Read at the start of a session. Update before ending one.** |
+| `docs/DECISIONS.md` | Decisions made *while building*, with the evidence that drove them | **When you make one.** Not at the end, when the reason has been forgotten. |
+
+Part 7 below holds decisions made *before* building — the platform and stack choices.
+`docs/DECISIONS.md` holds the ones discovered with a keyboard.
+
+**Write an entry when someone six months from now would otherwise reasonably do the
+opposite.** In practice that is:
+
+- **A vendor's documentation was wrong.** Record the endpoint's actual behaviour and the
+  date you verified it. Half of M1's and M2's adapter code exists because of these.
+- **A rule had to be narrowed because live data broke it.** Record the data. "`#259` is a
+  store number, not a requisition id" is worth more than the diff that fixed it.
+- **You rejected the obvious approach.** Say what it was and why it loses. A future
+  session will otherwise propose it again, confidently.
+- **You deferred something.** It goes in the deferred table **with a trigger** — the
+  condition that makes it worth doing. A deferral with no trigger is just a hole.
+- **You found a defect in already-shipped code.** Record why the existing tests could not
+  catch it. That is usually the more valuable half.
+
+**Do not write an entry for:** anything the code already says plainly, anything git
+history answers, a restatement of Part 7, or a narration of what you did. These files are
+read by someone deciding what to do next, not audited.
+
+**When measurement contradicts something written here**, do not quietly change this file.
+Record the contradiction in `docs/DECISIONS.md` with the evidence and a trigger, and say
+so. This file is law; law gets amended deliberately, not as a side effect.
+
 ---
 
 # PART 2 — WHAT WE ARE BUILDING
@@ -630,6 +664,10 @@ Three more from M2:
 Format: **decision — rejected alternative — why**. If you want to change one of these,
 say so explicitly and give the reason; don't quietly do something else.
 
+These are the decisions taken **before** building. The ones taken **while** building —
+where a vendor's docs were wrong, where live data forced a rule to narrow — live in
+`docs/DECISIONS.md`, which is appended to as they happen (§1.6).
+
 ## 7.1 Platform
 
 | Layer | Decided | Rejected | Why |
@@ -861,3 +899,7 @@ Decisions deliberately deferred. If a task touches one of these, ask rather than
 *Companions: `job-automation-build-blueprint.md` (what and why) ·
 `build-sequence-and-phase-architecture.md` (order and gates). This file is the operational
 summary of both — where they disagree, they are the source of truth and this file is stale.*
+
+*Living records, updated every session (§1.6): `docs/PROJECT_STATE.md` (what is true right
+now) · `docs/DECISIONS.md` (what was decided while building, and why). Operational guides:
+`docs/proxy-setup.md`.*
