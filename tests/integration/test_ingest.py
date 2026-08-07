@@ -74,6 +74,24 @@ def test_first_run_inserts_every_posting(session: Session, company: Company) -> 
     assert rows[0].description == "Write software."
 
 
+def test_a_board_that_repeats_a_posting_does_not_raise(session: Session, company: Company) -> None:
+    """Workable's widget returns one entry per location, so a role posted in six cities
+    comes back six times under one shortcode — verified live against lawnstarter, which
+    returns 46 entries for 9 postings.
+
+    Postgres refuses an ON CONFLICT DO UPDATE that would touch a row twice in one
+    statement, so this was a hard failure rather than a duplicate row. None of M1's
+    three seeded Workable boards repeat, which is why it never fired.
+    """
+    board = _board(_posting(1), _posting(1), _posting(2))
+
+    result = ingest.ingest_company(session, board, company)
+
+    assert result.fetched == 3
+    assert result.inserted == 2
+    assert [row.external_id for row in _jobs(session)] == [f"{SLUG}:1", f"{SLUG}:2"]
+
+
 # ------------------------------------------------ gate item 2: only diffs, no duplicates
 
 
