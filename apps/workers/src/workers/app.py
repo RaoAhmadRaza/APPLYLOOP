@@ -14,6 +14,7 @@ from datetime import timedelta
 from celery import Celery
 from db.session import make_sync_engine, make_sync_sessionmaker
 
+from workers.scraping import feeds
 from workers.settings import get_settings
 
 # Module scope: this IS the worker entrypoint, so a bad environment must fail here.
@@ -35,6 +36,10 @@ TASK_MODULES = [
     "workers.tasks.health",
     "workers.tasks.scraping",
 ]
+
+# Imported for the beat schedule below, not for the tasks — one entry per feed, keyed by
+# the registry so adding a module cannot leave it unscheduled.
+FEEDS = feeds.FEEDS
 
 app = Celery(
     "applyloop",
@@ -59,10 +64,42 @@ app.conf.update(
     # logic in it — the entry names a task and an interval, nothing else — so M7 can
     # replace it with cron -> webhook without touching a line of the ingest code.
     #
+    # Each layer-3 feed gets its own entry on its own interval, built from the registry
+    # so a feed cannot be added and then silently never run. The interval lives on the
+    # feed module rather than in settings because it is a property of that provider's
+    # terms — Remotive's own response asks for at most four requests a day — and it does
+    # not change between staging and production.
     beat_schedule={
         "ingest-ats-boards": {
             "task": "workers.tasks.scraping.ingest_all",
             "schedule": timedelta(minutes=settings.ingest_interval_minutes),
+        },
+        **{
+            f"feed-{source}": {
+                "task": "workers.tasks.scraping.ingest_feed",
+                "args": (source,),
+                "schedule": timedelta(hours=module.INTERVAL_HOURS),
+            }
+            for source, module in FEEDS.items()
+        },
+        # Its own entry rather than a chord after ingest: the pass converges to a fixed
+        # point from any starting state, so *when* it runs is not load-bearing, and a
+        # chord would let one failing board block the dedupe of every other source.
+        "dedupe-jobs": {
+            "task": "workers.tasks.scraping.dedupe_jobs",
+            "schedule": timedelta(minutes=settings.ingest_interval_minutes),
+        },
+        # §4.3's reverse-index. Hourly rather than per-ingest: it works through a capped
+        # batch each run, so the useful knob is how often it gets a turn.
+        "grow-registry": {
+            "task": "workers.tasks.scraping.grow_registry",
+            "schedule": timedelta(minutes=settings.grow_interval_minutes),
+        },
+        # Layer 2. Twice a day rather than four times, because every request here spends
+        # residential bandwidth and carries block risk. No-ops without a proxy.
+        "aggregate-jobspy": {
+            "task": "workers.tasks.scraping.aggregate_all",
+            "schedule": timedelta(minutes=settings.aggregate_interval_minutes),
         },
     },
 )
