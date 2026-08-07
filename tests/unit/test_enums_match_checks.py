@@ -17,11 +17,15 @@ from schemas.enums import (
     DocumentType,
     MatchLabel,
     MatchStatus,
+    RemoteMode,
     Seniority,
     UserPlan,
     WorkAuth,
 )
 
+# Every StrEnum that backs a CHECK constraint. The guard iterates this list, not the
+# module, so a new enum has to be added here by hand — that is the one gap it cannot
+# close for itself.
 ALL_ENUMS = [
     ApplicationStatus,
     ApplyMethod,
@@ -32,6 +36,7 @@ ALL_ENUMS = [
     DocumentType,
     MatchLabel,
     MatchStatus,
+    RemoteMode,
     Seniority,
     UserPlan,
     WorkAuth,
