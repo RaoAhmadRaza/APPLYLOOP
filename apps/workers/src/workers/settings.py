@@ -30,6 +30,22 @@ class Settings(BaseSettings):
     # watch a tick actually happen, and it cannot wait six hours to do it.
     ingest_interval_minutes: int = 360
 
+    # --- Layer 3, the free feeds -------------------------------------------------
+    # How long a paginated feed waits between pages. One second is not a throughput
+    # decision — Himalayas 429s, and none of these cost us anything to be polite to.
+    feed_page_delay_seconds: float = 1.0
+
+    # The share of the previous pass's row count below which a feed closes nothing.
+    # Half is generous on purpose: these listings genuinely fluctuate, and the guard
+    # only has to catch a collapse, not a dip. See feed._volume_ok.
+    feed_volume_floor: float = 0.5
+
+    # Age at which a *paginated* feed's rows are closed. Absence can never close them —
+    # a posting missing from the pages we asked for may be on a page we did not — so
+    # time is the only signal left. Six weeks is longer than a live posting usually
+    # lasts and shorter than the noise floor of "is this still open?".
+    feed_stale_days: int = 45
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
