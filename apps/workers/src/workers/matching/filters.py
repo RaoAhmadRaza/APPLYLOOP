@@ -97,6 +97,27 @@ class Funnel:
         return asdict(self)
 
 
+def active(profile: ProfileRead, prefs: Prefs) -> list[str]:
+    """Which filters actually constrained anything for this profile.
+
+    Goes into `reasons_json`, and the distinction it carries is the useful one: every job
+    that reaches the model passed every filter by construction, so a list of "filters
+    passed" would be the same constant on every row. What a reader cannot otherwise tell
+    is whether location was *checked and matched* or simply never set.
+    """
+    return [
+        name
+        for name, on in (
+            ("location", bool(profile.locations)),
+            ("remote", bool(prefs.remote_modes)),
+            ("seniority", profile.seniority is not None),
+            ("work_auth", profile.work_auth == WorkAuth.NEEDS_SPONSORSHIP),
+            ("keywords", bool(prefs.must_have_keywords or prefs.exclude_keywords)),
+        )
+        if on
+    ]
+
+
 def candidates(
     session: Session, profile: ProfileRead, prefs: Prefs
 ) -> tuple[list[uuid.UUID], Funnel]:
