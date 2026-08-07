@@ -93,12 +93,19 @@ services:
 
   # The scheduler for M1 gate item 4. Enqueues only — every task it fires runs on the
   # worker above. Exactly one replica: two beats would double-enqueue every tick.
-  # Schedule state goes to /tmp rather than the read-only working directory.
+  #
+  # The schedule file is on a named volume, not in /tmp. Beat stores each entry's
+  # last-run time there; without persistence every restart looks like "never ran" and
+  # re-fires every entry immediately. Harmless at M1's unmetered six-hour ATS tick, but
+  # M2's feeds carry real budgets — Remotive's own response asks for at most four
+  # requests a day, and a restart loop would blow through that in a minute.
   beat:
     <<: *app
     restart: unless-stopped
     command:
-      ["celery", "-A", "workers.app", "beat", "-l", "info", "-s", "/tmp/celerybeat-schedule"]
+      ["celery", "-A", "workers.app", "beat", "-l", "info", "-s", "/var/lib/celery/schedule"]
+    volumes:
+      - beat-state:/var/lib/celery
     depends_on:
       redis:
         condition: service_healthy
@@ -107,3 +114,4 @@ services:
 
 volumes:
   db-data:
+  beat-state:

@@ -37,6 +37,12 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # without a second copy of the migrations.
 
 RUN useradd --create-home --uid 1000 app && chown -R app:app /app
+
+# Beat's schedule volume mounts here. The directory has to exist and be owned by `app`
+# *in the image*: Docker seeds a fresh named volume from the image path, so a path that
+# does not exist gets created root-owned and beat cannot write its schedule.
+RUN mkdir -p /var/lib/celery && chown app:app /var/lib/celery
+
 USER app
 
 EXPOSE 8000
