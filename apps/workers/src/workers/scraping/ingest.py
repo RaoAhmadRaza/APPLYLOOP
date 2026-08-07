@@ -142,6 +142,12 @@ def _upsert_chunk(
             "updated_at": func.now(),
             # Seeing a posting again means it is listed again.
             "closed_at": None,
+            # A changed payload can change title, company or location, so the derived
+            # key is stale. Clearing it hands recomputation to the dedupe pass, which
+            # keeps one owner of the normalizer. This sits inside `set_`, so it fires
+            # only when the `where` below has already decided the row genuinely changed
+            # — `_MUTABLE` and the diff invariant are both untouched.
+            "dedupe_key": None,
         },
         # The whole of "writes only diffs". Without it every run rewrites every row.
         # The closed_at arm is load-bearing on its own: a job that was closed and then
