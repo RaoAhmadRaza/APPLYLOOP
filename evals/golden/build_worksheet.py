@@ -178,14 +178,18 @@ def _sample(session: Session, fixture: str, profile: ProfileRead) -> list[dict[s
 
     chosen: list[tuple[str, uuid.UUID]] = []
     taken: set[uuid.UUID] = set()
-    for stratum, source in (
-        ("on_topic", on_topic),
-        ("filtered_out", _across_filters(single_failure, fixture)),
-        ("candidate_random", candidates),
-        ("pool_random", list(verdicts)),
+    # `filtered_out` arrives already ordered and must NOT be shuffled again — the
+    # round-robin across filters *is* its order, and re-shuffling silently threw it away.
+    # The first draw after adding the round-robin still produced zero work-auth pairs for
+    # exactly that reason, while looking entirely plausible.
+    for stratum, source, preordered in (
+        ("on_topic", on_topic, False),
+        ("filtered_out", _across_filters(single_failure, fixture), True),
+        ("candidate_random", candidates, False),
+        ("pool_random", list(verdicts), False),
     ):
         wanted = STRATA[stratum]
-        for job_id in _shuffled(source, fixture + stratum):
+        for job_id in source if preordered else _shuffled(source, fixture + stratum):
             if wanted == 0:
                 break
             if job_id in taken:

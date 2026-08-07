@@ -515,6 +515,140 @@ the same as clearing the one the code under test calls.
   width when mixed into a points-based layout. Fixture-generator only, but the failure
   mode — a unit that looks like a number — is worth knowing.
 
+## M4 — Matching and scoring (2026-08-08)
+
+### The pool was never seeded, and it shaped everything
+
+`companies` held **0 of the 30 boards in `registry.SEED`**. The 39 active boards were all
+M2's reverse-index finds, which is why one employer was **55% of the open pool** and a
+quarter of it was German-language postings — a sampling frame that would have made the
+golden set measure the wrong thing entirely.
+
+`make seed && make ingest` fixed it with no code: **pool 1,458 → 19,707, active boards
+41 → 67, that employer's share 55.3% → 5.9%.** Recorded because the next person to look
+at a skewed pool should check this before concluding anything about the scrapers.
+
+### Defects the measurement found before a line of M4 was written
+
+**The location hard filter was a `WHERE false`.** `profiles.locations` holds `"City,
+Region"` as the résumé spelled it; `jobs.locations` holds each source's own strings. Both
+sides are deliberately un-normalized, and each of those decisions is individually correct
+— their *composition* is the bug. Measured on the pool as it then stood:
+
+```
+profiles.locations && jobs.locations   "Portland, OR" -> 1     "Kraków, Lesser Poland" -> 0
+```
+
+Every M3 fixture profile got a candidate pool of **at most three jobs out of 1,458**, and
+a matcher that returns one job and gets it right scores 100% precision. This is the
+green-while-broken shape the whole milestone had to be designed around: the filter clause,
+the precision clause and the cost clause all *pass* on a filter that has emptied the pool.
+
+The filter is now coarse — remote counts, silence counts, a case-folded comma segment
+counts — and the exact city goes to the model as something to weigh rather than a clause
+to die on. Against the grown pool a senior Portland profile gets **4,767 candidates from
+19,267**: a filter that drops three quarters, not one that drops everything. BAR.md's pool
+floor and per-filter cap exist so this specific failure can never pass the gate again.
+
+**Substring keyword matching drops 85% of the pool, or none of it.** `description ILIKE
+'%go%'` matched **1,234 of 1,458** rows — "good", "going", "Google", "category", "Diego" —
+against 136 for the word-boundary form. As a must-have that filter drops nothing and
+silently disables §3.5's free rung; as an exclude term it drops five rows in six and still
+looks like it works.
+
+**`\m…\M` cannot wrap a term ending in punctuation.** `\mC\+\+\M` matches nothing at
+all, because `\M` demands a word character and `+` is not one. Applied unconditionally,
+every keyword ending in punctuation — `C++`, `.NET`, `Node.js` — becomes a must-have that
+matches zero jobs. The boundaries are now conditional on the term's own first and last
+character.
+
+**An uncorrelated `unnest` subquery makes `EXISTS` true for every row.** Wrapping
+`unnest(jobs.locations)` in a plain `.subquery()` unnests *every* job's locations at once,
+so the location filter passed everything as soon as one job in the table matched. It was
+caught by the single assertion in the suite demanding a specific row be **dropped** — every
+"this should survive" assertion passed. `table_valued(...).alias(...)` was the first
+attempt and is also wrong: it renders `AS job_loc` with no column list. The shipped form
+is one array expression, `regexp_split_to_array(array_to_string(...))`, with no subquery
+to correlate.
+
+**The golden-set sampler re-shuffled its own round-robin.** The `filtered_out` stratum
+round-robins across the filters that actually fired, so a rare one still gets picked; the
+draw loop then passed that ordered list back through `_shuffled` and threw the ordering
+away. The result looked entirely plausible — 15 location drops, 8 seniority — and contained
+**zero** work-auth pairs, which is the filter §7.2 calls the most-praised feature in the
+leading product. Work-auth-only failures do exist in the pool (22 and 43 for the two
+sponsorship profiles); they were simply never reached.
+
+### Decisions
+
+**No cross-encoder in v1 — an explicit override of §7.2, with a trigger.** §7 asks that
+changes to it be stated with a reason. The M4 gate measures precision, not architecture:
+if `filter → embed → cosine top-N → LLM explain` clears the bar then the reranker is
+provably unnecessary, and building it first makes the precision unattributable to any
+stage. The golden run reports **recall@N** — the share of hand-labelled fit pairs that
+reached the model at all — and below ~0.95 the reranker has a measured job. It would be
+hosted (`cohere/rerank-v3.5` via OpenRouter, $0.001/search, where one "search" is really
+25–50 real postings once a >500-token description is auto-chunked). Never self-hosted:
+`bge-reranker-v2-m3` means torch in the worker image on the 4 vCPU / 8 GB box M10 also
+needs for a headed Chromium.
+
+**The model emits facts; Python computes the score.** M3's split, applied for a sharper
+reason. Part 14 defers the threshold to the golden set, and a threshold only means
+anything against a stable score distribution — a model-emitted 0–100 anchors on 85/90/75
+and shifts wholesale with the model version, so a cut calibrated on fifty pairs measures
+something else after the next bump. It also keeps the arithmetic testable with no model
+calls, which leaves the paid gate pointed at the only question a live model can answer.
+Cosine is recorded but is **not** a term: it decides who gets asked, not how good the
+answer is, and a second weight would be fitted to fifty pairs.
+
+**Part 14 is enforced, not documented.** `match_threshold` has no default anywhere. With
+it unset the matcher records `match.skipped` and does nothing — the same interlock shape
+as the aggregator without a proxy. Every milestone so far has learned that a rule written
+in prose and not executed gets quietly broken.
+
+**Salary is not a hard filter, and has no funnel counter.** §3.5 lists it, but `jobs`
+carries no salary column — the only structured pay data in the repo is one feed's
+`raw_json`, on 100 of 19,707 rows. A counter for a filter that structurally cannot fire
+reads, in a dashboard, exactly like a filter that ran and found nothing.
+
+**`job_embeddings.model` carries a template version (`...@v1`).** That key is what says
+"this job is done". If the embedded text changes without it, the key still says done and
+the table holds two incomparable vector spaces that one cosine query compares anyway.
+M1's `raw_json` lesson in a new place.
+
+**Below-threshold matches are written `skipped`, not left unwritten.** "Only
+above-threshold matches proceed" becomes a database fact — M5 selects
+`WHERE status = 'discovered'` and cannot see them — rather than a convention someone has
+to remember. It overloads `skipped` with M6's user-initiated Skip; acceptable because the
+consumer semantics are identical and `reasons_json` records which.
+
+**The rescore's `ON CONFLICT ... WHERE status IN ('discovered','skipped')` is not
+optional.** Without it a routine re-run drags an `approved` or `applied` match back to
+`discovered` and undoes a human decision M6 has already messaged about.
+
+**`seniority.py` moved to the worker top level.** §3.1 forces it: M4's filter must band
+`jobs.title` and the only banding code was inside `workers/profiles/`. `RANK` is new and
+necessary — **neither ordering already in the codebase is a rank.** `Seniority`'s
+declaration order puts LEAD after PRINCIPAL; `TITLE_BANDS` is a match-precedence order
+that puts INTERN above JUNIOR. Both look like rank, so a window comparison written against
+either is wrong in a way nothing notices. LEAD and STAFF share a rank deliberately.
+
+**The golden set is drawn from the pool, never from the matcher's own top-N**, seeded and
+committed so it cannot be re-rolled until it looks convenient, with job payloads stored
+beside each id so it does not rot when a posting closes. The "passes filters, low cosine"
+stratum in the plan was dropped: building it would have required embedding the entire
+candidate pool before a single pair was labelled — the exact spend §3.5 exists to avoid,
+on a matcher whose quality is still unmeasured. A uniform draw from the candidates catches
+the same retrieval false negatives, costs nothing, and is independent of the thing under
+test.
+
+**BAR.md is committed before any scored output exists**, alone and first, because
+`git log --diff-filter=A` on it is the only thing that makes §9's "set **in advance**"
+auditable rather than asserted. Its recall floor is the single most important line in it:
+without one, threshold=100 labels nothing a good fit, precision is 1.0 by vacuity, and a
+matcher that matches nothing passes the gate.
+
+
 ---
 
 ## Open, deferred deliberately
@@ -538,4 +672,11 @@ the same as clearing the one the code under test calls.
 | Layout-aware extraction (docling, or a fine-tuned small model) | The live parse gate shows real two-column résumés failing. Today's ceiling is pdfminer.six's reading order. | M3 |
 | A MinIO service in compose for local storage | Local development without R2 credentials becomes real friction. Today the endpoint 503s and everything else runs. | M3 |
 | Seeding `prefs_json.remote_modes` from a résumé that says "Remote" | A user complains that stating "Remote" on their CV did not make remote jobs match. Deliberately not done: prefs are the user's, and a parse that wrote them would be inventing intent. | M3 |
+| A cross-encoder reranker | Golden `recall@N` < ~0.95 — a hand-labelled fit pair never reached the model. Hosted only; never on the 4 vCPU / 8 GB box M10 needs for a headed browser. | M4 |
+| HNSW on `job_embeddings` | Already on the model: >100k rows or p95 match query >500 ms, now measurable from `match.scored.elapsed_ms`. Deliberately not added at M4 — HNSW is approximate, and adding it now folds ANN recall loss into the very baseline the milestone exists to establish. | M4 |
+| A stored profile embedding | Profile embeds exceed ~1% of a run's `embed_tokens`. Today it is one call per user per run, against a staleness rule keyed on two independently-mutating inputs. | M4 |
+| A salary hard filter | A `jobs.salary_min` column exists. Today both sides are missing on 99% of the pool. | M4 |
+| `jobs.locations_norm` + GIN | Pool > ~50k, or the funnel query shows up in `match.scored.elapsed_ms`. | M4 |
+| A distinct below-threshold match status | M8's dashboard needs to tell "scored too low" from "the user skipped". Both mean excluded today. | M4 |
+| Batching several jobs per explain call | Measured cost exceeds BAR.md's ceiling. 3–4x available, at the cost of per-job attribution and retry granularity. | M4 |
 | PII retention policy for `master_resume` and `evidence` | Before the first paying customer — the same deadline Part 14 already sets for multi-tenancy isolation. These are the first genuinely private per-user rows in the schema; ICO/EDPS guidance for candidate data is 6–12 months. | M3 |

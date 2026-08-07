@@ -6,8 +6,8 @@ ending one.
 CLAUDE.md §9 says what "in scope" means. This file says what is *true* — what has been
 proven, with what evidence, and what is known to be broken.
 
-> Last updated: **2026-08-07**, after M3 landed and its live gate passed.
-> `main` @ `323957f` · pushed · CI green (`test` + `compose-smoke`).
+> Last updated: **2026-08-08**, mid-M4. The code is complete and green offline; the
+> gate is **not** met yet because the golden set is unlabelled — see *Next*.
 
 ---
 
@@ -19,8 +19,8 @@ proven, with what evidence, and what is known to be broken.
 | **M1** | ATS ingestion + registry | ✅ **proven** 2026-08-06 | Six adapters green against live boards (gate asked for three). Second run writes only diffs — live PostHog board: `fetched: 12, inserted: 0, updated: 0, closed: 0`. `detect()` resolves a real careers URL. CI log reads `beat ingested 13 jobs unattended`. |
 | **M2** | Aggregators + dedupe | ✅ **proven** 2026-08-07, one clause pending | See below. |
 | **M3** | Profiles & résumé parsing | ✅ **proven** 2026-08-07 | Live gate **24/24 against a real model** (OpenAI, `gpt-5.4-nano` class). See below. |
-| **M4** | Matching | ⬜ **unblocked — this is next** | Reads the deduped pool from M2 and the profiles from M3. |
-| M5–M11 | — | ⬜ | Strict chain from M4. |
+| **M4** | Matching | 🟡 **built, gate not yet met** | Stage, filters, scoring and the live gate all ship and are green offline (567 tests). The gate is a quality bar and needs ~50 **hand-labelled** pairs; the worksheet is drawn and waiting on a human. See below. |
+| M5–M11 | — | ⬜ | Strict chain from M4. **M5 is not in scope until the golden-set bar is met.** |
 
 ### M3 gate, item by item
 
@@ -33,6 +33,21 @@ proven, with what evidence, and what is known to be broken.
 Also true, and not asked for by the gate: a re-parse is idempotent, drops claims the new
 résumé no longer makes, keeps claims the user added by hand, and never overwrites a
 promoted column the user set.
+
+### M4 gate, item by item
+
+| Clause | Status | Evidence |
+|---|---|---|
+| Golden-set precision meets the bar set **in advance** | 🟡 **bar set, set unlabelled** | `evals/golden/BAR.md` was committed **alone and first**, before any scored output existed — `git log --diff-filter=A` on it is what makes "in advance" auditable. It pins precision ≥ 0.80, a recall floor, filter recall ≥ 0.90, a minimum positive count below which a run is *inconclusive*, a pool floor, a per-filter cap and a cost ceiling. `evals/golden/pairs.json` holds 56 stratified pairs with every label blank. **Blocked on a human labelling them.** |
+| Hard filters demonstrably drop mismatches **before** embedding | ✅ **offline; live half waits on labels** | Proven structurally rather than by a call-order spy: `test_matching.py` asserts **no `job_embeddings` row exists** for a filtered job — an embedding row is the physical receipt that a job reached a paid stage. Plus the counter chain is asserted non-increasing, and `set(ids_sent_to_llm) ⊆ set(filtered_ids)`. 34 filter tests cover all five polarity laws. |
+| Cost per 1,000 jobs scored is measured | ✅ **mechanism ships** | `llm.complete_json` takes a caller-owned `usage` sink, appended **per attempt including the one that raises**; `match.scored` carries `embed_tokens`/`prompt_tokens`/`completion_tokens`. The live gate asserts `prompt_tokens > 0` **and** `embed_tokens > 0`, which is also the anti-stub proof — a fake reports zero. |
+| Every score carries a human-readable reason | ✅ | `MatchReasons` is the `reasons_json` contract; `test_matching.py` asserts every written match has a non-empty summary and a non-empty partition. The live gate additionally asserts every requirement span is **findable in the posting** — M5's fabrication problem caught a milestone early. |
+
+**What runs today, and what it costs:** nothing, until someone sets `MATCH_THRESHOLD`.
+That is deliberate. Part 14 defers the threshold to the golden set, so there is no default
+anywhere in the code — `match_all` records `match.skipped` and does nothing. Both tasks
+are registered in the live worker (verified via `celery inspect registered`).
+
 
 ### M2 gate, item by item
 
@@ -80,24 +95,32 @@ SELECT kind, text, source FROM evidence WHERE profile_id = :profile_id;
 
 | | |
 |---|---|
-| Open rows | 942 |
-| Deduped pool | 942 (zero false merges after the same-source fix) |
-| By source | lever 807 · greenhouse 80 · remotive 34 · workable 9 · ashby 12 |
-| Registry | 4 real boards, 6 negatively cached (`other`/`error`) |
-| Second dedupe pass | `keyed: 0, duplicates: 0, promoted: 0` — converged |
+| Open rows | **19,707** (was 942 — see below) |
+| Registry | **67 active boards** (was 41) |
+| Largest single employer's share | **5.9%** (was 55.3%) |
+| Distinct companies in the pool | 263 |
+| `remote_mode IS NULL` | 87% — the reason every filter passes on silence |
+| Candidates after hard filters, senior Portland profile | 4,767 / 19,267 |
+
+**`registry.SEED` had never been run against this database** — all 41 boards were M2's
+reverse-index finds, which is why one employer was more than half the pool. `make seed &&
+make ingest` fixed it with no code change. Anyone diagnosing a skewed pool should check
+this first.
 
 ---
 
 ## Test surface
 
 ```
-451 pass, no network            make test
+567 pass, no network            make test
  12 live, all 8 real feeds      make verify-live-feeds       APPLYLOOP_LIVE_FEEDS=1
   9 live, all 6 real ATS boards make verify-live             APPLYLOOP_LIVE_ATS=1
   3 live, aggregator            make verify-live-aggregator  ← SKIPPED, needs a proxy
  24 live, résumé parsing        make verify-live-parse       ← GREEN 2026-08-07 (4 model
                                                              calls/run, well under a cent)
   3 live, object storage        make verify-live-storage     ← SKIPPED, needs a bucket
+ 13 live, the M4 gate           make verify-live-match       ← SKIPPED, needs the golden
+                                                             set labelled
 ```
 
 ruff + format + mypy clean on 133 files. Live suites are deliberately **not** in CI — a

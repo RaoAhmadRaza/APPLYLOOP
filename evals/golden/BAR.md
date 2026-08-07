@@ -142,6 +142,14 @@ own top-N would measure precision over exactly the region the system already bel
 | `candidate_random` | 10 | Passes every filter, drawn uniformly. Catches retrieval false negatives without needing the pool embedded first. |
 | `pool_random` | 10 | Uniform over the whole open pool. The calibration stratum, and the one that screams if a filter has quietly emptied everything. |
 
+**Which filters the set can actually exercise.** Recorded when the first draw was
+taken, because it bounds what the filter clause proves. The four fixture profiles state no
+preferences, so `remote` and `must_have_keywords` are inactive for them and no pair can
+fail on either — those two are covered by the offline polarity suite only. `location`,
+`seniority` and `work_auth` all fire and all appear in `filtered_out`. Getting work-auth
+in took a fix: a plain shuffle of the single-failure set produces zero of them, because
+they are 22–43 rows against fourteen thousand location failures.
+
 **Hard negatives.** At least 60% of the `not_relevant` labels must be marked
 `negative_type: hard` — a posting in the same job family as some positive, differing on
 exactly one dimension the product claims to handle. A warehouse role against a backend
