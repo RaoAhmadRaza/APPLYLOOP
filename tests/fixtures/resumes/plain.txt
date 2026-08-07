@@ -1,0 +1,22 @@
+TOBIAS FENWICK-ADEYEMI
+Backend Engineer | Remote (GMT+1) | t.fenwick@example.com
+UK citizen.
+
+EXPERIENCE
+
+Backend Engineer, Cobalt Ledger — February 2020 to Present
+- Replaced the nightly settlement batch with a streaming consumer, cutting end-of-day
+  reconciliation from four hours to eleven minutes
+- Owned the Postgres upgrade from 12 to 16 with no scheduled downtime
+
+Junior Developer, Marrow & Finch — July 2018 to January 2020
+- Built the internal invoicing tool still used by the finance team
+
+EDUCATION
+
+University of Edinburgh — BEng Software Engineering, 2018
+
+SKILLS
+
+Languages: Python, Java
+Infrastructure: PostgreSQL, RabbitMQ, Docker

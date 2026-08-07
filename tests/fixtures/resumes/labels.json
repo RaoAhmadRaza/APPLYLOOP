@@ -1,0 +1,50 @@
+{
+  "_comment": [
+    "M3's labelled set. build-sequence.md asks for 'parsing accuracy acceptable on a",
+    "small labeled set'; this is it, and tests/integration/test_resume_parse_live.py is",
+    "what runs against it.",
+    "",
+    "Every résumé here is synthetic — invented people, invented employers, example.com",
+    "addresses. Nothing in this directory is anyone's real document (Part 13 rule 9 in",
+    "spirit: a fixture is committed forever).",
+    "",
+    "Each fixture carries a trap on purpose. Add a fixture when a real résumé breaks the",
+    "parser in a way none of these do, and say which trap it carries."
+  ],
+  "senior_backend.pdf": {
+    "trap": "the clean case — single column, conventional headings, work auth stated plainly",
+    "seniority": "staff",
+    "work_auth": "visa_holder",
+    "location_contains": "Portland",
+    "skills_include": ["Python", "Go", "SQL", "Kubernetes", "Terraform", "PostgreSQL"],
+    "years_experience_between": [11.0, 13.0],
+    "roles": 3
+  },
+  "two_column.pdf": {
+    "trap": "two columns — pdfminer.six is documented to interleave these line by line",
+    "seniority": "senior",
+    "work_auth": "needs_sponsorship",
+    "location_contains": "Krak",
+    "skills_include": ["Python", "Rust", "PyTorch", "Spark", "dbt"],
+    "years_experience_between": [6.0, 8.0],
+    "roles": 2
+  },
+  "career_changer.docx": {
+    "trap": "no Projects and no Certifications section — the shape that makes a parser requiring every section raise; also a DOCX rather than a PDF",
+    "seniority": "junior",
+    "work_auth": "needs_sponsorship",
+    "location_contains": "Manchester",
+    "skills_include": ["SQL", "Python", "dbt"],
+    "years_experience_between": [9.0, 11.0],
+    "roles": 2
+  },
+  "plain.txt": {
+    "trap": "the no-extraction-risk baseline — if this one fails, the model or the prompt is at fault and not the converter",
+    "seniority": "mid",
+    "work_auth": "citizen",
+    "location_contains": "Remote",
+    "skills_include": ["Python", "Java", "PostgreSQL"],
+    "years_experience_between": [7.0, 9.0],
+    "roles": 2
+  }
+}
