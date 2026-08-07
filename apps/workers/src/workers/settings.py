@@ -97,6 +97,37 @@ class Settings(BaseSettings):
     # Generous: a long résumé is a lot of input, and a retry costs a whole call.
     llm_timeout_seconds: float = 120.0
 
+    # --- M4: matching and scoring --------------------------------------------------
+    # Same base URL and key as the chat model — OpenRouter and OpenAI direct both expose
+    # an OpenAI-shaped POST /embeddings, so §7.2's "keep the interface swappable" stays
+    # one variable. 1536 native dimensions, which is what `job_embeddings.embedding` is
+    # declared as. This string is stored verbatim in `job_embeddings.model` (with the
+    # template version appended, see `matching.embed`), so changing it is additive: the
+    # old vectors stay, the new ones land beside them, and nothing needs an ALTER.
+    embed_model: str = "openai/text-embedding-3-small"
+
+    # **The Part 14 interlock, made mechanical.** None is not a missing value — it is the
+    # state before the golden set has spoken. With no threshold the matching task records
+    # `match.skipped` and does nothing, the same shape as the aggregator without a proxy.
+    # Part 14 forbids inventing this number, and a default here would be exactly that
+    # invention wearing a config file. `make verify-live-match` prints the one to paste.
+    match_threshold: int | None = None
+
+    # Jobs per profile per run that reach the LLM. §3.5's illustrative funnel says 40.
+    # This is the cost dial: everything above it is free, everything below is per-job
+    # spend, and it is the only number in the ladder that buys precision with money.
+    match_top_n: int = 40
+
+    # No more than this many shortlisted jobs from one employer. Measured, not guessed:
+    # one company was 55% of the open pool the day this was written, and without a cap
+    # every match a user sees comes from that one board.
+    match_per_company_cap: int = 5
+
+    # Twelve hours. Postings move on the order of a day, and this interval *is* the
+    # cadence of the LLM bill. Already-scored jobs are excluded by a WHERE clause, so a
+    # run over an unchanged pool costs nothing.
+    match_interval_minutes: int = 720
+
     # Object storage is configured by `packages/storage`, not here: the API writes the
     # upload and the worker reads it back, so neither app can own those settings.
 
