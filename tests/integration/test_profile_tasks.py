@@ -23,10 +23,17 @@ def celery_app(redis_url: str, migrated_url: str, monkeypatch: pytest.MonkeyPatc
     monkeypatch.delenv("LLM_API_KEY", raising=False)
 
     import workers.app
+    import workers.llm
     import workers.settings
     import workers.tasks.profiles
 
     workers.settings.get_settings.cache_clear()
+    # And the one the code under test actually calls. `llm.py` did
+    # `from workers.settings import get_settings` at import, so it holds its own
+    # reference — and a reload elsewhere in the suite can leave that pointing at a
+    # different function with a warm cache built when a key *was* present. Clearing only
+    # the module's copy makes this test pass or fail on alphabetical ordering.
+    workers.llm.get_settings.cache_clear()
     importlib.reload(workers.app)
     importlib.reload(workers.tasks.profiles)
     return workers.app.app

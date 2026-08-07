@@ -29,7 +29,15 @@ class Sample(Schema):
 
 @pytest.fixture(autouse=True)
 def _configured(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A key must be present or `complete_json` refuses before it opens a socket."""
+    """A key must be present or `complete_json` refuses before it opens a socket.
+
+    The two URLs are required fields on `Settings` and nothing here connects to either.
+    They are supplied rather than inherited because the suite ignores the developer's
+    `.env` (see conftest) — a unit test that borrowed them from a real file would assert
+    different things on different machines, which is the bug that fixture exists for.
+    """
+    monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://u:p@localhost:5432/none")
+    monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
     monkeypatch.setenv("LLM_API_KEY", "test-key-not-a-secret")
     monkeypatch.setenv("LLM_MODEL", "test/model")
     llm.get_settings.cache_clear()

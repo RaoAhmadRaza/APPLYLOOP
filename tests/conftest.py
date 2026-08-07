@@ -31,6 +31,42 @@ POSTGRES_IMAGE = "pgvector/pgvector:0.8.6-pg18-trixie"
 REDIS_IMAGE = "redis:8-alpine"
 
 
+@pytest.fixture(autouse=True)
+def _ignore_dotenv() -> Iterator[None]:
+    """Settings come from `os.environ` only, never from the developer's `.env`.
+
+    Without this the suite asserts different things on different machines. Every
+    interlock test — "the aggregator no-ops without a proxy", "the parse no-ops without
+    an API key" — is a claim about an *absent* setting, and `monkeypatch.delenv` cannot
+    make it true: pydantic-settings falls straight through to the `.env` file, which on
+    a working machine holds the value.
+
+    **Found the day a real LLM_API_KEY was added**, which turned two green tests red
+    without a line of source changing. M2's proxy interlock test had the same latent bug
+    and would have failed on the first day of real proxy credentials.
+
+    Function-scoped rather than session-scoped, which is the non-obvious part:
+    `test_settings_fail_fast` calls `importlib.reload` on the settings modules, and
+    reload re-executes the module body into the *same* module dict — replacing the class
+    object this patched with a fresh one that reads `.env` again. Re-applying per test is
+    three dict writes and removes the ordering dependency entirely.
+
+    The container fixtures below export DATABASE_URL and REDIS_URL into `os.environ`, so
+    the suite still has everything it genuinely needs. A test that needs more supplies it.
+    """
+    import api.settings
+    import storage.settings
+    import workers.settings
+
+    modules = (api.settings, workers.settings, storage.settings)
+    previous = [module.Settings.model_config.get("env_file") for module in modules]
+    for module in modules:
+        module.Settings.model_config["env_file"] = None
+    yield
+    for module, value in zip(modules, previous, strict=True):
+        module.Settings.model_config["env_file"] = value
+
+
 @pytest.fixture(scope="session")
 def postgres_url() -> Iterator[str]:
     with PostgresContainer(POSTGRES_IMAGE, driver="psycopg") as container:
