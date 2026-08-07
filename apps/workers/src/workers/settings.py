@@ -77,6 +77,37 @@ class Settings(BaseSettings):
     # bandwidth and carries block risk, and aggregator listings are staler by nature.
     aggregate_interval_minutes: int = 720
 
+    # --- The LLM. M3 is the first stage to call one; M4 and M5 follow --------------
+    # An OpenAI-compatible base URL rather than a provider SDK, so §7.2's "keep the
+    # interface swappable" is one env var rather than a rewrite. Defaults to OpenRouter
+    # because §7.2 wants a cheap model for scoring and a strong one for tailoring, and
+    # routing both off one key is the whole reason that product exists.
+    llm_base_url: str = "https://openrouter.ai/api/v1"
+
+    # SecretStr, and Optional. Empty is a safety interlock, not a missing value: with no
+    # key the parse task records `profile.parse_skipped` and does nothing, exactly like
+    # the aggregator without a proxy. CI stays green without buying credit.
+    llm_api_key: SecretStr | None = None
+
+    # Résumé extraction is structured output on a few thousand tokens, once per user —
+    # the cheapest LLM call in the system. A cheap model with genuine `json_schema`
+    # support is the whole requirement. Overridable per deployment.
+    llm_model: str = "google/gemini-2.5-flash"
+
+    # Generous: a long résumé is a lot of input, and a retry costs a whole call.
+    llm_timeout_seconds: float = 120.0
+
+    # --- Object storage for raw résumés (S3-compatible; R2 in production) -----------
+    # All optional and all interlocked together: without them the upload endpoint 503s
+    # rather than 500s, and nothing else in the system notices.
+    storage_endpoint_url: str | None = None
+    storage_access_key_id: SecretStr | None = None
+    storage_secret_access_key: SecretStr | None = None
+    storage_bucket: str | None = None
+    # R2 ignores regions but boto3's signer demands one. "auto" is what Cloudflare's
+    # own docs use.
+    storage_region: str = "auto"
+
     @field_validator("jobspy_proxies", mode="before")
     @classmethod
     def _split_comma_separated(cls, value: object) -> object:
