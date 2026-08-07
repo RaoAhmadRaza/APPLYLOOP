@@ -13,18 +13,7 @@ from datetime import UTC, date, datetime
 from schemas.enums import Seniority, WorkAuth
 from schemas.resume import ParsedResume, ResumeWork
 
-# Title keywords, most senior first — the first match wins, so "Senior Staff Engineer"
-# resolves to STAFF rather than SENIOR. Word-boundary matched, or "principal" would fire
-# on "principally".
-_TITLE_BANDS: list[tuple[Seniority, tuple[str, ...]]] = [
-    (Seniority.DIRECTOR, ("director", "vp", "vice president", "head of")),
-    (Seniority.PRINCIPAL, ("principal", "distinguished", "fellow")),
-    (Seniority.STAFF, ("staff", "architect")),
-    (Seniority.LEAD, ("lead", "manager")),
-    (Seniority.SENIOR, ("senior", "sr")),
-    (Seniority.INTERN, ("intern", "internship", "trainee", "apprentice")),
-    (Seniority.JUNIOR, ("junior", "jr", "associate", "graduate", "entry level")),
-]
+from workers import seniority as bands
 
 # Fallback when the title says nothing — "Software Engineer" carries no band. Years of
 # experience, ascending; the first bound not exceeded wins.
@@ -145,7 +134,7 @@ def seniority(resume: ParsedResume, years: float | None) -> Seniority | None:
     """
     current = next(iter(_by_recency(resume.work)), None)
     if current is not None:
-        band = _band_from_title(current.position)
+        band = bands.band(current.position)
         if band is not None:
             return band
     if years is None:
@@ -159,9 +148,13 @@ def seniority(resume: ParsedResume, years: float | None) -> Seniority | None:
 def locations(resume: ParsedResume) -> list[str]:
     """The one place the résumé names, as the résumé spells it.
 
-    Deliberately **not** normalized. `profiles.locations` is matched against
-    `jobs.locations` with `&&`, and `jobs.locations` holds each source's own strings —
-    normalizing one side of an overlap makes matching worse, not better.
+    Deliberately **not** normalized, because `jobs.locations` is not either — normalizing
+    one side of a comparison makes it worse, not better.
+
+    M4 does not compare the two arrays directly: measured on the open pool, an exact
+    overlap matched 141 rows for "San Francisco, CA" where a case-folded segment match
+    found 808. `matching/filters.py` splits both sides on commas and folds case; what
+    matters here is only that this stays the string the résumé used.
 
     A list because the column is one, and because M4's filter is really "where would
     this person work" — which the user extends through the API. The parse only ever
@@ -234,13 +227,3 @@ def _by_recency(roles: list[ResumeWork]) -> list[ResumeWork]:
         ),
         reverse=True,
     )
-
-
-def _band_from_title(title: str | None) -> Seniority | None:
-    if not title:
-        return None
-    lowered = title.lower()
-    for band, keywords in _TITLE_BANDS:
-        if any(re.search(rf"\b{re.escape(word)}\b", lowered) for word in keywords):
-            return band
-    return None
