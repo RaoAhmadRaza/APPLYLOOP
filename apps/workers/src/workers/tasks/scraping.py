@@ -14,6 +14,7 @@ from typing import Any
 from uuid import UUID
 
 import httpx
+from db.events import record
 from db.models import Company
 from schemas.enums import AtsType, CompanyStatus
 from sqlalchemy import select
@@ -133,7 +134,7 @@ def aggregate_all() -> int:
     if not get_settings().jobspy_proxies:
         with SessionLocal() as session:
             # §3.7: a layer that quietly does nothing is the failure mode, so say so.
-            ingest.record(session, "aggregate.skipped", {"reason": "no proxy configured"})
+            record(session, "aggregate.skipped", {"reason": "no proxy configured"})
             session.commit()
         return 0
 
@@ -173,7 +174,7 @@ def aggregate_search(site: str, term: str, location: str) -> dict[str, int]:
         # not a board — "this job did not come back in today's python developer search"
         # means it fell off page two, not that it closed. Closing on absence here would
         # mass-close live jobs on the first throttled run.
-        ingest.record(
+        record(
             session,
             "aggregate.run",
             {

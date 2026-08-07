@@ -10,11 +10,14 @@ Recruitee expose creation dates only. So the question "did this posting change?"
 answered by comparing payloads, and Postgres answers it for free: `jsonb` equality is
 semantic and key-order-insensitive, so no `content_hash` column is needed.
 
-`upsert`, `close_missing` and `record` are public because M2's feed layer (`feed.py`)
-and aggregator layer (`aggregator.py`) write rows through exactly these. They take a
+`upsert` and `close_missing` are public because M2's feed layer (`feed.py`) and
+aggregator layer (`aggregator.py`) write rows through exactly these. They take a
 `company_id` rather than a `Company` for the same reason: a feed row names an employer
 we may hold no registry row for, so there is nothing to pass. One diff engine, one
-close statement, one event shape, three sources.
+close statement, three sources.
+
+The event writer they all share lives in `db.events.record` — M3 needed one too, and
+§3.1 forbids a stage package importing another's internals.
 """
 
 import uuid
@@ -24,7 +27,8 @@ from datetime import UTC, datetime
 from typing import Any
 
 import httpx
-from db.models import Company, Event, Job
+from db.events import record
+from db.models import Company, Job
 from schemas.enums import AtsType, CompanyStatus
 from sqlalchemy import func, literal_column, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
@@ -280,22 +284,6 @@ def record_failure(session: Session, company: Company, error: str) -> None:
         "ingest.error",
         {"error": error[:500], "consecutive_failures": company.consecutive_failures},
     )
-
-
-def record(session: Session, event_type: str, payload: dict[str, Any]) -> None:
-    """One row in `events`. §8.2 wants rows-ingested-per-source-per-run and §3.7 wants
-    alerting on volume rather than only on errors; `events` carries both without a new
-    table. The caller owns the payload shape — a board names its ats/slug, a feed names
-    itself."""
-    session.add(
-        Event(
-            # Ingest is not per-user: one source serves every user who matches against it.
-            user_id=None,
-            type=event_type,
-            payload_json=payload,
-        )
-    )
-    session.flush()
 
 
 def _record_board(

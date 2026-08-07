@@ -4,8 +4,8 @@ A sibling rather than a generalisation of `ingest_company`, because almost every
 that function branches on is board-specific — `fetch_detail`, `consecutive_failures`,
 retirement, the ats/slug event payload. Sharing it would mean `if company: ... else:`
 throughout, and `ingest.py` is already past the size this repo prefers. What the two do
-share is the part worth sharing: `ingest.upsert`, `ingest.close_missing` and
-`ingest.record`, one diff engine between them.
+share is the part worth sharing: `ingest.upsert` and `ingest.close_missing`, one diff
+engine between them, plus `db.events.record`.
 
 The one destructive statement in this stage is the close, and it is guarded three ways.
 M1 can close every posting a board stopped returning because an ATS board returns the
@@ -28,6 +28,7 @@ from types import ModuleType
 from typing import Any
 
 import httpx
+from db.events import record
 from db.models import Event, Job
 from sqlalchemy import func, select, text, update
 from sqlalchemy.orm import Session
@@ -48,7 +49,7 @@ def ingest_feed(
     """Fetch one feed, upsert the diff, close what safely can be. Commits nothing."""
     postings = feed.fetch(client, pages if pages is not None else feed.PAGES, delay)
     if not postings:
-        ingest.record(session, "feed.empty", {"feed": feed.SOURCE, "fetched": 0})
+        record(session, "feed.empty", {"feed": feed.SOURCE, "fetched": 0})
         return IngestResult(fetched=0, inserted=0, updated=0, closed=0)
 
     jobs = [feed.normalize(raw) for raw in postings]
@@ -60,7 +61,7 @@ def ingest_feed(
     if feed.COMPLETE and _volume_ok(session, feed.SOURCE, len(jobs), volume_floor):
         closed = ingest.close_missing(session, feed.SOURCE, [job.external_id for job in jobs], None)
 
-    ingest.record(
+    record(
         session,
         "feed.run",
         {
@@ -108,7 +109,7 @@ def _volume_ok(session: Session, source: str, fetched: int, floor: float) -> boo
     if previous is None or fetched >= previous * floor:
         return True
 
-    ingest.record(
+    record(
         session,
         "feed.volume_drop",
         {"feed": source, "fetched": fetched, "previous": previous, "floor": floor},
