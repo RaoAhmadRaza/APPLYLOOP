@@ -8,7 +8,7 @@ importable without a complete environment.
 
 from functools import lru_cache
 
-from pydantic import PostgresDsn, RedisDsn
+from pydantic import Field, PostgresDsn, RedisDsn, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -60,6 +60,32 @@ class Settings(BaseSettings):
     # ATS, so a miss is not permanent — but re-probing hourly forever is six wasted
     # requests an hour, per company, indefinitely.
     grow_retry_days: int = 30
+
+    # --- Layer 2, the aggregators. The ONLY proxy in this repo ---------------------
+    # §7.4 and Part 13 rule 12: the ATS layer and the free feeds never see one. They
+    # cost nothing to hit directly, and residential bandwidth is §8.1's swing factor.
+    #
+    # SecretStr because these carry `user:pass@`, and repr(get_settings()) reaches a log
+    # line or a Sentry breadcrumb eventually (§3.7, Part 13 rule 9).
+    #
+    # Empty is a safety interlock, not a missing value: with no proxy the aggregate task
+    # no-ops. Scraping LinkedIn or Indeed from a bare datacentre or a developer's home IP
+    # burns that IP and inflates §8.2's block rate.
+    jobspy_proxies: list[SecretStr] = Field(default_factory=list)
+
+    # Longer than the ATS interval on purpose: every request here spends residential
+    # bandwidth and carries block risk, and aggregator listings are staler by nature.
+    aggregate_interval_minutes: int = 720
+
+    @field_validator("jobspy_proxies", mode="before")
+    @classmethod
+    def _split_comma_separated(cls, value: object) -> object:
+        """pydantic-settings parses a `list[...]` field from the environment as JSON, so
+        a bare comma-separated string would raise at worker boot. Comma-separated is the
+        form a proxy vendor hands you, so accept it."""
+        if isinstance(value, str):
+            return [entry.strip() for entry in value.split(",") if entry.strip()]
+        return value
 
 
 @lru_cache(maxsize=1)
