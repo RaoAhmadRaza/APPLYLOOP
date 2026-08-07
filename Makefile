@@ -1,4 +1,4 @@
-.PHONY: up down logs ps migrate revision shell seed ingest feeds grow dedupe test lint typecheck fmt verify verify-live verify-live-feeds verify-live-aggregator verify-live-parse verify-live-storage parse clean
+.PHONY: up down logs ps migrate revision shell seed ingest feeds grow dedupe test lint typecheck fmt verify verify-live verify-live-feeds verify-live-aggregator verify-live-parse verify-live-match verify-live-storage parse match clean
 
 # `make up` is the one command that boots the stack (M0 gate item 1).
 up:
@@ -55,6 +55,13 @@ parse:
 	docker compose exec -T worker python -c \
 	  "from workers.tasks.profiles import parse_profile; print(parse_profile.delay('$(id)').get(timeout=180))"
 
+# Score one profile against the deduped pool now. make match id=<profile-uuid>
+# No-ops without LLM_API_KEY *and* without MATCH_THRESHOLD, by design — it records
+# `match.skipped` instead. Part 14 says that threshold comes from the golden set.
+match:
+	docker compose exec -T worker python -c \
+	  "from workers.tasks.matching import match_profile; print(match_profile.delay('$(id)').get(timeout=600))"
+
 # Collapse the same role seen on several sources onto one canonical row.
 dedupe:
 	docker compose exec -T worker python -c \
@@ -89,7 +96,9 @@ verify: lint typecheck test
 	  | grep -q workers.tasks.scraping.dedupe_jobs
 	docker compose exec -T worker celery -A workers.app inspect registered \
 	  | grep -q workers.tasks.profiles.parse_profile
-	@echo "M0 + M1 + M2 + M3 gates: all checks passed"
+	docker compose exec -T worker celery -A workers.app inspect registered \
+	  | grep -q workers.tasks.matching.match_all
+	@echo "M0 + M1 + M2 + M3 + M4 gates: all checks passed"
 
 # M1 gate item 1, against the six real boards. Not in CI — a build must not go red
 # because a third party had a bad afternoon.
@@ -114,6 +123,14 @@ verify-live-aggregator:
 # a few cents, but it should never be something a `make test` does by accident.
 verify-live-parse:
 	APPLYLOOP_LIVE_LLM=1 uv run pytest tests/integration/test_resume_parse_live.py -q
+
+# M4's gate: the golden set through the real model and the real embedding endpoint,
+# with nothing stubbed. Its own variable rather than sharing APPLYLOOP_LIVE_LLM because
+# this one is materially more expensive than the parse suite — and because the whole
+# point is that it cannot be made green by a fake. It prints the threshold the data
+# supports; that number goes into MATCH_THRESHOLD.
+verify-live-match:
+	APPLYLOOP_LIVE_MATCH=1 uv run pytest tests/integration/test_matching_live.py -q -s
 
 # Object storage against a real bucket. Needs STORAGE_* set; skips otherwise, because
 # unconfigured storage is a supported state.

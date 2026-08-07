@@ -37,6 +37,7 @@ TASK_MODULES = [
     "workers.tasks.scraping",
     # M3. No beat entry: parsing fires on upload, not on a clock.
     "workers.tasks.profiles",
+    "workers.tasks.matching",
 ]
 
 # Imported for the beat schedule below, not for the tasks — one entry per feed, keyed by
@@ -102,6 +103,14 @@ app.conf.update(
         "aggregate-jobspy": {
             "task": "workers.tasks.scraping.aggregate_all",
             "schedule": timedelta(minutes=settings.aggregate_interval_minutes),
+        },
+        # M4. Its own entry for the same reason dedupe has one: scoring converges — a job
+        # already scored is excluded by a WHERE clause — so *when* it runs is not
+        # load-bearing, and chaining it behind ingest would let one failing board stall
+        # every user's matches. No-ops without an API key, and without a threshold.
+        "match-profiles": {
+            "task": "workers.tasks.matching.match_all",
+            "schedule": timedelta(minutes=settings.match_interval_minutes),
         },
     },
 )
