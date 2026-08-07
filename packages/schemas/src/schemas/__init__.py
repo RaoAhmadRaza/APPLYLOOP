@@ -18,7 +18,7 @@ from schemas.job_embedding import (
     JobEmbeddingRead,
     JobEmbeddingUpdate,
 )
-from schemas.match import MatchCreate, MatchRead, MatchUpdate
+from schemas.match import MatchCreate, MatchFacts, MatchRead, MatchReasons, MatchUpdate
 from schemas.prefs import Prefs
 from schemas.profile import ProfileCreate, ProfileRead, ProfileUpdate
 from schemas.resume import ParsedResume
@@ -51,6 +51,8 @@ __all__ = [
     "JobRead",
     "JobUpdate",
     "MatchCreate",
+    "MatchFacts",
+    "MatchReasons",
     "MatchRead",
     "MatchUpdate",
     "Page",
