@@ -319,6 +319,11 @@ actually return:
   widget GET. Both are public and return the same postings; v3 needs a POST body and
   `nextPage` paging, v1 returns everything plus descriptions in one call. Also: every
   Workable job's `id` is `null` — `shortcode` is the identifier.
+  **And a Workable board repeats a posting once per location** — verified 2026-08-07
+  against `lawnstarter`, which returns 46 entries for 9 shortcodes. Postgres refuses an
+  `ON CONFLICT DO UPDATE` that touches a row twice in one statement, so `ingest.upsert`
+  collapses a batch on `external_id` before writing. None of M1's three seeded Workable
+  boards repeat, which is why this only surfaced once M2's reverse-index found one.
 - **SmartRecruiters is the only paginated provider, and the only one that withholds
   descriptions** from its list response. Full text needs
   `GET .../postings/{id}` per posting, so ingest fetches detail only for postings the
@@ -333,7 +338,43 @@ Cloudflare/CAPTCHA, and carry stale duplicates and ghost listings — which is e
 they are layer 2 and not layer 1.
 
 **Layer 3 — Free remote-tech feeds.** Remotive, RemoteOK, Himalayas, Arbeitnow,
-WeWorkRemotely, Jobicy, Working Nomads, The Muse. Open JSON, zero cost.
+WeWorkRemotely, Jobicy, Working Nomads, The Muse. Open JSON, zero cost, no proxy.
+
+```
+remotive       https://remotive.com/api/remote-jobs
+remoteok       https://remoteok.com/api
+himalayas      https://himalayas.app/jobs/api?offset={n}&limit=20
+arbeitnow      https://www.arbeitnow.com/api/job-board-api?page={n}
+weworkremotely https://weworkremotely.com/remote-jobs.rss          (RSS, not JSON)
+jobicy         https://jobicy.com/api/v2/remote-jobs?count=100
+workingnomads  https://www.workingnomads.com/api/exposed_jobs/
+themuse        https://www.themuse.com/api/public/jobs?page={n}
+```
+
+**Verified against live responses, 2026-08-07** (M2). Fixtures were recorded before any
+adapter was written, and five of the eight contradict their own documentation:
+
+- **`companyName` is the literal string `"name"` on every Himalayas posting** (and
+  `companyLogo` is `"thumbnail_url"`) — placeholders that reached production. Only
+  `companySlug` identifies the employer. `limit` caps at 20 and the endpoint 429s.
+- **Arbeitnow does paginate** — `links` and `meta` are both present — and its
+  `created_at` is epoch **seconds**. Passing that to a millisecond parser silently
+  yields 1970, which is a wrong date rather than an error.
+- **RemoteOK's element 0 is a legal notice**, so postings are filtered on having an `id`
+  rather than by skipping index 0. It answers our own honest User-Agent, contrary to
+  every write-up claiming it needs a browser one.
+- **Working Nomads ships no identifier at all.** Its `external_id` is derived from the
+  URL with scheme and query stripped, because a key that moves reposts the whole feed.
+- **The Muse calls the title `name`** and returns the apply URL under `refs.landing_page`.
+
+**`COMPLETE` is the flag that decides whether absence may close a row.** Only a feed
+whose single pass returns its entire current listing may close by absence (remotive,
+remoteok, workingnomads, weworkremotely). Everything paginated or truncated — himalayas,
+arbeitnow, jobicy, themuse — ages rows out instead. Getting this wrong retires a whole
+feed's history in one tick.
+
+Attribution is a licence condition on remotive, remoteok, himalayas and jobicy. Each
+adapter carries a `HOME` constant and a test asserts it.
 
 **Layer 4 — Startup / niche.** Wellfound, YC Work at a Startup, the monthly HN hiring
 thread (parseable), hiring.cafe.
