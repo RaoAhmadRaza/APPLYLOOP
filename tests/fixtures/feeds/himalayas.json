@@ -1,0 +1,149 @@
+{
+  "comments": "13/03/2026: The API has been updated to include the companySlug field in the response.",
+  "updatedAt": 1786075366,
+  "offset": 0,
+  "limit": 20,
+  "totalCount": 96137,
+  "jobs": [
+    {
+      "title": "Vice President, Customer Growth",
+      "excerpt": "At AbsenceSoft, we’re transforming the employee experience.",
+      "companyName": "name",
+      "companySlug": "absencesoft-llc",
+      "companyLogo": "thumbnail_url",
+      "employmentType": "Full Time",
+      "minSalary": 200000,
+      "maxSalary": 200000,
+      "salaryPeriod": "annual",
+      "seniority": [
+        "Executive"
+      ],
+      "currency": "USD",
+      "locationRestrictions": [
+        "United States"
+      ],
+      "timezoneRestrictions": [
+        -10,
+        -9,
+        -8,
+        -7,
+        -6,
+        -5,
+        14
+      ],
+      "categories": [
+        "Account-Management",
+        "Customer-Growth",
+        "Sales-Leadership",
+        "Revenue-Operations",
+        "Enterprise-Sales",
+        "Senior-Vice-President-Of-Growth",
+        "Vice-President-Customer-Success",
+        "Vice-President-Of-Customer-Success",
+        "VP-Of-Growth",
+        "VP-Customer-Success",
+        "VP-Growth-Marketing",
+        "VP-Of-Growth-Marketing",
+        "VP-Of-Customer-Success",
+        "Customer-Growth-Executive",
+        "Growth"
+      ],
+      "parentCategories": [
+        "Sales"
+      ],
+      "description": "<p>At AbsenceSoft, we’re transforming the employee experience. Our secure, intuitive technology helps employers bring humanity, certainty, and efficiency to some of the most complex moments in the workplace. Built by HR professionals for HR professionals, we’re proud of where we’ve been and even more excited about where we’re going.</p><p>AbsenceSoft is looking for a Vice President, Customer Growth to lead the revenue engine that drives value from our existing customer base. This is a sales-focused leadership role owning renewals, upsell, cross-sell, and account expansion across our full customer portfolio — from Mid Market employers to large enterprises and TPAs. You'll build, coach, and scale a team of Account Managers, setting quotas and pipeline targets while personally driving high-stakes renewal and expansion negotiations with key accounts. Working closely with Customer Success, Product, and Marketing, you'll ensure that product adoption and customer health translate into measurable growth revenue. The ideal candidate is a results-driven commercial leader with a deep track record of exceeding renewal and expansion targets and building high-performing quota-carrying teams.</p><p><b><strong>WHAT YOU'LL DO</strong></b></p><ul>\n<li>Define and execute a revenue growth strategy for our existing customer base, focused on renewals, upsell, cross-sell, and account expansion</li>\n<li>Lead, coach, and scale a team of Account Managers, setting quotas, pipeline targets, and performance metrics tied directly to renewal and expansion revenue</li>\n<li>Own the renewal process end-to-end, driving on-time renewal rates and negotiating contract terms across the customer base</li>\n<li>Identify and execute upsell and cross-sell opportunities within existing accounts, partnering with Product and Marketing to align offerings to customer needs</li>\n<li>Partner closely with Customer Success leadership on account health signals and adoption data to inform expansion strategy and timing</li>\n<li>Build and manage forecasting and pipeline reporting for the Account Management function, reporting regularly to executive leadership on renewal and growth performance</li>\n<li>Develop account segmentation and territory or account portfolio assignment strategies to maximize coverage and revenue potential across Mid Market, enterprise, and TPA accounts</li>\n<li>Establish and monitor KPIs such as renewal rate, net revenue retention, and upsell/cross-sell attainment, adjusting strategy as needed</li>\n<li>Cultivate executive-level relationships with key accounts to support high-stakes renewal and expansion negotiations</li>\n<li>Collaborate with Sales leadership on smooth account handoffs as new customers transition into the existing base</li>\n<li>Coach the team on MEDDPICC methodology and ensure it's applied consistently across deal reviews and pipeline management to improve forecast accuracy and win rates</li>\n<li>Maintain Salesforce data hygiene and enforce CRM discipline across the team, ensuring pipeline, opportunity, and account data stay accurate and up to date</li>\n<li>Participate in a highly compliant environment, assisting to maintain company controls and security within your job role</li>\n</ul><p><b><strong>WHAT YOU'LL BRING</strong></b></p><ul>\n<li>12+ years of experience in Account Management, Sales, or Customer Success leadership in B2B SaaS, with direct ownership of renewal and expansion revenue targets</li>\n<li>8+ years of people leadership experience, including building and scaling a quota-carrying team against renewal, upsell, and cross-sell goals</li>\n<li>Experience building or significantly evolving an Account Management or renewals-focused sales function</li>\n<li>Strong negotiation skills and experience managing high-stakes contract renewals with executive-level stakeholders</li>\n<li>Comfort with CRM, sales engagement, and customer success tools (e.g., Salesforce, Salesforce CPQ, Gong, ChurnZero) and using data to manage pipeline and performance</li>\n<li>Excellent verbal and written communication skills, with executive-level presentation and influencing ability</li>\n<li>Results-driven commercial leader with a proven track record of exceeding renewal and expansion revenue targets</li>\n<li>Strategic operator who translates customer health and adoption data into revenue growth opportunities</li>\n<li>Data-driven decision maker who uses CRM and pipeline data to manage team performance and forecast accurately</li>\n<li>Collaborative cross-functional partner who aligns Customer Success, Product, and Marketing around customer growth</li>\n<li>Executive presence with the ability to build and maintain relationships at the C-suite level</li>\n<li>Experience in the HR technology ecosystem (HRIS, payroll, or leave technologies) is a plus</li>\n<li>Experience partnering with a Customer Success organization in a shared-ownership or hand-off model is a plus</li>\n<li>Background in compliance-driven or highly regulated SaaS industries is a plus</li>\n<li>An MBA or advanced degree in Business or a related field is a plus</li>\n</ul><h3><b><strong>WHY JOIN US</strong></b></h3><p>At AbsenceSoft, we <i><b><strong>LEAD</strong></b></i> with our values:</p><p><i><b><strong>Lead with Innovation</strong></b></i> - We create meaningful change through intelligence, focus and passion.We embrace curiosity, data, and insight to shape the future of our industry. Always innovating, learning and evolving.</p><p><i><b><strong>Elevate Every Voice</strong></b></i> - Every perspective matters. We listen, learn, and build a culture where diversity of thought and experience drives better solutions and smarter decisions. </p><p><i><b><strong>Achieve Together</strong></b></i> - The customer fuels everything we do. We share knowledge, collaborate, celebrate wins, and face challenges as one team because success is always a collective achievement.</p><p><i><b><strong>Drive Outcome</strong></b></i> - Every action we take delivers measurable value to our teams, our customers, and the employees they support. Accountability is non-negotiable. We honor our commitments, take responsibility for results, and see every success and setback as a chance to grow stronger.</p><h3>We offer:</h3><ul>\n<li>\n<b><strong>Impact that matters.</strong></b> You’ll do work that shapes the future of the modern workplace</li>\n<li>\n<b><strong>Flexibility and trust.</strong></b> We’re remote-first and results driven. You’ll have the freedom and flexibility to do your best work, wherever you do it best.</li>\n<li>\n<b><strong>Growth and development.</strong></b> We believe the best work happens when people are growing. You’ll have access to learning resources, leadership programs, and real opportunities to take on new challenges and expand your impact. </li>\n<li>\n<b><strong>Competitive rewards.</strong></b> We offer comprehensive benefits, a performance-based bonus program, and equity opportunities – because when we grow, you should too.</li>\n<li>\n<b><strong>Time for life.</strong></b> Recharge and reconnect with flexible time off, paid holidays, and flexible leave programs designed to support every season of life.</li>\n<li>\n<b><strong>Belonging and balance.</strong></b> We’re building an inclusive culture where every voice is valued, collaboration is celebrated, and success is shared.</li>\n</ul><p>We’re committed to building a team as diverse as the customers we serve. If your experience doesn’t align perfectly with every qualification, we still encourage you to apply you might be exactly what we’re looking for. If this sounds like a fit, apply today, we’d love to meet you!</p><p><b><strong>Compensation: </strong></b>Base salary range for this full-time position is $200,000 annually + bonus/commission + benefits. The expected On-Target Earnings (OTE) for this role is $369,600.</p><p>Final compensation is determined based on a candidate's relevant experience, skills, education, and geographic location. </p><p>Originally posted on <a href=\"https://himalayas.app\">Himalayas</a></p>",
+      "pubDate": 1786075366,
+      "expiryDate": 1791259365,
+      "applicationLink": "https://himalayas.app/companies/absencesoft-llc/jobs/vice-president-customer-growth",
+      "guid": "https://himalayas.app/companies/absencesoft-llc/jobs/vice-president-customer-growth"
+    },
+    {
+      "title": "Commercial GL Claims Representative",
+      "excerpt": "Our Story Imagine being part of a team that’s not just shaping the future but actively driving it.",
+      "companyName": "name",
+      "companySlug": "davies-north-america",
+      "companyLogo": "thumbnail_url",
+      "employmentType": "Full Time",
+      "minSalary": 80000,
+      "maxSalary": 100000,
+      "salaryPeriod": "annual",
+      "seniority": [
+        "Mid-level"
+      ],
+      "currency": "USD",
+      "locationRestrictions": [
+        "United States"
+      ],
+      "timezoneRestrictions": [
+        -10,
+        -9,
+        -8,
+        -7,
+        -6,
+        -5,
+        14
+      ],
+      "categories": [
+        "Claims-Adjuster",
+        "Commercial-General-Liability-Claims",
+        "Insurance-Claims",
+        "Property-Claims",
+        "GL-Claims-Representative",
+        "Claims-Representative",
+        "Liability-Claims-Representative",
+        "Insurance-Claims-Representative"
+      ],
+      "parentCategories": [],
+      "description": "<div><strong>Our Story</strong></div><div>Imagine being part of a team that’s not just shaping the future but actively driving it. At <strong><a href=\"https://himalayas.app/companies/davies-north-america\">Davies North America</a></strong>, we’re at the forefront of innovation and excellence, blending cutting-edge technology with top-tier professional services. As a vital part of the global Davies Group, we help businesses navigate risk, optimize operations, and spearhead transformation in the insurance and regulated sectors.<div>We're on the lookout for a <strong>Commercial General Liability Claim Adjuster</strong>. As a Commercial General Liability Claim Adjuster you will be responsible for handling and supervision of complex and litigated liability and property claims. Responsible for the investigation of coverage, liability and damages, negotiating with contractors, public adjusters and attorneys, through the life of the claim, maintain a pending and closing ratio of 100%, be responsible for the establishment and maintenance of reserves and payments, presenting large loss report and communicate with their manager as well as internal and external customers.  </div>\n<h3>Key Responsibilities</h3>\n<div>\n<ul>\n<li>Negotiate and settle large exposure commercial general liability and property claims </li>\n<li>Prepare written status and large loss reports for clients</li>\n<li>Ability to interpret routine and complex policy contracts and coverage.</li>\n<li>Ability to plan, organize and establish priorities to maintain various responsibilities under critical deadlines</li>\n<li>Attend mediations and settlement conferences as necessary</li>\n<li>Direct and monitor defense counsel to settle litigated claims</li>\n<li>Provide monetary authority and strategy to counsel to ensure client’s money and claims are protected</li>\n<li>Knowledge of current case law, statutory law, DOI regulations, etc. that apply to claims practices and issues within the territory of operation</li>\n<li>The ability to determine, evaluate, investigate and resolve claims</li>\n<li>Demonstrate sound analytical skills</li>\n</ul>\n<div>Other duties as assigned</div>\n</div>\n<h3>Skills, knowledge &amp; expertise</h3>\n<div><ul>\n<li>Proactive, independent, dependable, and takes initiative with consistent follow through</li>\n<li>Superb written and verbal communication skills conducted in a timely manner with diverse audiences</li>\n<li>Superior time management skills with capability of working with and meeting deadlines</li>\n<li>Exceptional capability to multi-task and prioritize with excellent organization and documentation skills in a fast-paced, dynamic work environment</li>\n<li>Excellent team player with interpersonal skills</li>\n<li>High level attention to detail with ability to utilize decision making and problem-solving skills</li>\n<li>Capable of working collaboratively and independently with minimal supervision</li>\n<li>Exhibit discretion with sensitive and confidential information</li>\n<li>Display a comfort level working with key people at all levels within an organization</li>\n</ul></div>\n<h3>Equal Employment Opportunity &amp; Legal Notices</h3>\n<div>\n<div><strong>Benefits</strong></div>\n<div>At <a href=\"https://himalayas.app/companies/davies-north-america\">Davies North America</a>, we are dedicated to supporting the well‑being and future of our qualifying employees. Our comprehensive benefits package includes:</div>\n<ul>\n<li>Medical, dental, and vision plans to support your health and that of your family</li>\n<li>A 401(k) plan with employer matching</li>\n<li>Time‑off policies, including Discretionary Time Off (DTO) for exempt employees and Paid Time Off (PTO) for non‑exempt employees</li>\n<li>Paid holidays</li>\n<li>Life insurance and short‑term and long‑term disability coverage</li>\n</ul>\n<div>Benefit offerings, eligibility, and required employer contributions may vary based on role, classification, and applicable federal, state, and local laws, including those tied to an employee’s primary work location.<div>Where required by law, the Company provides paid sick leave, paid family and parental leave, and other mandated benefits in accordance with applicable state and local requirements.<div><strong>Diversity and Inclusion</strong></div>\n<div>Davies is dedicated to fostering a diverse and inclusive workplace that embraces a wide range of perspectives and experiences. We believe that diversity of thought is essential for innovation and creativity, and we actively promote an environment where all voices are valued and heard.<br><br><strong>Compensation Transparency:</strong><br>The salary range listed reflects the full compensation band for this role across all locations. Actual compensation will be based on factors such as skills, experience, qualifications, and geographic location, which may impact the final offer. We share ranges to remain transparent and consistent with pay equity practices. <br><br><strong>Background Check &amp; Fair Chance Compliance </strong>\n</div>\n<div>Any background check or review of criminal history, if applicable to the role, will be conducted only after a conditional offer of employment and in compliance with applicable federal, state, and local laws, including fair‑chance hiring requirements.<br><br><strong>Massachusetts NoticeIt is unlawful in Massachusetts to require or administer a lie detector test as a condition of employment or continued employment. An employer who violates this law shall be subject to criminal penalties and civil liability.</strong>\n</div>\n<div><strong><br><em>We do not use sites like Facebook, Craigslist, or Telegram to recruit or interview potential employees or contractors. If you have been asked to provide any information through any method other than our career portal, please email us at </em><em></em></strong></div>\n</div>\n</div>\n</div>\n</div><p>Originally posted on <a href=\"https://himalayas.app\">Himalayas</a></p>",
+      "pubDate": 1786075010,
+      "expiryDate": 1791259009,
+      "applicationLink": "https://himalayas.app/companies/davies-north-america/jobs/commercial-gl-claims-representative",
+      "guid": "https://himalayas.app/companies/davies-north-america/jobs/commercial-gl-claims-representative"
+    },
+    {
+      "title": "Support & Marketing Associate for Startup Accelerator",
+      "excerpt": "Location: Remote Job Type: Full-Time Salary: [Competitive – Based on Experience] About the Founder Institute: TheFounder Institute (FI) is a global network of startup incubators, accelerators, and investors on a mission to activate and empower communities of entrepreneurs worldwide.",
+      "companyName": "name",
+      "companySlug": "founder-institute",
+      "companyLogo": "thumbnail_url",
+      "employmentType": "Full Time",
+      "minSalary": null,
+      "maxSalary": null,
+      "salaryPeriod": "annual",
+      "seniority": [
+        "Entry-level",
+        "Mid-level"
+      ],
+      "currency": "USD",
+      "locationRestrictions": [
+        "Pakistan"
+      ],
+      "timezoneRestrictions": [
+        5
+      ],
+      "categories": [
+        "Customer-Support",
+        "Marketing",
+        "Customer-Success",
+        "Digital-Marketing",
+        "Program-Management",
+        "Startup-Accelerator",
+        "Startup-Accelerator-Coordinator",
+        "Startup-Ecosystem-Associate",
+        "Marketing-Support-Specialist",
+        "Growth-and-Marketing-Associate",
+        "Marketing-Associate",
+        "Acceleration-Program-Associate"
+      ],
+      "parentCategories": [
+        "Customer Service",
+        "Marketing"
+      ],
+      "description": "<p><strong>Location: </strong>Remote<strong><br>Job Type: </strong>Full-Time<strong><br>Salary: </strong>[Competitive – Based on Experience]</p><h3>About the <a href=\"https://himalayas.app/companies/founder-institute\">Founder Institute</a>: </h3><p>The<a href=\"https://himalayas.app/companies/founder-institute\">Founder Institute</a> (FI) is a global network of startup incubators, accelerators, and investors on a mission to activate and empower communities of entrepreneurs worldwide.</p><p>Since 2009, we’ve helped launch over 8,000 companies in 200+ cities globally, which have raised nearly $2BN in funding. We are based in Silicon Valley and have remote team members across the United States, Europe, India, and Brazil. Our success has been documented in the New York Times, BusinessWeek, Forbes, TechCrunch, and more.</p><h3>About the Role:</h3><p>We are seeking a Support &amp; Marketing Associate with a passion for startups and entrepreneurship to join our team. </p><p>You will have the opportunity to see entrepreneurship and venture capital from many angles, and work for a company with a small and mission-driven team. </p><p>This role is 100% remote, and will require a Sunday-Thursday workweek. </p><h3>Our Culture:</h3><p>At the <a href=\"https://himalayas.app/companies/founder-institute\">Founder Institute</a>, we work a lot like the early-stage startups we support. That means things move fast, and we thrive on creativity, ownership, and a “let’s figure it out” mindset. Here’s what we look for in our team:</p><ul>\n<li>You’re naturally entrepreneurial, self-motivated, and enjoy tackling challenges head-on.</li>\n<li>You prefer autonomy over hand-holding and don’t need a lot of oversight to get things done.</li>\n<li>You love learning new things, and when you hit a roadblock, your first instinct is to dig in, research, and find a solution—Google is your best friend.</li>\n<li>You’re open to feedback (even when it’s tough), and always looking to grow and improve—both personally and as part of the team.</li>\n</ul><p>If that sounds exciting to you, we’d love to hear from you. If not, no hard feelings—this kind of environment isn’t for everyone. </p><p>Still with us? Great—read on for more details!</p><div>\n<h3>Key Responsibilities:</h3>\n<ul>\n<li>\n<strong>Customer Support &amp; Engagement: </strong>Respond promptly and professionally to customer inquiries, offering personalized assistance and proactive support.</li>\n<li>\n<strong>Assist with Program Admissions: </strong>Review applications to FI incubation and acceleration programs, and follow best practices for acceptance.</li>\n<li>\n<strong>Improve the Customer Experience: </strong>As our “feet on the ground”, your ideas will play a critical role in our ability to improve our customer experience.</li>\n<li>\n<strong>Host Live Q&amp;A Calls: </strong>Host scheduled Q&amp;A sessions with customers, addressing their concerns and providing expert guidance on our products/services.</li>\n<li>\n<strong>Host Info-Session Webinars: </strong>Conduct and facilitate informative webinars to educate customers on key topics, program qualities, and best practices.</li>\n<li>\n<strong>Improve Conversion &amp; Retention:</strong>  Coordinate with the design and product teams to improve the usability and conversion of the website and overall conversion rate optimization (CRO). Coordinate with the marketing team on initiatives to increase conversion and retention.</li>\n<li>\n<strong>Improve Site and Email Copy: </strong>Update and improve copy across our marketing materials to properly address the changing needs of our customers.</li>\n<li>\n<strong>Maintain Organized Documentation &amp; Processes: </strong>Track customer interactions, document frequently asked questions, and provide feedback to improve processes.</li>\n</ul>\n<h3>Qualifications and Skills:</h3>\n<h3>Required:</h3>\n<ul>\n<li>Willing to work a Sunday-Thursday schedule</li>\n<li>Exceptional written and verbal communication skills</li>\n<li>Business-level fluency in English</li>\n<li>Comfort in hosting live calls and webinars</li>\n<li>Internet and computer-savvy</li>\n</ul>\n<h3>Preferred:</h3>\n<ul>\n<li>Knowledge of startup accelerators and the startup/ venture capital industry</li>\n<li>2+ years of professional customer service and/or marketing experience</li>\n<li>Experience using Google Suite, Powerpoint, Excel, Canva, Mailchimp, and various online CRM and marketing tool</li>\n</ul>\n<h3>What We Offer:</h3>\n<ul>\n<li>Great upward mobility into a larger, conversion-focused marketing role (all senior team members at FI have grown into their roles from inside the company) </li>\n<li>Competitive compensation package commensurate with experience.</li>\n<li>Unlimited PTO</li>\n<li>Remote Flexibility: Work from anywhere with the autonomy to drive results in your own style.</li>\n<li><p>Ability to learn from top entrepreneurs, investors, and executives throughout FI’s global network and suite of acceleration programs. </p></li>\n</ul>\n</div><p><strong>IMPORTANT:</strong> In your Cover Letter please write two paragraphs, the first on why you would like to work in the startup accelerator industry, and the second on how your personality fits well with the FI culture described above. Applications without this Cover Letter will be ignored.</p><p>Originally posted on <a href=\"https://himalayas.app\">Himalayas</a></p>",
+      "pubDate": 1786075008,
+      "expiryDate": 1791259008,
+      "applicationLink": "https://himalayas.app/companies/founder-institute/jobs/support-marketing-associate-for-startup-accelerator",
+      "guid": "https://himalayas.app/companies/founder-institute/jobs/support-marketing-associate-for-startup-accelerator"
+    }
+  ]
+}

@@ -1,0 +1,101 @@
+{
+  "page": 1,
+  "page_count": 20355,
+  "items_per_page": 20,
+  "took": 8,
+  "timed_out": false,
+  "total": 407097,
+  "results": [
+    {
+      "contents": "<p>As a Senior Specialist Electrical Engineer, the candidate must have experience with L band RF systems, able to work from customer requirements to derive additional requirements, define the architecture of a possible solution based on requirements, setup a requirements schema &amp; link requirements to documents (systems/subsystem specification, hardware/RF architecture description document, etc.) and flow down applicable requirements to other groups (software, ASIC, &amp; test) so that they can contribute to realize the end solution based on the proposed architecture.  The Senior Specialist EE will also oversee the development a qualification test plan that will ensure that the architecture and solution satisfy the customer’s requirements.   The Senior Specialist EE will also work with subject matter experts in the areas of GPS signal processing, anti-jam signal processing, other hardware design team members, control software, and government qualification standards.  As a Senior Specialist EE, the candidate is expected to understand each aspect of the technology used in the proposed solution.  The assigned EE also must work with the cost account manager, program management, and project management to develop the solution within the program’s budget and schedule.</p>\n\n<p> </p>\n\n<p><strong>Essential Functions:</strong></p>\n\n<ul><li>Requires solid level knowledge of Electrical Engineering low frequency and high frequency (RF) Analog and Digital circuit design.</li></ul>\n\n<ul><li>Experience with RF systems, ideally GPS receivers</li><li>Able to contribute to providing innovative Electrical Engineering solutions consistent with business development plans.</li><li>Ability to develop circuit designs, requirements, design descriptions, verification plans/procedures, customer CDRLs to meet program schedules.</li><li>Ability to support cross functional teams for cross functional design conflict resolution, Root Cause Analysis, blank page architecture developments and design</li><li>Ability to contribute to algorithm development, analysis, implementation, system architecture, verification, and Test with emphasis on military GPS electronics. </li><li>Ability to contribute to execution of design, build, integration and test activities, problem resolution and verifying that the deliverable products meet all program and customer requirements.</li><li>Ability to provide project management reports as required, support senior level and customer reviews as necessary.</li><li>Ability to provide inputs and reviews of the engineering technical baseline as part of proposal efforts.</li><li>Ability to interface with the program’s leadership and other teams (SW, Systems, ME, and Test) on a frequent basis, conduct or participate in customer and/or program technical review presentations, and provide progress status updates on work products.</li><li>Ability to participate or lead in the product development process including design reviews.</li><li>5 to 10% Travel required.</li><li>Must have Secret Security Clearance or be able to obtain a US security clearance.</li></ul>\n\n<p><strong>Qualifications:</strong></p>\n\n<ul><li>Bachelor’s Degree and a minimum of 6 years of prior relevant experience. </li><li>Graduate Degree and a minimum of 4 years of prior related experience. </li><li>In lieu of a degree, minimum of 10 years of prior related experience.</li><li>3 years’ experience with receiver, Antenna, or Radio design.</li><li>Minimum 4 years’ hands-on experience working on RF circuitry in Lab.</li><li>1 years’ experience with embedded Hardware design.</li><li>1 years’ experience with FPGA design with emphasis in digital signal processing (DSP)</li><li>4 years’ experience demonstrating strong verbal and written skills</li><li>Experience with design tools such as MATLAB/Simulink, P-Spice, Agilent ADS (or AWR), Schematics Capturing/PCBA Layout tools such as Altium,and Ansys HFSS</li><li>Experience with FPGA design tools such as Xilinx ISE, Xilinx EDK, and ModelSim</li><li>Minimum 4 years Lab experience in trouble shooting electronics in Analog and RF domain.</li><li>Minimum 3 years of experience working with Network Analyzer, Frequency Generator, Vector Analyzer, and digital/analog scope.</li></ul>\n\n<ul><li>Must have Secret Security Clearance or be able to obtain a US security clearance.</li></ul>\n\n<p><strong>Preferred Additional Skills:</strong></p>\n\n<ul><li>Ability to capture schematics design and PCBA Layout using modern EE CAD such as Altium or Mentor Graphics.</li><li>Proficient in MS Office, design tools such as Simulink/MATLAB, P-Spice, Altium (Schematics Capturing &amp; PCBA Layout), Agilent ADS (or AWR), and Ansys HFSS.</li><li>Proficient with FPGA design methodologies. </li><li>Proficient with High speed Analog design methodologies. </li><li>Proficient with DO-254 design.</li><li>Strong verbal and written communication skills. </li></ul>\n\n<p>In compliance with pay transparency requirements, the salary range for this role in California, Massachusetts, New Jersey, Washington, and the Greater D.C, Denver, or NYC areas is Min $106,500.00 - $197,500.00 Max. The salary range for this role in Colorado state, Hawaii, Illinois, Maryland, Minnesota, New York state, Cleveland Ohio, and Vermont is $92,500.00 Min - $171,500.00 Max. This is not a guarantee of compensation or salary, as final offer amount may vary based on factors including but not limited to experience and geographic location. L3Harris also offers a variety of benefits, including health and disability insurance, 401(k) match, flexible spending accounts, EAP, education assistance, parental leave, paid time off, and company-paid holidays. The specific programs and options available to an employee may vary depending on date of hire, schedule type, and the applicability of collective bargaining agreements.</p>\n\n<p> </p>\n\n<p><strong> </strong></p>\n\n<p> </p>\n\n<p> </p>\n\n<p> </p>\n\n<p>#LI-KM1</p>\n\n<p>L3Harris Technologies is proud to be an Equal Opportunity Employer. L3Harris is committed to treating all employees and applicants for employment with respect and dignity and maintaining a workplace that is free from unlawful discrimination. All applicants will be considered for employment without regard to race, color, religion, age, national origin, ancestry, ethnicity, gender (including pregnancy, childbirth, breastfeeding or other related medical conditions), gender identity, gender expression, sexual orientation, marital status, veteran status, disability, genetic information, citizenship status, characteristic or membership in any other group protected by federal, state or local laws. L3Harris maintains a drug-free workplace and performs pre-employment substance abuse testing and background checks, where permitted by law.</p>\n\n<p>Please be aware many of our positions require the ability to obtain a security clearance. Security clearances may only be granted to U.S. citizens. In addition, applicants who accept a conditional offer of employment may be subject to government security investigation(s) and must meet eligibility requirements for access to classified information. </p>\n\n<p>By submitting your resume for this position, you understand and agree that L3Harris Technologies may share your resume, as well as any other related personal information or documentation you provide, with its subsidiaries and affiliated companies for the purpose of considering you for other available positions.</p>\n\n<p>L3Harris Technologies is an E-Verify Employer. Please click here for the E-Verify Poster in English or Spanish. For information regarding your Right To Work, please click here for English or Spanish.</p>",
+      "name": "Senior Specialist, Electrical Engineer",
+      "type": "external",
+      "publication_date": "2026-03-17T13:37:20Z",
+      "short_name": "senior-specialist-electrical-engineer-ffb3ea",
+      "model_type": "jobs",
+      "id": 21438281,
+      "locations": [
+        {
+          "name": "Anaheim, CA"
+        }
+      ],
+      "categories": [],
+      "levels": [
+        {
+          "name": "Senior Level",
+          "short_name": "senior"
+        }
+      ],
+      "tags": [],
+      "refs": {
+        "landing_page": "https://www.themuse.com/jobs/l3harristechnologies/senior-specialist-electrical-engineer-ffb3ea"
+      },
+      "company": {
+        "id": 15000922,
+        "short_name": "l3harristechnologies",
+        "name": "L3Harris Technologies"
+      }
+    },
+    {
+      "contents": "<div>\n Safety-Kleen in Sylmar, CA is seeking a Driver Operations Manager (Service Delivery Manager) manage the daily completion of routes by motivating and directing team members; as well as ensuring a high level of customer satisfaction. This role does this while still having a strong operational adherence to all DOT, EPA, State and Local Regulations and Safety-Kleen Policies and Procedures.\n</div>\n\n<div>\n <br> \n</div>\n\n<div>\n Safety-Kleen, a subsidiary of Clean Harbors is the leading provider of environmental, energy and industrial services throughout the United States, Canada, Mexico and Puerto Rico.  Everywhere industry meets environment, Clean Harbors is on-site, providing premier environmental, energy and industrial services. We are solving tough problems through innovation and proven methodology – come be part of the solution with us.\n</div>\n\n<div>\n <br> \n</div>\n\n<div>\n <strong>Why work for Clean Harbors?</strong>\n</div>\n\n<div>\n <ul>\n  <li>Health and Safety is our #1 priority and we live it 3-6-5!</li>\n  <li>Focus on maintaining sustainability and cleaning the Earth </li>\n  <li>Recruiting Pay range $75k-$80k </li>\n  <li>Comprehensive health benefits coverage after 30 days of full-time employment including 401K with Company match</li>\n  <li>Own part of the company with our Employee Stock Purchase Plan</li>\n  <li>Opportunities for growth and development for all the stages of your career</li>\n  <li>Company paid training and tuition reimbursement</li>\n </ul>\n</div>\n\n<div>\n <ul>\n  <li>Ensure Health and Safety is the number one priority by complying with all safe work practices, policies, and processes and always acting in a safe manner</li>\n  <li>Train, develop, and manage sales and service route drivers</li>\n  <li>Manage flow of service requests to ensure customers are serviced in a timely and efficient manner</li>\n  <li>Conduct End-of-day Check-In / Morning Check-Out process with drivers to ensure daily expectations are met and employees are prepared for the day</li>\n  <li>Fulfill duties of route driver when s/he is absent</li>\n  <li>Provide field coaching and sales training to route drivers</li>\n  <li>Meet with customers periodically to discuss needs</li>\n  <li>Increase sales portfolio by identifying opportunities</li>\n  <li>Schedule services to prevent and resolve route issues and complaints</li>\n  <li>Ensure completion and organization of all mandated paperwork and files.</li>\n  <li>Follow all local, state (provincial) and federal compliance regulations and rules</li>\n  <li>Safely operate vehicles in accordance with U.S. DOT, local, state (provincial) and federal requirements</li>\n  <li>Safely observe all corporate operating guidelines and procedures</li>\n  <li>Observe all company environmental health and safety operating guidelines</li>\n  <li>Perform other duties as assigned</li>\n </ul>\n</div>\n\n<div>\n <ul>\n  <li>Class B CDL</li>\n  <li>Obtain Hazmat and Tanker endorsements within 90 days of employment</li>\n  <li>Leadership experience</li>\n  <li>Intermediate computer skills</li>\n  <li>Excellent customer service skills </li>\n  <li>Excellent organization and attention to detail</li>\n  <li>Perform physical functions per job requirements</li>\n  <li>Successfully complete a background check, drug test, and physical, by position</li>\n </ul>\n</div>\n\n<div>\n <strong>Preferred Qualifications:</strong>\n</div>\n\n<div>\n <ul>\n  <li>Previous route driver experience</li>\n  <li>Previous dispatch/logistics experience</li>\n </ul>\n</div>\n\n<div>\n <br> \n</div>\n\n<div>\n Clean Harbors is an equal opportunity employer. We do not discriminate against applicants due to race, ancestry, color, sexual orientation, gender identity, national origin, religion, age, physical or mental disability, veteran status, or based on any other federal, state/provincial, or local protected class. \n</div>\n\n<div>\n <br> \n</div>\n\n<div>\n Clean Harbors is a Military &amp; Veteran friendly company.\n</div>\n\n<div>\n *SK\n</div>\n\n<div>\n <br> \n</div>",
+      "name": "Service Delivery Manager",
+      "type": "external",
+      "publication_date": "2025-03-08T15:56:50Z",
+      "short_name": "service-delivery-manager-d082ec",
+      "model_type": "jobs",
+      "id": 17766748,
+      "locations": [
+        {
+          "name": "Burbank, CA"
+        }
+      ],
+      "categories": [],
+      "levels": [
+        {
+          "name": "Senior Level",
+          "short_name": "senior"
+        }
+      ],
+      "tags": [],
+      "refs": {
+        "landing_page": "https://www.themuse.com/jobs/cleanharbors/service-delivery-manager-d082ec"
+      },
+      "company": {
+        "id": 15000557,
+        "short_name": "cleanharbors",
+        "name": "Clean Harbors"
+      }
+    },
+    {
+      "contents": "<p><strong>Safety-Kleen</strong> is looking for a <strong>Territory Sales Representative</strong>, internally known as an Account Manager, to join their safety conscious team! This role focuses on building business within their territories as well as developing and maintaining strong customer relationships. While working in conjunction with route drivers, the Outside Sales Representative provides product insight to our clientele regarding essential lines of business.</p>\n\n<p><strong>This position requires daily visits to our local branch location.</strong></p>\n\n<ul><li>Why work for Safety-Kleen?</li><li>Health and Safety is our #1 priority and we live it 3-6-5!</li><li>Competitive wages: $65,000 - $80,000 + bonus opportunities </li><li>Comprehensive health benefits coverage after 30 days of full-time employment</li><li>Group 401K with company matching component</li><li>Generous paid time off, company paid training and tuition reimbursement</li><li>Positive and safe work environments</li><li>Opportunities for growth and development for all the stages of your career</li></ul>\n\n<ul><li>Ensures Health and Safety is the number one priority by complying with all safe work practices, policies, and processes and acting in a safe manner at all times;</li><li>Work with route drivers to convert new sales opportunities;</li><li>Grow current customer base with new lines of business;</li><li>Prepare and deliver customer quotes;</li><li>Prospect and convert leads into customers;</li><li>Achieve monthly sales quotas/budgets;</li></ul>\n\n<ul><li>Exceptional computer skills;</li><li>Tenacious, assertive, strong organizational skills and a hunter mentality;</li><li>Proven ability to develop a book of business;</li><li>Working knowledge and current use of Salesforce.com is a plus;</li><li>3+ years business to business sales experience preferred;</li></ul>\n\n<p><strong>Safety-Kleen Systems,</strong> a Clean Harbors company, has a commitment to excellence deeply rooted in a strong sense of tradition. Our entire business model revolves around keeping North American businesses green. We generate more than $1.2 billion in annual revenue as a world-class environmental service organization and market leader in industrial hazardous waste management, parts-cleaning technology, and oil re-refining. We collect over 200 million gallons of used motor oil each year and we have the largest re-refinery capacity in North America allowing us to re-refine more than 150 million gallons each year.<br> <br>Every day, we help our customers resolve their waste management needs and reduce their carbon footprint. <strong>PROTECTION. CHOICES. PEOPLE</strong>. <strong>MAKE GREEN WORK.™</strong></p>\n\n<p><strong>Join our safety focused team today!  </strong>To learn more about our company, and to apply online for this exciting opportunity, v<strong>isit us at </strong><a href=\"http://www.safety-kleen.com/careers\">www.safety-kleen.com/careers</a><strong>.</strong></p>\n\n<p><br><strong>Clean Harbors is an equal opportunity employer. We do not discriminate against applicants due to race, ancestry, color, sexual orientation, gender identity, national origin, religion, age, physical or mental disability, veteran status, or on the basis of any other federal, state/provincial or local protected class.</strong><br><br>Safety-Kleen Systems, a Clean Harbors company, is a Military &amp; Veteran friendly company.</p>\n\n<p>*SK </p>\n\n<p>#LI-SM1 </p>",
+      "name": "SKE Account Manager",
+      "type": "external",
+      "publication_date": "2025-03-08T15:56:40Z",
+      "short_name": "ske-account-manager-ff84b8",
+      "model_type": "jobs",
+      "id": 18054997,
+      "locations": [
+        {
+          "name": "Seattle, WA"
+        }
+      ],
+      "categories": [],
+      "levels": [
+        {
+          "name": "Mid Level",
+          "short_name": "mid"
+        }
+      ],
+      "tags": [],
+      "refs": {
+        "landing_page": "https://www.themuse.com/jobs/cleanharbors/ske-account-manager-ff84b8"
+      },
+      "company": {
+        "id": 15000557,
+        "short_name": "cleanharbors",
+        "name": "Clean Harbors"
+      }
+    }
+  ],
+  "aggregations": {}
+}
