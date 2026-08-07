@@ -655,9 +655,10 @@ Stack: Sentry (errors) + Grafana/Prometheus (system) + Langfuse (LLM traces and 
 down is a strict chain.** Do not start a milestone before the one it depends on is
 *proven* — not written, proven, by its E2E test.
 
-> **CURRENT MILESTONE: M1** — ATS ingestion + company slug registry.
-> M0 landed 2026-08-06; its gate is green in CI (both `test` and `compose-smoke`).
-> M1, M2 and M3 depend only on M0 and may be built in parallel.
+> **CURRENT MILESTONE: M2** — aggregators, free feeds, cross-source dedupe, registry grow.
+> M0 landed 2026-08-06. M1 landed 2026-08-06; both gates are green in CI (`test` and
+> `compose-smoke`), and M1's live gate is green against all six real boards.
+> M3 depends only on M0 and may still be built in parallel.
 > *(update this line as milestones land; it tells Claude what "in scope" means today)*
 
 ```
