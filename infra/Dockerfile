@@ -13,6 +13,13 @@ ENV UV_COMPILE_BYTECODE=1 \
 
 WORKDIR /app
 
+# uv fetches git dependencies with the git CLI, and slim images ship none. Needed for
+# python-jobspy, whose PyPI release is unusable on Python 3.13 (see [tool.uv.sources]).
+# Before the first `uv sync` so the dependency layer still caches.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/*
+
 # Dependency layer. Only the manifests are copied, so editing source does not
 # invalidate the (slow) resolve+download step.
 # --frozen because uv cannot validate the lock against workspace members whose

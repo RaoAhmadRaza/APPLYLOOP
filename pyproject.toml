@@ -14,6 +14,14 @@ members = ["apps/*", "packages/*"]
 [tool.uv.sources]
 db = { workspace = true }
 schemas = { workspace = true }
+# Not the PyPI release. 1.1.82 (2024-12-20) pins NUMPY==1.26.3, which publishes no
+# cp313 wheel and does not build on this repo's Python. Upstream relaxed it to
+# >=1.26.0 in #337 (2026-01-10) and has cut no release since.
+#
+# Pinned by sha, not by branch: a scraper tracking a moving branch is an unreviewed
+# deploy on every rebuild, and §11 says to keep JobSpy updated *deliberately*. Bumping
+# it means re-running the spike in infra/Dockerfile's comment and reading the diff.
+python-jobspy = { git = "https://github.com/speedyapply/JobSpy", rev = "fda080a373e8226f3fd60635323f5da9af9892b1" }
 
 [dependency-groups]
 dev = [
@@ -60,8 +68,8 @@ module = "db.migrations.*"
 ignore_errors = true
 
 [[tool.mypy.overrides]]
-# Celery ships no py.typed marker.
-module = ["celery.*", "asgi_lifespan.*"]
+# Neither Celery nor JobSpy ships a py.typed marker.
+module = ["celery.*", "asgi_lifespan.*", "jobspy.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

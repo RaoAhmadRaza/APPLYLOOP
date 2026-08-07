@@ -10,6 +10,10 @@ dependencies = [
     # out of the worker. Retries come from Celery's autoretry_for, not tenacity.
     "httpx>=0.28.1",
     "pydantic-settings>=2.14.2",
+    # M2's layer 2. Brings pandas + numpy + requests + tls-client with it, which is why
+    # the import lives inside the task rather than at module scope — see
+    # workers/tasks/scraping.py. Source pinned to a git sha in the workspace root.
+    "python-jobspy",
     "db",
     "schemas",
 ]
