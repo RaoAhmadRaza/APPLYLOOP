@@ -1,5 +1,10 @@
-"""`profiles`. Deliberately not one-per-user: multiple target-role profiles is plausible
-and nothing at M0 depends on the constraint either way."""
+"""`profiles`. One per user — `profiles.user_id` is UNIQUE as of migration 0003.
+
+`matches` is keyed on `(user_id, job_id)` and carries no `profile_id`, so a second
+profile would have nowhere to record its own scores. Supporting multiple target-role
+profiles needs `matches.profile_id` and a different unique key; it is a design change,
+not a relaxed constraint. See the model for the long version.
+"""
 
 from datetime import datetime
 from typing import Any
