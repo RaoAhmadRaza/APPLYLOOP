@@ -460,6 +460,48 @@ swap `ix_profiles_user_id` for `uq_profiles_user_id`. Four other places stated t
 constraint correctly; this was the only one disagreeing, and it is the first file an M3
 implementer opens.
 
+### Defects the live gate caught that 448 green tests did not
+
+The first real run was 22/24. Both failures were in `derive.py` — our code, not the
+model — and both had passing unit tests asserting the wrong thing. This is the pattern
+worth remembering: **a stubbed model tests the plumbing, not the judgement.**
+
+**An old title banded a current bandless one.** `seniority()` scanned every role and took
+the first with a keyword, so a résumé whose current role is "Backend Engineer" and whose
+first job was "Junior Developer" resolved to JUNIOR — six years after they stopped being
+one. `_by_recency` already puts the current role first, so scanning past it bought
+nothing and cost that. **Why the unit test missed it:** `test_a_title_on_an_older_role_
+still_counts` *asserted the bug*. It was written to prove ordering worked, and encoded
+"scan every role" as the intent rather than as an implementation detail.
+
+**A status claim beat a sponsorship requirement in the same sentence.** A résumé reading
+"EU citizen. Requires H-1B sponsorship for roles based in the United States" resolved to
+CITIZEN, because status was matched before need. **This is the dangerous direction**:
+§7.2 calls the work-auth filter the single most-praised feature in the leading product,
+and its entire value is not showing someone jobs they cannot legally take. The reverse
+error only narrows results. Need now dominates status, with negation ahead of both.
+**Why the unit test missed it:** every case was a single clean phrase. Real résumés put
+two facts in one sentence.
+
+**"Remote" is not a location.** `plain.txt` says "Remote (GMT+1)" and names no city; the
+model correctly declined to invent one. §3.5's filter is "location/**remote**" — two
+things — and `profiles.locations` is only the place half. The label demanding "Remote"
+in `locations` was wrong, and the fixture now asserts the stronger property: a résumé
+that names no place produces none.
+
+**The suite was not hermetic.** Adding a real `LLM_API_KEY` turned two green tests red
+with no source change. Every interlock test is a claim about an *absent* setting, and
+`monkeypatch.delenv` cannot make that true — pydantic-settings falls through to `.env`.
+M2's proxy interlock test had the identical latent bug and would have failed on the
+first day of real proxy credentials. Settings now come from `os.environ` only.
+
+Two second-order traps inside that fix, both worth knowing before touching settings in a
+test: `importlib.reload` re-executes a module body into the **same** module dict, so it
+replaces a class object a session-scoped patch was applied to — hence the fixture is
+function-scoped. And `llm.py` does `from workers.settings import get_settings` at import,
+so it holds its own reference with its own `lru_cache`; clearing the module's copy is not
+the same as clearing the one the code under test calls.
+
 ### Live findings
 
 - **`EmailStr` rejects the `.test` TLD** as special-use, so the `@example.test`
@@ -495,4 +537,5 @@ implementer opens.
 | Résumé versioning | M5 needs to cache tailoring per `(resume-version, JD)` — blueprint §6 implies it and nothing in the schema supports it. | M3 |
 | Layout-aware extraction (docling, or a fine-tuned small model) | The live parse gate shows real two-column résumés failing. Today's ceiling is pdfminer.six's reading order. | M3 |
 | A MinIO service in compose for local storage | Local development without R2 credentials becomes real friction. Today the endpoint 503s and everything else runs. | M3 |
+| Seeding `prefs_json.remote_modes` from a résumé that says "Remote" | A user complains that stating "Remote" on their CV did not make remote jobs match. Deliberately not done: prefs are the user's, and a parse that wrote them would be inventing intent. | M3 |
 | PII retention policy for `master_resume` and `evidence` | Before the first paying customer — the same deadline Part 14 already sets for multi-tenancy isolation. These are the first genuinely private per-user rows in the schema; ICO/EDPS guidance for candidate data is 6–12 months. | M3 |

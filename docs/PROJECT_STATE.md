@@ -6,8 +6,8 @@ ending one.
 CLAUDE.md §9 says what "in scope" means. This file says what is *true* — what has been
 proven, with what evidence, and what is known to be broken.
 
-> Last updated: **2026-08-07**, after M3 landed.
-> `main` @ `12f273d` · **not yet pushed** · CI not yet run on these commits.
+> Last updated: **2026-08-07**, after M3 landed and its live gate passed.
+> `main` @ `323957f` · pushed · CI green (`test` + `compose-smoke`).
 
 ---
 
@@ -18,15 +18,15 @@ proven, with what evidence, and what is known to be broken.
 | **M0** | Foundation | ✅ **proven** 2026-08-06 | One command boots the stack; `alembic upgrade head` clean; pgvector present; `POST /jobs` → `GET /jobs/{id}` round-trips; a no-op Celery task completes; CI green. |
 | **M1** | ATS ingestion + registry | ✅ **proven** 2026-08-06 | Six adapters green against live boards (gate asked for three). Second run writes only diffs — live PostHog board: `fetched: 12, inserted: 0, updated: 0, closed: 0`. `detect()` resolves a real careers URL. CI log reads `beat ingested 13 jobs unattended`. |
 | **M2** | Aggregators + dedupe | ✅ **proven** 2026-08-07, one clause pending | See below. |
-| **M3** | Profiles & résumé parsing | 🟡 **built 2026-08-07, one clause pending** | See below. |
-| **M4** | Matching | ⬜ **unblocked once M3's live gate runs** | Reads the deduped pool from M2 and the profiles from M3. |
+| **M3** | Profiles & résumé parsing | ✅ **proven** 2026-08-07 | Live gate **24/24 against a real model** (OpenAI, `gpt-5.4-nano` class). See below. |
+| **M4** | Matching | ⬜ **unblocked — this is next** | Reads the deduped pool from M2 and the profiles from M3. |
 | M5–M11 | — | ⬜ | Strict chain from M4. |
 
 ### M3 gate, item by item
 
 | Clause | Status | Evidence |
 |---|---|---|
-| Three sample résumés parse with correct skills/seniority/location/work-auth | 🟡 **offline half proven** | Four fixtures, each carrying a named trap (`tests/fixtures/resumes/labels.json`). All four extract to text and every labelled skill survives (`test_resume_extract.py`, 17 tests). The full stage is proven against a stubbed model (`test_profile_parse.py`, 12 tests): parsed_json, the promoted columns, the vault and the event all assert. **The live half needs an LLM API key** — `test_resume_parse_live.py` is written and skipped. |
+| Three sample résumés parse with correct skills/seniority/location/work-auth | ✅ | **Four** fixtures (one more than asked), each carrying a named trap — clean single-column PDF, two-column PDF, DOCX with no Projects section, plain text with no city. `make verify-live-parse`: **24 passed** against a real model. Seniority, work-auth and location assert *exactly*; skills as a superset; years-of-experience within a labelled range. The first run was 22/24 and found two real bugs — see DECISIONS.md → M3. |
 | Prefs store and retrieve | ✅ | `Prefs` schema in `packages/schemas`. Verified live against the running stack: `PATCH /profiles/{id}` with `remote_modes`, `must_have_keywords`, `exclude_keywords`, `titles` and `salary_floor` round-trips through `GET`. |
 | Evidence vault populated for one test user | ✅ | `evidence` table, migration 0006 applied live. `test_profile_parse.py` asserts it is populated and that **every stored claim's text is present in `master_resume`** — the invariant that makes M5's validator worth anything. A fabricated skill is dropped and counted. |
 
@@ -91,11 +91,12 @@ SELECT kind, text, source FROM evidence WHERE profile_id = :profile_id;
 ## Test surface
 
 ```
-448 pass, no network            make test
+451 pass, no network            make test
  12 live, all 8 real feeds      make verify-live-feeds       APPLYLOOP_LIVE_FEEDS=1
   9 live, all 6 real ATS boards make verify-live             APPLYLOOP_LIVE_ATS=1
   3 live, aggregator            make verify-live-aggregator  ← SKIPPED, needs a proxy
- 24 live, résumé parsing        make verify-live-parse       ← SKIPPED, needs an LLM key
+ 24 live, résumé parsing        make verify-live-parse       ← GREEN 2026-08-07 (4 model
+                                                             calls/run, well under a cent)
   3 live, object storage        make verify-live-storage     ← SKIPPED, needs a bucket
 ```
 
@@ -115,12 +116,7 @@ budget, and the parse suite spends real money.
   state, not a broken one.
 - **CLAUDE.md §8.1's proxy budget is contradicted by measurement** — see
   `docs/DECISIONS.md` → *Open, deferred deliberately*. Left alone until end of project.
-- **No résumé has ever been through a real model.** The stage is interlocked: empty
-  `LLM_API_KEY` records `profile.parse_skipped` and does nothing. Verified live. That is
-  a supported state, not a broken one — but it means M3's first gate clause rests on a
-  stubbed model, and the accuracy numbers are unmeasured. **This is the one thing
-  standing between M3 and green.**
-- **No résumé has ever been through a real bucket.** Same shape: unconfigured storage
+- **No résumé has ever been through a real bucket.** Unconfigured storage
   makes the upload endpoint 503, verified live. `test_storage_live.py` is written and
   skipped. The parse stage works without it — `master_resume` can be set directly — so
   this blocks the upload path, not the milestone.
@@ -162,13 +158,10 @@ budget, and the parse suite spends real money.
 
 ## Next
 
-**Get an OpenRouter key and run `make verify-live-parse`.** It is 24 assertions over four
-fixture résumés and costs a few cents. Until it passes, M3's first gate clause rests on a
-stubbed model and nobody knows what the accuracy actually is. Everything else in M3 is
-green.
-
-Then **M4 (matching)**, which is what all of this was for. It reads the three queries in
-*What M4 gets* above.
+**M4 (matching)** — the first milestone in the strict chain, and what all of this was
+for. It reads the three queries in *What M4 gets* above. Note §14 is still open on the
+match-score threshold: it needs the golden set, so **do not hardcode a number before
+then**.
 
 Two smaller items, both blocked on credentials rather than on code:
 
@@ -176,3 +169,7 @@ Two smaller items, both blocked on credentials rather than on code:
 - R2 credentials close M3's upload path (`make verify-live-storage`).
 
 And one that is not blocked on anything: debug or drop the `google` aggregator site.
+
+**Before writing M4's golden set, read DECISIONS.md → M3 → "Defects the live gate caught
+that 448 green tests did not".** M4's gate is a quality bar, and the M3 lesson is that a
+stubbed model tests the plumbing while the judgement stays unmeasured.
