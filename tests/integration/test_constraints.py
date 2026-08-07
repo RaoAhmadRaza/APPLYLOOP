@@ -7,8 +7,18 @@ both are only true if these constraints actually exist and actually fire.
 """
 
 import pytest
-from db.models import Application, Approval, Company, Document, Job, Match, Profile, User
-from sqlalchemy import text
+from db.models import (
+    Application,
+    Approval,
+    Company,
+    Document,
+    Evidence,
+    Job,
+    Match,
+    Profile,
+    User,
+)
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -106,6 +116,61 @@ def test_profiles_reject_a_second_profile_for_one_user(session: Session) -> None
     session.flush()
     session.add(Profile(user_id=user.id))
     with pytest.raises(IntegrityError):
+        session.flush()
+
+
+def _profile(session: Session) -> Profile:
+    profile = Profile(user_id=_user(session).id, master_resume="Built a Python service.")
+    session.add(profile)
+    session.flush()
+    return profile
+
+
+def test_evidence_rejects_a_duplicate_claim(session: Session) -> None:
+    """What makes a re-parse idempotent. The same résumé yields the same claims every
+    time, and the database refuses the second copy — Part 13 rule 10, no check-then-act."""
+    profile = _profile(session)
+    session.add(Evidence(profile_id=profile.id, kind="skill", text="Python", origin="parsed"))
+    session.flush()
+
+    session.add(Evidence(profile_id=profile.id, kind="skill", text="Python", origin="parsed"))
+    with pytest.raises(IntegrityError):
+        session.flush()
+
+
+def test_evidence_allows_the_same_text_under_a_different_kind(session: Session) -> None:
+    """The key is (profile_id, kind, text). "Kubernetes" can legitimately be both a
+    listed skill and a word inside a bullet, and collapsing them would lose the bullet."""
+    profile = _profile(session)
+    session.add(Evidence(profile_id=profile.id, kind="skill", text="Python", origin="parsed"))
+    session.add(Evidence(profile_id=profile.id, kind="bullet", text="Python", origin="parsed"))
+
+    session.flush()
+
+
+def test_deleting_a_profile_takes_its_vault_with_it(session: Session) -> None:
+    """CASCADE, not SET NULL. A claim is only meaningful relative to the résumé it was
+    verified against, so an orphaned one could never be re-verified."""
+    profile = _profile(session)
+    session.add(Evidence(profile_id=profile.id, kind="skill", text="Python", origin="parsed"))
+    session.flush()
+
+    session.delete(profile)
+    session.flush()
+
+    assert session.scalar(select(func.count()).select_from(Evidence)) == 0
+
+
+def test_check_constraint_rejects_an_illegal_evidence_kind(session: Session) -> None:
+    profile = _profile(session)
+    with pytest.raises(IntegrityError):
+        session.execute(
+            text(
+                "INSERT INTO evidence (profile_id, kind, text, origin) "
+                "VALUES (:id, 'invention', 'x', 'parsed')"
+            ),
+            {"id": profile.id},
+        )
         session.flush()
 
 
