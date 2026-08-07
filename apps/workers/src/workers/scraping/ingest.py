@@ -9,8 +9,16 @@ only Greenhouse exposes an `updated_at` — Lever, Ashby, Workable, SmartRecruit
 Recruitee expose creation dates only. So the question "did this posting change?" is
 answered by comparing payloads, and Postgres answers it for free: `jsonb` equality is
 semantic and key-order-insensitive, so no `content_hash` column is needed.
+
+`upsert`, `close_missing` and `record` are public because M2's feed layer (`feed.py`)
+and aggregator layer (`aggregator.py`) write rows through exactly these. They take a
+`company_id` rather than a `Company` for the same reason: a feed row names an employer
+we may hold no registry row for, so there is nothing to pass. One diff engine, one
+close statement, one event shape, three sources.
 """
 
+import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -27,6 +35,12 @@ from workers.scraping import ADAPTERS
 # Consecutive failed runs before a slug is retired. Five rather than one so a single
 # 503 never retires a live board; §4.3 asks for "N runs" without naming N.
 RETIRE_AFTER_FAILURES = 5
+
+# Rows per INSERT statement. `insert(Job).values(rows)` renders one multi-VALUES
+# statement and Postgres caps a statement at 65,535 bind parameters; JobCreate has 13
+# fields, so a single statement dies just above 5,041 rows. SmartRecruiters already
+# allows 10,000 postings from one board, and M2's feeds return four figures.
+UPSERT_CHUNK = 500
 
 # Columns the upsert refreshes. `source`/`external_id` are the conflict key and never
 # change; `created_at` records first sight and must survive an update.
@@ -68,23 +82,54 @@ def ingest_company(session: Session, client: httpx.Client, company: Company) -> 
         # rows and raises nothing. Closing here would delete this employer's entire job
         # set on one transient glitch, so the run records itself and stops. A genuinely
         # empty board leaves stale rows open — visible in the event log, not destructive.
-        _record(session, company, "ingest.empty", {"fetched": 0})
+        _record_board(session, company, "ingest.empty", {"fetched": 0})
         return IngestResult(fetched=0, inserted=0, updated=0, closed=0)
 
     jobs = [adapter.normalize(raw, company.name, slug) for raw in postings]
-    changed_ids, inserted, updated = _upsert(session, company, jobs)
+    changed_ids, inserted, updated = upsert(session, jobs, company.id)
     _fetch_missing_details(session, client, adapter, company, changed_ids)
-    closed = _close_missing(session, adapter.SOURCE, company, [job.external_id for job in jobs])
+    closed = close_missing(session, adapter.SOURCE, [job.external_id for job in jobs], company.id)
 
     return IngestResult(fetched=len(jobs), inserted=inserted, updated=updated, closed=closed)
 
 
-def _upsert(session: Session, company: Company, jobs: list[Any]) -> tuple[list[str], int, int]:
+def upsert(
+    session: Session, jobs: Sequence[Any], company_id: uuid.UUID | None
+) -> tuple[list[str], int, int]:
     """Insert new postings, update only genuinely changed ones.
 
     Returns (changed external_ids, inserted count, updated count).
+
+    `company_id` is required rather than defaulted: `None` means "this row names an
+    employer with no registry entry", which is right for a feed and wrong for a board,
+    and nobody should reach it by omission.
     """
-    rows = [{**job.model_dump(), "company_id": company.id} for job in jobs]
+    # Postgres refuses an ON CONFLICT DO UPDATE that would touch one row twice in a
+    # single statement ("cannot affect row a second time"), so a source that returns the
+    # same posting twice in one pass would raise rather than dedupe. An ATS board never
+    # does; a feed paginated by offset does it routinely, because a posting inserted at
+    # the top of the listing between two page requests shifts everything down one. Last
+    # occurrence wins: for a shifted page that is the more recently fetched copy.
+    deduped = list({job.external_id: job for job in jobs}.values())
+
+    changed_ids: list[str] = []
+    inserted = 0
+    updated = 0
+    # Chunked because one statement has a bind-parameter ceiling — see UPSERT_CHUNK.
+    for start in range(0, len(deduped), UPSERT_CHUNK):
+        ids, new, touched = _upsert_chunk(
+            session, deduped[start : start + UPSERT_CHUNK], company_id
+        )
+        changed_ids.extend(ids)
+        inserted += new
+        updated += touched
+    return changed_ids, inserted, updated
+
+
+def _upsert_chunk(
+    session: Session, jobs: Sequence[Any], company_id: uuid.UUID | None
+) -> tuple[list[str], int, int]:
+    rows = [{**job.model_dump(), "company_id": company_id} for job in jobs]
 
     insertion = insert(Job).values(rows)
     statement = insertion.on_conflict_do_update(
@@ -161,18 +206,29 @@ def _fetch_missing_details(
     session.flush()
 
 
-def _close_missing(
-    session: Session, source: str, company: Company, seen_external_ids: list[str]
+def close_missing(
+    session: Session,
+    source: str,
+    seen_external_ids: list[str],
+    company_id: uuid.UUID | None,
 ) -> int:
-    """Mark every still-open posting this board stopped returning.
+    """Mark every still-open posting this source stopped returning.
 
-    Scoped by company_id, not by the raw `company` text: two boards spelling a name
-    differently would otherwise close each other's rows.
+    Scoped by company_id when there is one, not by the raw `company` text: two boards
+    spelling a name differently would otherwise close each other's rows. A feed passes
+    `None` and is scoped by `source` alone, which is safe because the two namespaces are
+    disjoint — no board row is ever `source='remotive'` and no feed row is ever
+    `source='greenhouse'`.
+
+    Callers decide *whether* to call this at all. An ATS board returns the complete
+    current set for one employer, so absence is evidence; a paginated feed or an
+    aggregator search proves nothing by absence. See `feed.ingest_feed`.
     """
+    scope = [Job.company_id == company_id] if company_id is not None else []
     closed = session.scalars(
         update(Job)
         .where(
-            Job.company_id == company.id,
+            *scope,
             Job.source == source,
             Job.closed_at.is_(None),
             Job.external_id.not_in(seen_external_ids),
@@ -194,7 +250,7 @@ def record_success(session: Session, company: Company, result: IngestResult) -> 
     company.last_seen_ok = now
     company.jobs_last_run = now
     company.consecutive_failures = 0
-    _record(
+    _record_board(
         session,
         company,
         "ingest.run",
@@ -212,7 +268,7 @@ def record_failure(session: Session, company: Company, error: str) -> None:
     company.consecutive_failures += 1
     if company.consecutive_failures >= RETIRE_AFTER_FAILURES:
         company.status = CompanyStatus.RETIRED.value
-    _record(
+    _record_board(
         session,
         company,
         "ingest.error",
@@ -220,13 +276,23 @@ def record_failure(session: Session, company: Company, error: str) -> None:
     )
 
 
-def _record(session: Session, company: Company, event_type: str, payload: dict[str, Any]) -> None:
+def record(session: Session, event_type: str, payload: dict[str, Any]) -> None:
+    """One row in `events`. §8.2 wants rows-ingested-per-source-per-run and §3.7 wants
+    alerting on volume rather than only on errors; `events` carries both without a new
+    table. The caller owns the payload shape — a board names its ats/slug, a feed names
+    itself."""
     session.add(
         Event(
-            # Ingest is not per-user: one board serves every user who matches against it.
+            # Ingest is not per-user: one source serves every user who matches against it.
             user_id=None,
             type=event_type,
-            payload_json={"ats": company.ats_type, "slug": company.ats_slug, **payload},
+            payload_json=payload,
         )
     )
     session.flush()
+
+
+def _record_board(
+    session: Session, company: Company, event_type: str, payload: dict[str, Any]
+) -> None:
+    record(session, event_type, {"ats": company.ats_type, "slug": company.ats_slug, **payload})
