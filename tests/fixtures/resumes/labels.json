@@ -39,10 +39,10 @@
     "roles": 2
   },
   "plain.txt": {
-    "trap": "the no-extraction-risk baseline — if this one fails, the model or the prompt is at fault and not the converter",
-    "seniority": "mid",
+    "trap": "the no-extraction-risk baseline — if this one fails, the model or the prompt is at fault and not the converter. Two more: its CURRENT title carries no seniority word, so it exercises the tenure fallback; and it names no city at all (\"Remote (GMT+1)\"), so it is the fixture that proves the parser does not invent one",
+    "seniority": "senior",
     "work_auth": "citizen",
-    "location_contains": "Remote",
+    "location_contains": null,
     "skills_include": ["Python", "Java", "PostgreSQL"],
     "years_experience_between": [7.0, 9.0],
     "roles": 2

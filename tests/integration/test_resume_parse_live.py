@@ -108,9 +108,19 @@ def test_the_promoted_columns_match_the_labels(
 
     assert profile.seniority == expected["seniority"], f"{name} seniority"
     assert profile.work_auth == expected["work_auth"], f"{name} work_auth"
-    assert any(expected["location_contains"] in place for place in profile.locations), (
-        f"{name} locations: {profile.locations}"
-    )
+
+    place = expected["location_contains"]
+    if place is None:
+        # A résumé that names no city must produce no location. §3.5's hard filter is
+        # "location/remote" — two things — and `profiles.locations` is the place half.
+        # "Remote (GMT+1)" is the *remote* half, and belongs in prefs_json.remote_modes,
+        # which the user sets. A parser that put "Remote" in a city field would be
+        # inventing a value, which is the one thing this stage may never do.
+        assert profile.locations == [], f"{name} invented a location: {profile.locations}"
+    else:
+        assert any(place in found for found in profile.locations), (
+            f"{name} locations: {profile.locations}"
+        )
 
 
 @pytest.mark.parametrize("name", RESUMES)
