@@ -91,6 +91,7 @@ name = "api"
 version = "0.1.0"
 source = { editable = "apps/api" }
 dependencies = [
+    { name = "celery", extra = ["redis"] },
     { name = "db" },
     { name = "fastapi", extra = ["standard"] },
     { name = "pydantic-settings" },
@@ -101,6 +102,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "celery", extras = ["redis"], specifier = ">=5.6.3" },
     { name = "db", editable = "packages/db" },
     { name = "fastapi", extras = ["standard"], specifier = ">=0.141.1" },
     { name = "pydantic-settings", specifier = ">=2.14.2" },
