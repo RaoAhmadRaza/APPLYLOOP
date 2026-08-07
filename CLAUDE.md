@@ -535,8 +535,11 @@ profiles     (id, user_id, master_resume, parsed_json, prefs_json,
               work_auth, locations[], seniority, salary_floor)
 jobs         (id, source, external_id, title, company, company_id,
               location, locations[], remote_mode, description, url,
-              ats_type, posted_at, closed_at, raw_json)
+              ats_type, posted_at, closed_at, raw_json,
+              dedupe_key, canonical_id)
                                                   -- closed_at NULL = still listed
+                                                  -- canonical_id NULL = the survivor
+                                                  -- the deduped pool both are NULL
 job_embeddings (job_id, model, embedding halfvec)  -- pgvector, PK (job_id, model)
 matches      (id, user_id, job_id, score, label, reasons_json, status)
 documents    (id, match_id, type, storage_url, gdrive_url, version)
@@ -582,7 +585,7 @@ Nothing may skip a transition. The apply stages act only on `approved` — never
   inside the transaction Alembic wraps migrations in, and removing a value rewrites the
   table. Adding a value here is a drop-and-re-add of one constraint.
 
-## 6.3 Two ingest invariants (M1) — do not relax either
+## 6.3 Ingest invariants (M1, M2) — do not relax any of these
 
 - **`jobs.external_id` is always `f"{slug}:{native_id}"`.** Greenhouse integers and
   Lever/Ashby UUIDs are provably unique across tenants; Recruitee's integer `id` and
@@ -595,6 +598,30 @@ Nothing may skip a transition. The apply stages act only on `approved` — never
   adding a computed field, reordering it through a model — makes every run find a
   difference, rewrite every row, and quietly stop "writing only diffs". Data from a
   second request belongs in its own column.
+
+Three more from M2:
+
+- **A source may only close a row by absence if one pass returns its complete current
+  listing.** True of an ATS board, which returns every open role for one employer. False
+  of a paginated feed, where a missing posting may simply be on a page we did not ask
+  for, and false of an aggregator search, which is a query rather than a board. Those
+  age rows out instead. Alongside it: an empty pass closes nothing, and a pass that
+  collapses against the previous one closes nothing and records `feed.volume_drop` —
+  the volume check is a **gate on the close**, not a dashboard, because by the time a
+  human reads a dashboard the rows are already closed.
+
+- **`jobs.canonical_id IS NULL` means "this row is the survivor".** Losers are marked,
+  never deleted: `upsert` conflicts on `(source, external_id)`, so a deleted row has no
+  conflict target and the next pass re-inserts it — delete/insert forever, and "writes
+  only diffs" gone. The deduped pool every later stage reads is
+  `WHERE closed_at IS NULL AND canonical_id IS NULL`.
+
+- **Dedupe priority is a pure function of `jobs.source`.** Never of arrival order,
+  `created_at`, or which task ran first. That is what makes "the survivor keeps the ATS
+  apply URL" structural rather than bookkeeping — if an ATS row is open in the group it
+  wins, and its `url` already *is* the ATS URL, so nothing is copied and nothing can be
+  copied wrong. The normalizers behind the key are deliberately conservative: a false
+  merge silently removes a real job from the pool, which is worse than a duplicate.
 
 ---
 
