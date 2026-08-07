@@ -4,7 +4,15 @@ import uuid
 from datetime import datetime
 
 from schemas.enums import AtsType, RemoteMode
-from sqlalchemy import DateTime, ForeignKey, Index, Text, UniqueConstraint, text
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -48,6 +56,18 @@ class Job(Base, UUIDv7PK, Timestamps):
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # No default: an empty raw payload means the adapter dropped something.
     raw_json: Mapped[dict] = mapped_column(JSONB)
+    # §4.2's cross-source merge key: normalized company|title|location. Written by the
+    # dedupe pass, not by ingest — a fresh row is NULL, which reads as "not yet known to
+    # be a duplicate", the safe default. NULL also means "un-keyable" (blank company or
+    # title), and such a row is never merged with anything.
+    dedupe_key: Mapped[str | None] = mapped_column(Text)
+    # NULL = this row is the survivor. Non-NULL = the id of the row that won its group.
+    # That polarity, not self-pointing: it makes the downstream predicate
+    # `canonical_id IS NULL` indexable, and every row predating this column is already
+    # correctly marked with no backfill.
+    canonical_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("jobs.id", ondelete="SET NULL")
+    )
 
     __table_args__ = (
         # The ingest dedupe key. Without it every M1 run duplicates every job.
@@ -60,6 +80,17 @@ class Job(Base, UUIDv7PK, Timestamps):
         Index(
             "ix_jobs_company_id_open",
             "company_id",
+            postgresql_where=text("closed_at IS NULL"),
+        ),
+        # "NULL = survivor" has to be a database fact, not a convention: a row pointing
+        # at itself would be excluded from `canonical_id IS NULL` and silently vanish
+        # from the deduped pool.
+        CheckConstraint("canonical_id IS NULL OR canonical_id <> id", name="canonical_id_not_self"),
+        # The dedupe pass's hot path is "which open rows still need a key?". After the
+        # first backfill that must be an empty index scan, not a scan of every open row.
+        Index(
+            "ix_jobs_dedupe_key_open",
+            "dedupe_key",
             postgresql_where=text("closed_at IS NULL"),
         ),
     )
