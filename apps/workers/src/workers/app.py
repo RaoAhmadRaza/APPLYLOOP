@@ -35,6 +35,8 @@ settings = get_settings()
 TASK_MODULES = [
     "workers.tasks.health",
     "workers.tasks.scraping",
+    # M3. No beat entry: parsing fires on upload, not on a clock.
+    "workers.tasks.profiles",
 ]
 
 # Imported for the beat schedule below, not for the tasks — one entry per feed, keyed by
