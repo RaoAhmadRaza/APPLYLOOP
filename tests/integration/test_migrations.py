@@ -18,6 +18,7 @@ EXPECTED_TABLES = {
     "job_embeddings",
     "jobs",
     "matches",
+    "evidence",
     "profiles",
     "users",
 }
