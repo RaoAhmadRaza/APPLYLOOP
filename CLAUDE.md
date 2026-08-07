@@ -247,8 +247,13 @@ the guess.** Portal risk is a first-class field on the job row, not a runtime he
 The model may **reorder, rephrase, and surface** evidence that already exists in the
 user's evidence vault. It may **never add a claim**.
 
-This is enforced twice:
+This is enforced three times, and the first one is the one people forget:
 
+0. **Vault-side, at write time (M3)** — a claim enters `evidence` only if its text
+   appears verbatim in that profile's `master_resume`. Without this, steps 1 and 2 are
+   theatre: if the *parser* invents a skill, the validator below finds it, declares the
+   generated bullet traceable, and puts a lie on a résumé — working perfectly and
+   proving nothing. A validator is only as true as the thing it diffs against.
 1. **Prompt-side** — the model is given the master résumé plus the facts store, and told
    that is the entire universe of permissible claims.
 2. **Code-side** — after generation, a validator diffs every generated bullet against the
@@ -519,7 +524,10 @@ to the same table with a different `method` value. Do not build an `ApplyStrateg
 ```
 /apps/api          FastAPI — Core API, the DB contract surface
 /apps/workers      Celery workers, one package per stage
+   llm.py            the one LLM call — worker infrastructure, NOT a stage, because
+                     M3, M4 and M5 all need it and stages may not import each other
    /scraping         ATS adapters, JobSpy wrapper, feeds, normalizer, dedupe
+   /profiles         résumé extraction, LLM parse, derived filters, evidence vault
    /matching         filters, embeddings, rerank, gap analysis
    /tailoring        LLM tailoring, fabrication validator, PDF render
    /notify           telegram, whatsapp
@@ -528,6 +536,8 @@ to the same table with a different `method` value. Do not build an `ApplyStrateg
 /apps/extension    Plasmo MV3 extension
 /packages/db       SQLAlchemy models + Alembic migrations — the single source of truth
 /packages/schemas  pydantic types shared across stages (the wire format)
+/packages/storage  S3-compatible blob store — shared because the API writes the résumé
+                   upload and a worker reads it back, and `api -> workers` is forbidden
 /infra             docker-compose, k8s manifests later
 /evals             golden set, fabrication tests, cost benchmarks
 ```
@@ -565,8 +575,15 @@ companies    (id, name, domain, ats_type, ats_slug, last_seen_ok,
               jobs_last_run, status, consecutive_failures)
                                                   -- the slug registry, §4.3
 users        (id, email, auth_id, plan, created_at)
-profiles     (id, user_id, master_resume, parsed_json, prefs_json,
+profiles     (id, user_id, master_resume, resume_url, parsed_json, prefs_json,
               work_auth, locations[], seniority, salary_floor)
+                                                  -- resume_url is a storage KEY
+                                                  -- the four bare columns are what M4
+                                                  -- filters in SQL; prefs_json is the rest
+evidence     (id, profile_id, kind, text, source, origin)
+                                                  -- the facts store half of the vault
+                                                  -- every `text` appears verbatim in
+                                                  -- that profile's master_resume
 jobs         (id, source, external_id, title, company, company_id,
               location, locations[], remote_mode, description, url,
               ats_type, posted_at, closed_at, raw_json,
@@ -605,11 +622,13 @@ Nothing may skip a transition. The apply stages act only on `approved` — never
 - `jobs.embedding` uses an HNSW index. Don't change the distance metric without
   re-embedding and re-running the golden set (§8.2).
 - `applications` gets a unique constraint on `(match_id, method)`. See §3.4.
-- Four more uniqueness rules exist for the same reason, and each has a test that proves
+- Five more uniqueness rules exist for the same reason, and each has a test that proves
   the database refuses the duplicate: `jobs(source, external_id)` (ingest dedupe),
-  `matches(user_id, job_id)`, `documents(match_id, type, version)`, and a **partial**
-  unique on `approvals(match_id, channel) WHERE decided_at IS NULL` — at most one
-  *undecided* request per channel, so a retry cannot double-message a human.
+  `matches(user_id, job_id)`, `documents(match_id, type, version)`,
+  `evidence(profile_id, kind, text)` — which is what makes a résumé re-parse idempotent
+  without check-then-act — and a **partial** unique on
+  `approvals(match_id, channel) WHERE decided_at IS NULL` — at most one *undecided*
+  request per channel, so a retry cannot double-message a human.
 - `profiles.user_id` is unique: **one profile per user.** `matches` is keyed on
   `(user_id, job_id)` and carries no `profile_id`, so a second profile would have
   nowhere to record its own scores. Supporting multiple target-role profiles is a real
@@ -761,10 +780,11 @@ Stack: Sentry (errors) + Grafana/Prometheus (system) + Langfuse (LLM traces and 
 down is a strict chain.** Do not start a milestone before the one it depends on is
 *proven* — not written, proven, by its E2E test.
 
-> **CURRENT MILESTONE: M2** — aggregators, free feeds, cross-source dedupe, registry grow.
-> M0 landed 2026-08-06. M1 landed 2026-08-06; both gates are green in CI (`test` and
-> `compose-smoke`), and M1's live gate is green against all six real boards.
-> M3 depends only on M0 and may still be built in parallel.
+> **CURRENT MILESTONE: M3** — profiles, résumé parsing, the evidence vault.
+> M0 and M1 landed 2026-08-06; M2 landed 2026-08-07. All three gates green.
+> M3 is **built** as of 2026-08-07 and green offline; its first gate clause needs one
+> live run against a real model (`make verify-live-parse`, needs `LLM_API_KEY`).
+> **M4 is not in scope until that run passes** — §9's rule is *proven*, not written.
 > *(update this line as milestones land; it tells Claude what "in scope" means today)*
 
 ```

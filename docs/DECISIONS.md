@@ -274,6 +274,207 @@ mass-close live jobs on the first throttled run.
 
 ---
 
+## M3 — Profiles, résumé parsing and the evidence vault (2026-08-07)
+
+### The vault, and where §3.3 is actually won
+
+**The evidence vault is a table, verified at write time** — a JSONB key on `profiles`;
+trusting the extractor — this is the decision the rest of M3 hangs off, so it is first.
+
+§3.3 makes M5's validator the guardrail against fabrication: it diffs every generated
+bullet against the vault and strips what it cannot trace. **That guarantee is worth
+nothing if the vault itself is not true.** If the *parser* invents a skill, M5 finds it,
+declares the generated bullet traceable, and puts a lie on somebody's résumé — the
+validator working perfectly and proving nothing. So `vault.py` stores a claim only when
+its text appears in that profile's `master_resume`.
+
+A table rather than a JSONB key for a lifecycle reason rather than a normalisation one:
+`parsed_json` is *derived* and is thrown away and rebuilt on every re-parse, while the
+vault also holds `origin='user'` claims a person added by hand, which have to survive a
+re-upload. Same row shape, two lifetimes, so two homes.
+
+**Comparison is containment over letters and digits, not similarity** — a trigram or
+embedding threshold — the same reasoning `dedupe.py` gives, with the polarity reversed.
+There, a false merge loses a real job. Here, a *rejected true claim* silently loses real
+evidence, and an *admitted paraphrase* is precisely the thing being excluded. Stricter
+comparison fails on a line break markitdown introduced mid-bullet; looser waves through
+"reduced latency by 76%" when nobody wrote 76%.
+
+**Rejected claims are counted onto the `profile.parsed` event** — dropping them
+silently — a non-zero count means the model paraphrased instead of copying, which loses
+real evidence that nothing else would surface. §3.7's "alert on volume" applies to
+evidence as much as to rows. `test_the_model_copies_rather_than_paraphrases` gates the
+ratio at 15% in the live suite.
+
+**Skill keywords each become their own claim** — storing the group label — a résumé
+writes "Languages: Python, Go", and §3.3 names inventing a *skill* as the adversarial
+case the permanent M5 test must catch. Left inside a group label, "is Rust in the
+vault?" is unanswerable.
+
+### The parser
+
+**The LLM extracts facts; Python derives filters** — asking the model for seniority and
+years of experience — `profiles.seniority`, `profiles.locations` and `profiles.work_auth`
+are M4 `WHERE`-clause inputs, and a value that varies between two runs over one résumé
+drops a different set of jobs each time. The model reports titles and dates; `derive.py`
+does the judging, with tests and no network.
+
+**Years of experience merges overlapping intervals** — summing them — a job and a
+concurrent contract are one stretch of a life, and summing reports eight years as
+twelve. A bare year ends at the *following* January, because "2020 – 2021" is two years
+of work and resolving both ends to January reports it as one month. **Found by a test**:
+the first implementation anchored on `spans[0]` before sorting, which mis-totals every
+résumé that lists its roles newest-first — i.e. all of them.
+
+**A role with no start date contributes nothing, and no dates at all yields NULL** —
+guessing a start from the end date; returning 0.0 — inventing tenure is the exact
+failure this stage exists to prevent, and 0.0 reads as "no experience" where NULL reads
+as "we could not tell". Same polarity M1 set with `RemoteMode`.
+
+**Seniority takes the title first and tenure only as a fallback** — tenure alone — a
+promotion is a stated fact and a year count is a proxy: someone made Staff at six years
+is Staff, and a career-changer with fifteen years in another field is not. Keywords are
+scanned most-senior-first so "Senior Staff Engineer" resolves to Staff.
+
+**`profiles.locations` is NOT normalized** — reusing `dedupe.normalize_location` —
+M4's location filter is `profiles.locations && jobs.locations`, and `jobs.locations`
+holds each source's own strings. Normalizing one side of an overlap makes matching
+*worse*. This also settles the question of whether that helper needed to move into
+`packages/`: M3 has no consumer for it, so it stays in the scraping stage.
+
+**A promoted column is filled only when it is empty** — overwriting on every parse — a
+person who corrected their own seniority has said something the résumé cannot
+contradict. **Known ceiling:** a genuine career change leaves stale columns until the
+user edits them. The alternative is tracking which fields a user has touched, which is
+real state for a case that editing the profile already solves.
+
+**`salary_floor` is never parsed.** A résumé does not state one, and inferring it from a
+title is exactly the invented value this stage exists to prevent.
+
+**The promoted columns are authoritative for anything M4 filters in SQL; `prefs_json`
+holds the rest** — build-sequence.md §M3 lists "location, remote, salary floor,
+must-haves" as *prefs*, which would put two of those in two places at once. Two writable
+homes for one value is two places for them to disagree, and the columns are the ones
+carrying the GIN index and the CHECK constraints.
+
+### The first LLM call in the repo
+
+**An OpenAI-compatible `httpx` call, no SDK and no `instructor`** — the openai package;
+instructor — a chat-completions request is one POST, `httpx` is already a dependency,
+and Celery already supplies backoff and jitter. `instructor`'s real value is unified
+retry across fifteen providers and there is one here; the part worth keeping — re-asking
+with the validation error attached — is ten lines, and a bare retry re-sends the same
+prompt and earns the same failure.
+
+**OpenRouter as the default base URL** — DeepSeek direct — **DeepSeek's API rejects
+`response_format.type = "json_schema"` outright** ("unavailable now"), and §7.2 already
+wants a cheap model for scoring and a strong one for tailoring, which is one key through
+a router. `LLM_BASE_URL` keeps the choice a config change.
+
+**The pydantic schema must be rewritten before strict mode accepts it** — passing
+`model_json_schema()` straight through — strict mode requires `additionalProperties:
+false` on every object and *every* property in `required`, and rejects `default`.
+Pydantic emits none of the first, omits optional fields from the second, and emits the
+third per defaulted field. Expressing optionality as a nullable type is exactly correct
+for our models, which are already `X | None`. **The rewrite returns new dicts**:
+`model_json_schema()` is cached per class, and editing it in place would corrupt every
+later call in the process.
+
+**A validation failure raises with field locations only** — the pydantic error string —
+that message reaches the Celery log *and* the Redis result backend, and the value it
+complains about is a fragment of somebody's résumé (Part 13 rule 9).
+
+**`workers/llm.py` sits at the worker top level, not in a stage package** — inside
+`workers/profiles/` — M4 and M5 both need it and §3.1 forbids importing across stage
+packages, so a stage-local client would exist three times. Same status as `settings.py`.
+
+### Text extraction and storage
+
+**`PyMuPDF` is rejected on licence grounds** — despite being the fastest option —
+**AGPL-3.0, whose network clause would require this service to be open-sourced or an
+Artifex licence bought.** It is 8–12× faster than the alternatives at plain text
+extraction and it is still the wrong answer. Recorded because somebody will otherwise
+"optimise" into it.
+
+**markitdown, not a PDF library directly** — pypdf; docling — one entry point for PDF,
+DOCX and text, and it emits Markdown rather than a wall of characters, so headings and
+lists survive into the model's input. Docling is also MIT but pulls torch and layout
+models, which is a different order of footprint. **Accepted cost:** markitdown's *base*
+dependencies include `magika`, an ONNX file-type detector, which brings `onnxruntime`
+(~200 MB) into the worker image. Not optional — it is a base dependency, not an extra.
+
+**pdfminer.six's two-column reading order is a known ceiling, not a blocker** — its
+documented behaviour is to interleave columns line by line. That degrades extraction
+*quality* — which the live suite measures — but **cannot corrupt the vault**, because
+the model reads exactly the text claims are later verified against. A mangled layout
+produces a worse record, never an unverifiable one.
+
+**`packages/storage` is a workspace package** — a module in either app — the API writes
+the upload and the worker reads it back, and `api -> workers` is forbidden. Same
+reasoning that moved `record` into `packages/db` in the same milestone.
+
+**The boto3 client is built per call, never cached at module scope** — botocore clients
+are not fork-safe and Celery's prefork children would inherit one, which is the same
+class of bug `db.session`'s `NullPool` exists to make structurally impossible.
+
+**`build_key` carries a random component per upload** — a fixed name per profile —
+otherwise re-uploading overwrites the object a currently-running parse task is about to
+read.
+
+### Wiring
+
+**`record()` moved from `workers.scraping.ingest` into `packages/db`** — a second copy
+in the profiles stage — M3 must write `events` rows and §3.1 forbids importing another
+stage's internals. It gained a keyword-only `user_id`: ingest events are not per-user, a
+profile event genuinely belongs to someone, and the column was always there.
+
+**Parsing has no beat entry** — a periodic re-parse — it fires on upload. A schedule
+would spend a model call per profile per tick to rewrite rows it already wrote.
+
+**Only `StorageError` retries the task** — retrying every exception — an extraction
+failure is deterministic (a scanned PDF does not become readable on the third attempt),
+and a model that answered nonsense has already had both of `llm.MAX_ATTEMPTS` inside one
+call.
+
+**A failed parse writes `profile.parse_failed` before re-raising** — letting Celery's
+log be the only record — a profile whose parse failed must not be indistinguishable from
+one with an empty résumé, or M4 scores it against nothing and produces confidently wrong
+matches.
+
+**The upload endpoint clears `master_resume`** — leaving it — between that commit and
+the parse finishing, stale text would be scored by M4 against a document the user has
+just replaced.
+
+**The resume router is registered before the CRUD routers** — after — both mount
+`/profiles`, and `/{row_id}` would otherwise swallow the literal `/profiles/{id}/resume`.
+
+**Unconfigured storage is a 503, not a 500** — a checkout with no bucket is a supported
+state everywhere else in this repo, and should read as "this deployment cannot do that
+yet" rather than as a crash.
+
+### Defects found in shipped code
+
+**`packages/schemas/src/schemas/profile.py`'s docstring claimed "Deliberately not
+one-per-user"** — true at M0, false from migration 0003, which exists specifically to
+swap `ix_profiles_user_id` for `uq_profiles_user_id`. Four other places stated the
+constraint correctly; this was the only one disagreeing, and it is the first file an M3
+implementer opens.
+
+### Live findings
+
+- **`EmailStr` rejects the `.test` TLD** as special-use, so the `@example.test`
+  addresses the ORM-level suites use 422 through the API. API-level tests use
+  `example.com`. Cost twelve failing tests to find.
+- **reportlab embeds the bullet as an unmapped glyph**, so pdfminer emits `(cid:127)`.
+  Real PDFs do this too. Harmless, because the vault's comparison drops everything that
+  is not a letter or a digit — pinned by a test so nobody "fixes" it by loosening that
+  normaliser.
+- **`docx.shared.Inches` is EMU-based** and silently produced a negative reportlab frame
+  width when mixed into a points-based layout. Fixture-generator only, but the failure
+  mode — a unit that looks like a number — is worth knowing.
+
+---
+
 ## Open, deferred deliberately
 
 | Item | Trigger to revisit | Recorded |
@@ -289,3 +490,9 @@ mass-close live jobs on the first throttled run.
 | A city+region map for `normalize_location` | A real board produces the `Portland, OR` / `Portland, ME` collision. | M2 |
 | `apps/jobspy` sidecar | Only if a future JobSpy bump breaks the in-worker install on both arches. | M2 |
 | Portal-risk field on `jobs` | M9. `source` + `ats_type` already answer it at read time; a column with no consumer is speculative. | M2 |
+| `prefs_json.remote_modes` / `must_have_keywords` promoted to columns | M4's filter query needs an index on one of them. §6.2 says adding a column later is "fine"; changing one's meaning is not. | M3 |
+| Re-parse overwriting a stale promoted column after a career-change re-upload | A real user hits it. The fix needs per-field "user touched this" state, which is more machinery than editing the profile. | M3 |
+| Résumé versioning | M5 needs to cache tailoring per `(resume-version, JD)` — blueprint §6 implies it and nothing in the schema supports it. | M3 |
+| Layout-aware extraction (docling, or a fine-tuned small model) | The live parse gate shows real two-column résumés failing. Today's ceiling is pdfminer.six's reading order. | M3 |
+| A MinIO service in compose for local storage | Local development without R2 credentials becomes real friction. Today the endpoint 503s and everything else runs. | M3 |
+| PII retention policy for `master_resume` and `evidence` | Before the first paying customer — the same deadline Part 14 already sets for multi-tenancy isolation. These are the first genuinely private per-user rows in the schema; ICO/EDPS guidance for candidate data is 6–12 months. | M3 |
