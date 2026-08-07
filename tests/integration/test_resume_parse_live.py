@@ -28,10 +28,11 @@ from typing import Any
 
 import pytest
 from db.models import Evidence, Profile, User
+from schemas.resume import ParsedResume
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from workers import llm
-from workers.profiles import extract, parse, vault
+from workers.profiles import extract, parse, prompt, vault
 
 pytestmark = [
     pytest.mark.skipif(
@@ -55,7 +56,25 @@ def _fresh_settings() -> None:
     llm.get_settings.cache_clear()
 
 
-def _parsed(session: Session, name: str) -> tuple[Profile, Any]:
+@pytest.fixture(scope="session")
+def answers() -> dict[str, ParsedResume]:
+    """One real model call per fixture, for the whole session.
+
+    Six test functions × four fixtures is twenty-four assertions but only **four**
+    résumés. Calling the model per test would spend six times the credit to ask the same
+    question six times — §3.5's filter-before-you-spend applied to our own test suite.
+
+    The model call is the only expensive part; everything downstream (derive, the vault,
+    the row writes) is free and still runs per test against a rolled-back session, so
+    nothing is stubbed that the gate is actually measuring.
+
+    Session-scoped rather than memoised inside the helper because the `session` fixture
+    rolls back between tests — the rows cannot be shared, only the answer.
+    """
+    return {}
+
+
+def _parsed(session: Session, name: str, answers: dict[str, ParsedResume]) -> tuple[Profile, Any]:
     """Run the real stage over one fixture. Seeds the row, parses, returns both."""
     user = User(email=f"{name.replace('.', '-')}@example.test", auth_id=f"auth|{name}")
     session.add(user)
@@ -66,16 +85,26 @@ def _parsed(session: Session, name: str) -> tuple[Profile, Any]:
     session.add(profile)
     session.flush()
 
-    result = parse.parse_profile(session, profile)
+    real = llm.complete_json
+    try:
+        # First test to reach a fixture pays for it; the rest replay that answer.
+        if name not in answers:
+            answers[name] = real(ParsedResume, system=prompt.SYSTEM, user=prompt.build(text))
+        llm.complete_json = lambda *_a, **_k: answers[name]  # type: ignore[assignment]
+        result = parse.parse_profile(session, profile)
+    finally:
+        llm.complete_json = real
     return profile, result
 
 
 @pytest.mark.parametrize("name", RESUMES)
-def test_the_promoted_columns_match_the_labels(session: Session, name: str) -> None:
+def test_the_promoted_columns_match_the_labels(
+    session: Session, name: str, answers: dict[str, ParsedResume]
+) -> None:
     """The gate clause, field by field. Exact, not approximate: these four go into M4's
     `WHERE` clause, where being close means dropping the wrong jobs."""
     expected = LABELS[name]
-    profile, _ = _parsed(session, name)
+    profile, _ = _parsed(session, name, answers)
 
     assert profile.seniority == expected["seniority"], f"{name} seniority"
     assert profile.work_auth == expected["work_auth"], f"{name} work_auth"
@@ -85,10 +114,12 @@ def test_the_promoted_columns_match_the_labels(session: Session, name: str) -> N
 
 
 @pytest.mark.parametrize("name", RESUMES)
-def test_the_labelled_skills_are_all_extracted(session: Session, name: str) -> None:
+def test_the_labelled_skills_are_all_extracted(
+    session: Session, name: str, answers: dict[str, ParsedResume]
+) -> None:
     """A superset check. A model naming more real skills than the label set is doing its
     job; a model missing one is the regression."""
-    profile, _ = _parsed(session, name)
+    profile, _ = _parsed(session, name, answers)
     extracted = {
         skill.lower()
         for entry in profile.parsed_json["skills"]
@@ -101,11 +132,13 @@ def test_the_labelled_skills_are_all_extracted(session: Session, name: str) -> N
 
 
 @pytest.mark.parametrize("name", RESUMES)
-def test_years_of_experience_lands_in_the_labelled_range(session: Session, name: str) -> None:
+def test_years_of_experience_lands_in_the_labelled_range(
+    session: Session, name: str, answers: dict[str, ParsedResume]
+) -> None:
     """A range rather than a value: the model reports dates and Python does the
     arithmetic, so the only thing at risk here is whether the *dates* were read right."""
     low, high = LABELS[name]["years_experience_between"]
-    profile, _ = _parsed(session, name)
+    profile, _ = _parsed(session, name, answers)
 
     years = profile.parsed_json["years_experience"]
     assert years is not None, f"{name} produced no dated roles"
@@ -113,18 +146,22 @@ def test_years_of_experience_lands_in_the_labelled_range(session: Session, name:
 
 
 @pytest.mark.parametrize("name", RESUMES)
-def test_every_role_in_the_resume_is_found(session: Session, name: str) -> None:
-    profile, result = _parsed(session, name)
+def test_every_role_in_the_resume_is_found(
+    session: Session, name: str, answers: dict[str, ParsedResume]
+) -> None:
+    profile, result = _parsed(session, name, answers)
 
     assert result.roles == LABELS[name]["roles"]
 
 
 @pytest.mark.parametrize("name", RESUMES)
-def test_the_vault_is_populated_and_nothing_in_it_was_invented(session: Session, name: str) -> None:
+def test_the_vault_is_populated_and_nothing_in_it_was_invented(
+    session: Session, name: str, answers: dict[str, ParsedResume]
+) -> None:
     """The gate's third clause and §3.3's guarantee, against a real model rather than a
     stub. Every stored claim must be findable in the résumé it came from — this is the
     assertion that would catch a model quietly paraphrasing."""
-    profile, result = _parsed(session, name)
+    profile, result = _parsed(session, name, answers)
 
     stored = list(session.scalars(select(Evidence).where(Evidence.profile_id == profile.id)))
     assert stored, f"{name} produced an empty vault"
@@ -137,11 +174,13 @@ def test_the_vault_is_populated_and_nothing_in_it_was_invented(session: Session,
 
 
 @pytest.mark.parametrize("name", RESUMES)
-def test_the_model_copies_rather_than_paraphrases(session: Session, name: str) -> None:
+def test_the_model_copies_rather_than_paraphrases(
+    session: Session, name: str, answers: dict[str, ParsedResume]
+) -> None:
     """The prompt's first rule, measured. A rejected claim is a *correct* fact the vault
     had to drop because the model rewrote it — real evidence lost, silently, unless this
     is watched. A small number is tolerable; a large one means the prompt regressed."""
-    _, result = _parsed(session, name)
+    _, result = _parsed(session, name, answers)
 
     total = result.claims_stored + result.claims_rejected
     assert total, f"{name} produced no claims at all"
