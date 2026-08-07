@@ -35,18 +35,26 @@ _YEAR_BANDS: list[tuple[float, Seniority]] = [
 ]
 _YEAR_BANDS_ABOVE = Seniority.STAFF
 
-# Phrases a résumé actually uses, mapped to the enum. Ordered because "does not require
-# sponsorship" contains "sponsorship" and must not fall through to NEEDS_SPONSORSHIP.
+# Phrases a résumé actually uses, mapped to the enum.
+#
+# **Order is load-bearing, and it is not the obvious one.** A résumé says things like
+# "EU citizen. Requires H-1B sponsorship for roles in the United States" — both a status
+# and a need, in one sentence. Matching status first returns CITIZEN and hides the
+# sponsorship requirement, which is the *dangerous* direction: §7.2 calls the work-auth
+# filter the single most-praised feature in the leading product, and its entire value is
+# not showing someone jobs they cannot legally take. The reverse error merely narrows
+# their results.
+#
+# So: whether sponsorship is needed dominates what the person's status is. Negation
+# comes before the need, because "does not require sponsorship" contains "require
+# sponsorship" and would otherwise read as its own opposite.
+#
+# ponytail: "US citizen, no sponsorship required" resolves to VISA_HOLDER rather than
+# CITIZEN. Both mean "can work here", so the filter behaves identically; the enum
+# conflates status with need and untangling it is a schema change, not a reordering.
 _WORK_AUTH_PHRASES: list[tuple[WorkAuth, tuple[str, ...]]] = [
     (
-        WorkAuth.CITIZEN,
-        ("citizen", "citizenship", "us national", "u.s. national"),
-    ),
-    (
-        WorkAuth.PERMANENT_RESIDENT,
-        ("permanent resident", "green card", "greencard", "indefinite leave"),
-    ),
-    (
+        # Sponsorship explicitly NOT needed. Must precede the block below.
         WorkAuth.VISA_HOLDER,
         (
             "no sponsorship required",
@@ -62,6 +70,7 @@ _WORK_AUTH_PHRASES: list[tuple[WorkAuth, tuple[str, ...]]] = [
         ),
     ),
     (
+        # Sponsorship needed. Beats any status claimed in the same sentence.
         WorkAuth.NEEDS_SPONSORSHIP,
         (
             "require sponsorship",
@@ -75,6 +84,14 @@ _WORK_AUTH_PHRASES: list[tuple[WorkAuth, tuple[str, ...]]] = [
             "h1b sponsorship",
             "visa sponsorship",
         ),
+    ),
+    (
+        WorkAuth.PERMANENT_RESIDENT,
+        ("permanent resident", "green card", "greencard", "indefinite leave"),
+    ),
+    (
+        WorkAuth.CITIZEN,
+        ("citizen", "citizenship", "us national", "u.s. national"),
     ),
 ]
 
@@ -111,15 +128,24 @@ def years_of_experience(resume: ParsedResume, *, today: date | None = None) -> f
 
 
 def seniority(resume: ParsedResume, years: float | None) -> Seniority | None:
-    """The most recent title's band, or the years band when the title is silent.
+    """The most recent title's band, or the years band when that title is silent.
 
     Title first because it is a stated fact and tenure is a proxy: someone promoted to
     Staff at six years is Staff, and a career-changer with fifteen years in another
-    field is not. Titles are matched over *every* role, not only the newest, so a
-    résumé listing the current role last still resolves.
+    field is not.
+
+    **Only the most recent role's title is consulted.** Scanning further back reads a
+    band off a job the person has left: a résumé whose current role is "Backend
+    Engineer" and whose first job was "Junior Developer" resolves to JUNIOR, six years
+    after they stopped being one. `_by_recency` already puts the current role first, so
+    scanning past it buys nothing and costs that. Found by the live gate on plain.txt.
+
+    A bandless current title falls through to tenure, which is the right answer for the
+    very common "Software Engineer" with no adjective.
     """
-    for role in _by_recency(resume.work):
-        band = _band_from_title(role.position)
+    current = next(iter(_by_recency(resume.work)), None)
+    if current is not None:
+        band = _band_from_title(current.position)
         if band is not None:
             return band
     if years is None:

@@ -173,13 +173,27 @@ def test_the_title_beats_tenure() -> None:
     assert derive.seniority(resume, 6.0) is Seniority.STAFF
 
 
-def test_a_title_on_an_older_role_still_counts() -> None:
-    """Titles are scanned across every role, so a résumé that lists its current job last
-    still resolves rather than falling through to tenure."""
-    resume = _resume(_role("2015-01", "2018-01", "Software Engineer"))
-    resume = _resume(*resume.work, _role("2018-01", None, "Principal Engineer"))
+def test_the_current_role_decides_even_when_it_is_listed_last() -> None:
+    """`_by_recency` puts the open role first regardless of the order the résumé used."""
+    resume = _resume(
+        _role("2015-01", "2018-01", "Software Engineer"),
+        _role("2018-01", None, "Principal Engineer"),
+    )
 
     assert derive.seniority(resume, 10.0) is Seniority.PRINCIPAL
+
+
+def test_an_old_title_never_bands_a_current_bandless_one() -> None:
+    """**Found by the live gate on plain.txt.** A current "Backend Engineer" and a first
+    job titled "Junior Developer" resolved to JUNIOR — six years after they stopped
+    being one. Only the most recent title is consulted; a bandless one falls through to
+    tenure, which is what eight years of it should say."""
+    resume = _resume(
+        _role("2020-02", None, "Backend Engineer"),
+        _role("2018-07", "2020-01", "Junior Developer"),
+    )
+
+    assert derive.seniority(resume, 8.0) is Seniority.SENIOR
 
 
 def test_no_title_and_no_tenure_is_none() -> None:
@@ -237,6 +251,23 @@ def test_not_requiring_sponsorship_is_not_needing_sponsorship() -> None:
     resume = ParsedResume(work_authorization="Does not require sponsorship")
 
     assert derive.work_auth(resume) is WorkAuth.VISA_HOLDER
+
+
+def test_needing_sponsorship_beats_a_status_stated_in_the_same_sentence() -> None:
+    """**Found by the live gate on two_column.pdf.** "EU citizen. Requires H-1B
+    sponsorship for roles based in the United States" resolved to CITIZEN, because
+    status was matched before need — which is the dangerous direction: §7.2's whole
+    point is not showing someone jobs they cannot legally take."""
+    resume = ParsedResume(
+        work_authorization="EU citizen. Requires H-1B sponsorship for roles in the United States"
+    )
+
+    assert derive.work_auth(resume) is WorkAuth.NEEDS_SPONSORSHIP
+
+
+def test_a_bare_citizenship_claim_is_still_citizen() -> None:
+    """The reordering must not swallow the simple case."""
+    assert derive.work_auth(ParsedResume(work_authorization="UK citizen.")) is WorkAuth.CITIZEN
 
 
 def test_an_unstated_authorisation_is_none_not_a_guess() -> None:
