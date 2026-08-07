@@ -9,6 +9,9 @@ that accepts every shape they actually emit — verified against live payloads:
     workable         "2026-02-12"                    date only, no time, no zone
     smartrecruiters  "2026-06-24T10:00:11.853Z"      ISO with Z
     recruitee        ISO string
+
+M2's feeds are all ISO too, with two exceptions that are epoch **seconds** rather than
+milliseconds — see `from_epoch_seconds`.
 """
 
 from datetime import UTC, datetime
@@ -38,6 +41,21 @@ def to_utc(value: Any) -> datetime | None:
     # A date-only value ("2026-02-12") parses to midnight naive. Treat it as UTC rather
     # than dropping it — the day is the information, the hour was never there.
     return parsed.replace(tzinfo=UTC) if parsed.tzinfo is None else parsed.astimezone(UTC)
+
+
+def from_epoch_seconds(value: Any) -> datetime | None:
+    """Arbeitnow's `created_at` and Himalayas' `pubDate` are epoch **seconds**.
+
+    Separate from `to_utc` rather than sniffed by magnitude: `to_utc` reads a bare
+    number as milliseconds because Lever does, and passing seconds to it silently
+    yields 1970 — a wrong date, not an error. Which unit a source uses is knowledge the
+    adapter has and the coercer does not.
+    """
+    if value is None or value == "":
+        return None
+    if not isinstance(value, int | float) or isinstance(value, bool):
+        return to_utc(value)
+    return datetime.fromtimestamp(value, tz=UTC)
 
 
 def join_nonempty(parts: list[str | None], sep: str = ", ") -> str | None:
