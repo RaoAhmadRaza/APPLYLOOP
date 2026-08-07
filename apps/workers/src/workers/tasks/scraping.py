@@ -19,8 +19,10 @@ from schemas.enums import CompanyStatus
 from sqlalchemy import select
 
 from workers.app import SessionLocal, app
+from workers.scraping import feed, http, ingest, registry
 from workers.scraping import detect as detection
-from workers.scraping import http, ingest, registry
+from workers.scraping.feeds import FEEDS
+from workers.settings import get_settings
 
 
 @app.task(name="workers.tasks.scraping.ingest_all")
@@ -66,6 +68,34 @@ def ingest_company(self: Any, company_id: str) -> dict[str, int] | None:
             raise
 
         ingest.record_success(session, company, result)
+        session.commit()
+        return asdict(result)
+
+
+@app.task(
+    name="workers.tasks.scraping.ingest_feed",
+    autoretry_for=(httpx.HTTPError,),
+    retry_backoff=True,
+    retry_jitter=True,
+    # Two rather than three: every retry re-runs the whole pass, and on these hosts that
+    # spends a politeness budget rather than just time.
+    max_retries=2,
+)
+def ingest_feed(source: str) -> dict[str, int]:
+    """Pull one layer-3 feed. Beat fires one of these per feed, on its own interval."""
+    settings = get_settings()
+    feed_module = FEEDS[source]
+    with SessionLocal() as session, http.client() as client:
+        result = feed.ingest_feed(
+            session,
+            client,
+            feed_module,
+            delay=settings.feed_page_delay_seconds,
+            volume_floor=settings.feed_volume_floor,
+        )
+        if not feed_module.COMPLETE:
+            # A paginated feed can never prove a posting is gone, so age does the work.
+            feed.close_stale(session, source, settings.feed_stale_days)
         session.commit()
         return asdict(result)
 
