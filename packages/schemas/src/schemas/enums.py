@@ -69,6 +69,36 @@ class Seniority(StrEnum):
     DIRECTOR = "director"
 
 
+class EvidenceKind(StrEnum):
+    """What one vault claim is.
+
+    The granularity is set by what M5's validator has to check. CLAUDE.md §3.3 says it
+    "diffs every generated bullet against the vault", and names *inventing a skill* as
+    the adversarial case the permanent test must catch — so a skill has to be
+    individually checkable, not merely findable inside some longer prose blob.
+
+    `title` is here because a fabricated job title is a lie of the same class as a
+    fabricated skill, and M5 restates titles verbatim.
+    """
+
+    SKILL = "skill"
+    BULLET = "bullet"
+    TITLE = "title"
+    CREDENTIAL = "credential"
+
+
+class EvidenceOrigin(StrEnum):
+    """Who put this claim in the vault.
+
+    Load-bearing, not bookkeeping: a re-parse rebuilds `parsed` claims from the current
+    résumé, and must leave `user` ones alone. Without this column a user who adds a
+    real project by hand loses it the next time they upload a résumé.
+    """
+
+    PARSED = "parsed"
+    USER = "user"
+
+
 class MatchStatus(StrEnum):
     """The pipeline state machine — CLAUDE.md §6.1.
 
