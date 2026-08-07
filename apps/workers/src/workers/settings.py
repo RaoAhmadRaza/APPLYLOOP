@@ -46,6 +46,21 @@ class Settings(BaseSettings):
     # lasts and shorter than the noise floor of "is this still open?".
     feed_stale_days: int = 45
 
+    # --- §4.3's reverse-index, the half of the registry that grows itself ---------
+    grow_interval_minutes: int = 60
+    # Employers resolved per run. The worst case is batch x 6 requests split across six
+    # different hosts, so 25 is ~25 requests each per hour — quieter than one human
+    # loading one careers page.
+    grow_batch: int = 25
+    # Open roles an employer needs before it earns a six-endpoint probe. One posting
+    # does not; a second one means they are actually hiring.
+    grow_min_jobs: int = 2
+    grow_delay_seconds: float = 1.0
+    # How long an employer we could not resolve is left alone. Companies do adopt an
+    # ATS, so a miss is not permanent — but re-probing hourly forever is six wasted
+    # requests an hour, per company, indefinitely.
+    grow_retry_days: int = 30
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
