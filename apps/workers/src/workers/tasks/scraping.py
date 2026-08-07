@@ -19,7 +19,7 @@ from schemas.enums import CompanyStatus
 from sqlalchemy import select
 
 from workers.app import SessionLocal, app
-from workers.scraping import feed, http, ingest, registry
+from workers.scraping import dedupe, feed, http, ingest, registry
 from workers.scraping import detect as detection
 from workers.scraping.feeds import FEEDS
 from workers.settings import get_settings
@@ -96,6 +96,15 @@ def ingest_feed(source: str) -> dict[str, int]:
         if not feed_module.COMPLETE:
             # A paginated feed can never prove a posting is gone, so age does the work.
             feed.close_stale(session, source, settings.feed_stale_days)
+        session.commit()
+        return asdict(result)
+
+
+@app.task(name="workers.tasks.scraping.dedupe_jobs")
+def dedupe_jobs() -> dict[str, int]:
+    """Collapse the same role seen on several sources onto one canonical row (§4.2)."""
+    with SessionLocal() as session:
+        result = dedupe.dedupe_jobs(session)
         session.commit()
         return asdict(result)
 
