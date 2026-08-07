@@ -97,16 +97,8 @@ class Settings(BaseSettings):
     # Generous: a long résumé is a lot of input, and a retry costs a whole call.
     llm_timeout_seconds: float = 120.0
 
-    # --- Object storage for raw résumés (S3-compatible; R2 in production) -----------
-    # All optional and all interlocked together: without them the upload endpoint 503s
-    # rather than 500s, and nothing else in the system notices.
-    storage_endpoint_url: str | None = None
-    storage_access_key_id: SecretStr | None = None
-    storage_secret_access_key: SecretStr | None = None
-    storage_bucket: str | None = None
-    # R2 ignores regions but boto3's signer demands one. "auto" is what Cloudflare's
-    # own docs use.
-    storage_region: str = "auto"
+    # Object storage is configured by `packages/storage`, not here: the API writes the
+    # upload and the worker reads it back, so neither app can own those settings.
 
     @field_validator("jobspy_proxies", mode="before")
     @classmethod

@@ -14,8 +14,14 @@ dependencies = [
     # the import lives inside the task rather than at module scope — see
     # workers/tasks/scraping.py. Source pinned to a git sha in the workspace root.
     "python-jobspy",
+    # M3's résumé text extraction. MIT, and the extras are the point: [pdf] is
+    # pdfminer.six + pdfplumber, [docx] is mammoth + lxml, all permissively licensed.
+    # PyMuPDF is 8-12x faster and AGPL-3.0, whose network clause would force this
+    # service open-source — see docs/DECISIONS.md.
+    "markitdown[docx,pdf]>=0.1.6",
     "db",
     "schemas",
+    "storage",
 ]
 
 [build-system]

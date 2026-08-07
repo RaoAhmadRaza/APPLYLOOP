@@ -11,6 +11,9 @@ dependencies = [
     "redis>=5.0",
     "db",
     "schemas",
+    # M3's résumé upload writes the raw file here; the worker reads it back. Shared
+    # rather than duplicated because this app may not import `workers`.
+    "storage",
     # Deliberately NOT `workers`: the API enqueues by task name via send_task, which
     # keeps Celery out of this image and honours CLAUDE.md §3.1.
 ]

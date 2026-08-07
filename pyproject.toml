@@ -5,8 +5,13 @@
 # via [tool.uv.sources] below.
 #
 # Dependency direction is one-way and enforced by CLAUDE.md §3.1:
-#   api -> db, schemas   |   workers -> db, schemas   |   db -> schemas   |   schemas -> nothing
+#   api -> db, schemas, storage  |  workers -> db, schemas, storage
+#   db -> schemas                |  schemas, storage -> nothing
 # api must never depend on workers; it enqueues by task name instead.
+#
+# `storage` is shared for the same reason `db` is: M3's API endpoint writes the résumé
+# upload and M3's worker reads it back to extract text, and neither app may import the
+# other. One implementation, two importers.
 
 [tool.uv.workspace]
 members = ["apps/*", "packages/*"]
@@ -14,6 +19,7 @@ members = ["apps/*", "packages/*"]
 [tool.uv.sources]
 db = { workspace = true }
 schemas = { workspace = true }
+storage = { workspace = true }
 # Not the PyPI release. 1.1.82 (2024-12-20) pins NUMPY==1.26.3, which publishes no
 # cp313 wheel and does not build on this repo's Python. Upstream relaxed it to
 # >=1.26.0 in #337 (2026-01-10) and has cut no release since.
@@ -68,8 +74,17 @@ module = "db.migrations.*"
 ignore_errors = true
 
 [[tool.mypy.overrides]]
-# Neither Celery nor JobSpy ships a py.typed marker.
-module = ["celery.*", "asgi_lifespan.*", "jobspy.*"]
+# None of these ships a py.typed marker. boto3/botocore have stubs on PyPI
+# (boto3-stubs), but they are generated per-service and enormous; one `s3` client
+# behind six typed functions is not worth the install.
+module = [
+    "celery.*",
+    "asgi_lifespan.*",
+    "jobspy.*",
+    "boto3.*",
+    "botocore.*",
+    "markitdown.*",
+]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

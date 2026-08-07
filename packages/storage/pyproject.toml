@@ -1,0 +1,12 @@
+[project]
+name = "storage"
+version = "0.1.0"
+description = "S3-compatible object storage for raw résumé uploads — the one blob store."
+requires-python = ">=3.13"
+# boto3, not a hand-rolled SigV4 signer. R2 speaks S3, and signing a request correctly
+# is the one part of this that is genuinely hard to get right.
+dependencies = ["boto3>=1.42.0", "pydantic-settings>=2.14.2"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
