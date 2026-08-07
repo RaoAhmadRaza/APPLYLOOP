@@ -18,14 +18,21 @@ Note the schema has to be *rewritten* for strict mode — see `_strict`.
 `trust_env=False` for the same reason `scraping/http.py` sets it: Part 13 rule 12 scopes
 the residential proxy to the aggregator layer, and routing model traffic through metered
 bandwidth would be an expensive accident caused by an env var nobody read.
+
+**The line this module draws, stated once:** anything that talks to the model provider
+lives here; anything that talks to Postgres lives in the stage. That is why `embed()` is
+here and the `job_embeddings` write is not, and why `client()` is public — M4's embed
+call needs the identical base URL, auth and `trust_env=False`, and a second copy of those
+twelve lines is the drift `db.events.record` exists to prevent.
 """
 
+from dataclasses import dataclass
 from typing import Any
 
 import httpx
 from pydantic import BaseModel, ValidationError
 
-from workers.settings import Settings, get_settings
+from workers.settings import get_settings
 
 # One corrective re-ask, never a loop. If a schema-constrained model cannot satisfy its
 # own schema twice, the prompt is wrong and burning credit will not fix it. Celery's
@@ -47,15 +54,38 @@ class LlmError(RuntimeError):
     """
 
 
+@dataclass(frozen=True)
+class Usage:
+    """What one request cost, in the only unit the provider actually reports.
+
+    Tokens rather than dollars: a price is a fact about a contract that changes without
+    notice, a token count is a fact about the request. §8.2 wants per-run spend, and the
+    conversion belongs where the price literal sits next to the model name — the eval,
+    and M11's dashboards. Storing dollars in `events` would freeze a stale rate into the
+    audit trail.
+    """
+
+    prompt_tokens: int
+    completion_tokens: int
+
+
 def is_configured() -> bool:
     """The interlock. No key means the caller no-ops and says so, never guesses."""
     return get_settings().llm_api_key is not None
 
 
-def complete_json[T: BaseModel](schema: type[T], *, system: str, user: str) -> T:
+def complete_json[T: BaseModel](
+    schema: type[T], *, system: str, user: str, usage: list[Usage] | None = None
+) -> T:
     """One structured completion, validated into `schema`.
 
     Raises `LlmError` if the model fails the schema twice.
+
+    `usage` is an optional caller-owned sink rather than a second return value, because
+    changing the return type would break every existing call site for a number most of
+    them do not want. **Appended once per attempt, including the attempt that raises** —
+    a corrective re-ask resends the whole transcript, so it is exactly where a silent 2×
+    would hide from a cost measurement.
     """
     settings = get_settings()
     if settings.llm_api_key is None:
@@ -67,9 +97,9 @@ def complete_json[T: BaseModel](schema: type[T], *, system: str, user: str) -> T
     ]
     body_schema = _strict(schema.model_json_schema())
 
-    with _client(settings) as client:
+    with client() as http:
         for attempt in range(MAX_ATTEMPTS):
-            content = _ask(client, settings.llm_model, messages, schema.__name__, body_schema)
+            content = _ask(http, settings.llm_model, messages, schema.__name__, body_schema, usage)
             try:
                 return schema.model_validate_json(content)
             except ValidationError as error:
@@ -96,7 +126,45 @@ def complete_json[T: BaseModel](schema: type[T], *, system: str, user: str) -> T
     raise LlmError("unreachable")  # pragma: no cover — the loop always returns or raises
 
 
-def _client(settings: Settings) -> httpx.Client:
+def embed(texts: list[str]) -> tuple[list[list[float]], int]:
+    """Embed a batch. Returns the vectors in input order, and the tokens they cost.
+
+    A tuple rather than the `usage` sink `complete_json` takes: there is no retry loop
+    here and no existing caller whose signature has to survive, so the smaller diff wins.
+
+    Raises `LlmError` if the provider returns a different number of vectors than it was
+    given — a length mismatch would silently pair job A's text with job B's vector, and
+    every downstream cosine would be wrong in a way nothing else can detect.
+    """
+    settings = get_settings()
+    if settings.llm_api_key is None:
+        raise LlmError("no LLM API key configured")
+    if not texts:
+        # Not an error, and deliberately before the client is opened: M4 calls this with
+        # whatever the hard filters left, and "nothing survived" is a normal run.
+        return [], 0
+
+    with client() as http:
+        response = http.post("/embeddings", json={"model": settings.embed_model, "input": texts})
+    response.raise_for_status()
+    payload = response.json()
+
+    try:
+        # Sorted by `index`, not trusted to arrive in order. The spec says ordered; a
+        # misordered batch is indistinguishable from a correct one at every later step.
+        rows = sorted(payload["data"], key=lambda row: row["index"])
+        vectors = [row["embedding"] for row in rows]
+    except (KeyError, IndexError, TypeError) as error:
+        raise LlmError(f"unexpected embeddings response shape: {sorted(payload)}") from error
+
+    if len(vectors) != len(texts):
+        raise LlmError(f"asked for {len(texts)} embeddings, got {len(vectors)}")
+    return vectors, int(payload.get("usage", {}).get("prompt_tokens", 0))
+
+
+def client() -> httpx.Client:
+    """The one provider client. Public because `matching` needs it and may not copy it."""
+    settings = get_settings()
     assert settings.llm_api_key is not None  # noqa: S101 — the caller checked
     return httpx.Client(
         base_url=settings.llm_base_url,
@@ -114,13 +182,14 @@ def _client(settings: Settings) -> httpx.Client:
 
 
 def _ask(
-    client: httpx.Client,
+    http: httpx.Client,
     model: str,
     messages: list[dict[str, str]],
     name: str,
     schema: dict[str, Any],
+    usage: list[Usage] | None = None,
 ) -> str:
-    response = client.post(
+    response = http.post(
         "/chat/completions",
         json={
             "model": model,
@@ -133,6 +202,17 @@ def _ask(
     )
     response.raise_for_status()
     payload = response.json()
+    if usage is not None:
+        # Recorded before the content is validated, so a response that fails the schema
+        # still shows up in the bill. A provider that omits `usage` yields zeros rather
+        # than raising: the cost measurement is not worth failing a good completion over.
+        counts = payload.get("usage") or {}
+        usage.append(
+            Usage(
+                prompt_tokens=int(counts.get("prompt_tokens", 0)),
+                completion_tokens=int(counts.get("completion_tokens", 0)),
+            )
+        )
     try:
         content = payload["choices"][0]["message"]["content"]
     except (KeyError, IndexError, TypeError) as error:

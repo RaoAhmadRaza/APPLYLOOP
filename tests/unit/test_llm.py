@@ -56,13 +56,13 @@ def _transport(*contents: str, seen: list[dict[str, Any]] | None = None) -> http
 
 
 def _patch(monkeypatch: pytest.MonkeyPatch, transport: httpx.MockTransport) -> None:
-    real = llm._client
+    real = llm.client
 
-    def fake(settings: Any) -> httpx.Client:
-        client = real(settings)
+    def fake() -> httpx.Client:
+        client = real()
         return httpx.Client(base_url=client.base_url, headers=client.headers, transport=transport)
 
-    monkeypatch.setattr(llm, "_client", fake)
+    monkeypatch.setattr(llm, "client", fake)
 
 
 # ------------------------------------------------------------------ the schema rewrite
@@ -218,3 +218,157 @@ def test_a_malformed_envelope_is_an_error(monkeypatch: pytest.MonkeyPatch) -> No
 
     with pytest.raises(llm.LlmError):
         llm.complete_json(Sample, system="s", user="u")
+
+
+# ------------------------------------------------------------- the token accounting
+
+
+def _usage_transport(*replies: tuple[str, dict[str, int]]) -> httpx.MockTransport:
+    """Answers with (content, usage) pairs in turn."""
+    answers = iter(replies)
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        content, usage = next(answers)
+        return httpx.Response(
+            200, json={"choices": [{"message": {"content": content}}], "usage": usage}
+        )
+
+    return httpx.MockTransport(handler)
+
+
+def test_the_usage_sink_records_what_the_call_cost(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch(
+        monkeypatch,
+        _usage_transport(('{"name": "ok"}', {"prompt_tokens": 12, "completion_tokens": 3})),
+    )
+    spent: list[llm.Usage] = []
+
+    llm.complete_json(Sample, system="s", user="u", usage=spent)
+
+    assert spent == [llm.Usage(prompt_tokens=12, completion_tokens=3)]
+
+
+def test_a_corrective_re_ask_is_counted_too(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The retry resends the whole transcript, so it is where a silent 2x hides.
+
+    A cost measurement that counted only the successful attempt would under-report every
+    call that needed correcting — which is exactly the call that costs the most.
+    """
+    _patch(
+        monkeypatch,
+        _usage_transport(
+            ("not json at all", {"prompt_tokens": 12, "completion_tokens": 2}),
+            ('{"name": "ok"}', {"prompt_tokens": 40, "completion_tokens": 3}),
+        ),
+    )
+    spent: list[llm.Usage] = []
+
+    llm.complete_json(Sample, system="s", user="u", usage=spent)
+
+    assert [entry.prompt_tokens for entry in spent] == [12, 40]
+
+
+def test_a_failed_call_still_reports_what_it_spent(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Two failed attempts cost real money. Raising without recording hides the bill."""
+    _patch(
+        monkeypatch,
+        _usage_transport(
+            ("nope", {"prompt_tokens": 12, "completion_tokens": 2}),
+            ("still nope", {"prompt_tokens": 40, "completion_tokens": 2}),
+        ),
+    )
+    spent: list[llm.Usage] = []
+
+    with pytest.raises(llm.LlmError):
+        llm.complete_json(Sample, system="s", user="u", usage=spent)
+
+    assert len(spent) == llm.MAX_ATTEMPTS
+
+
+def test_omitting_the_sink_changes_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """M3 passes no sink. The parameter must stay invisible to every existing caller."""
+    _patch(
+        monkeypatch,
+        _usage_transport(('{"name": "ok"}', {"prompt_tokens": 12, "completion_tokens": 3})),
+    )
+
+    assert llm.complete_json(Sample, system="s", user="u").name == "ok"
+
+
+def test_a_provider_that_omits_usage_yields_zeros_rather_than_raising(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A good completion must not fail because the cost measurement was unavailable."""
+    _patch(monkeypatch, _transport('{"name": "ok"}'))
+    spent: list[llm.Usage] = []
+
+    llm.complete_json(Sample, system="s", user="u", usage=spent)
+
+    assert spent == [llm.Usage(prompt_tokens=0, completion_tokens=0)]
+
+
+# ------------------------------------------------------------------------- embeddings
+
+
+def _embedding_transport(
+    *vectors: list[float], seen: list[dict[str, Any]] | None = None, shuffle: bool = False
+) -> httpx.MockTransport:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if seen is not None:
+            seen.append(json.loads(request.content))
+        rows = [{"index": n, "embedding": vector} for n, vector in enumerate(vectors)]
+        return httpx.Response(
+            200,
+            json={
+                "data": list(reversed(rows)) if shuffle else rows,
+                "usage": {"prompt_tokens": 99},
+            },
+        )
+
+    return httpx.MockTransport(handler)
+
+
+def test_embed_returns_vectors_and_tokens(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[dict[str, Any]] = []
+    _patch(monkeypatch, _embedding_transport([1.0, 2.0], [3.0, 4.0], seen=seen))
+
+    vectors, tokens = llm.embed(["a", "b"])
+
+    assert vectors == [[1.0, 2.0], [3.0, 4.0]]
+    assert tokens == 99
+    assert seen[0]["input"] == ["a", "b"]
+
+
+def test_embed_reorders_by_index_rather_than_trusting_arrival_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A misordered batch pairs job A's text with job B's vector.
+
+    Nothing downstream can detect that: every cosine still computes, the shortlist still
+    has N entries, and every score is quietly about the wrong posting.
+    """
+    _patch(monkeypatch, _embedding_transport([1.0, 2.0], [3.0, 4.0], shuffle=True))
+
+    vectors, _ = llm.embed(["a", "b"])
+
+    assert vectors == [[1.0, 2.0], [3.0, 4.0]]
+
+
+def test_embed_refuses_a_length_mismatch(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Fewer vectors than texts would silently shift every later pairing by one."""
+    _patch(monkeypatch, _embedding_transport([1.0, 2.0]))
+
+    with pytest.raises(llm.LlmError):
+        llm.embed(["a", "b"])
+
+
+def test_embedding_nothing_makes_no_request(monkeypatch: pytest.MonkeyPatch) -> None:
+    """ "The hard filters left nothing" is a normal run, not an error, and must not
+    open a socket or spend a token."""
+
+    def explode(_request: httpx.Request) -> httpx.Response:  # pragma: no cover
+        raise AssertionError("embed([]) must not reach the provider")
+
+    _patch(monkeypatch, httpx.MockTransport(explode))
+
+    assert llm.embed([]) == ([], 0)
