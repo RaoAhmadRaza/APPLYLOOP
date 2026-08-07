@@ -1,4 +1,4 @@
-.PHONY: up down logs ps migrate revision shell seed ingest feeds grow dedupe test lint typecheck fmt verify verify-live verify-live-feeds verify-live-aggregator clean
+.PHONY: up down logs ps migrate revision shell seed ingest feeds grow dedupe test lint typecheck fmt verify verify-live verify-live-feeds verify-live-aggregator verify-live-parse verify-live-storage parse clean
 
 # `make up` is the one command that boots the stack (M0 gate item 1).
 up:
@@ -49,6 +49,12 @@ grow:
 	docker compose exec -T worker python -c \
 	  "from workers.tasks.scraping import grow_registry; print(grow_registry.delay().get(timeout=300))"
 
+# Parse one profile's résumé now. make parse id=<profile-uuid>
+# No-ops without LLM_API_KEY, by design — it records `profile.parse_skipped` instead.
+parse:
+	docker compose exec -T worker python -c \
+	  "from workers.tasks.profiles import parse_profile; print(parse_profile.delay('$(id)').get(timeout=180))"
+
 # Collapse the same role seen on several sources onto one canonical row.
 dedupe:
 	docker compose exec -T worker python -c \
@@ -81,7 +87,9 @@ verify: lint typecheck test
 	  | grep -q workers.tasks.scraping.ingest_all
 	docker compose exec -T worker celery -A workers.app inspect registered \
 	  | grep -q workers.tasks.scraping.dedupe_jobs
-	@echo "M0 + M1 + M2 gates: all checks passed"
+	docker compose exec -T worker celery -A workers.app inspect registered \
+	  | grep -q workers.tasks.profiles.parse_profile
+	@echo "M0 + M1 + M2 + M3 gates: all checks passed"
 
 # M1 gate item 1, against the six real boards. Not in CI — a build must not go red
 # because a third party had a bad afternoon.
@@ -100,3 +108,14 @@ verify-live-feeds:
 # bandwidth, so this is never in CI and never in a loop.
 verify-live-aggregator:
 	APPLYLOOP_LIVE_AGGREGATOR=1 uv run pytest tests/integration/test_aggregator_live.py -q
+
+# M3's gate: four fixture résumés through the real model. Its own variable because this
+# is the first suite that spends money rather than someone else's goodwill — one run is
+# a few cents, but it should never be something a `make test` does by accident.
+verify-live-parse:
+	APPLYLOOP_LIVE_LLM=1 uv run pytest tests/integration/test_resume_parse_live.py -q
+
+# Object storage against a real bucket. Needs STORAGE_* set; skips otherwise, because
+# unconfigured storage is a supported state.
+verify-live-storage:
+	APPLYLOOP_LIVE_STORAGE=1 uv run pytest tests/integration/test_storage_live.py -q

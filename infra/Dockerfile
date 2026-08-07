@@ -28,6 +28,7 @@ RUN apt-get update \
 COPY pyproject.toml uv.lock ./
 COPY packages/schemas/pyproject.toml packages/schemas/
 COPY packages/db/pyproject.toml packages/db/
+COPY packages/storage/pyproject.toml packages/storage/
 COPY apps/api/pyproject.toml apps/api/
 COPY apps/workers/pyproject.toml apps/workers/
 RUN --mount=type=cache,target=/root/.cache/uv \

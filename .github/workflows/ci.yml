@@ -99,7 +99,8 @@ jobs:
                       workers.tasks.scraping.aggregate_all \
                       workers.tasks.scraping.aggregate_search \
                       workers.tasks.scraping.detect_company \
-                      workers.tasks.scraping.seed_registry; do
+                      workers.tasks.scraping.seed_registry \
+                      workers.tasks.profiles.parse_profile; do
             echo "$REGISTERED" | grep -q "$TASK" || { echo "MISSING: $TASK"; exit 1; }
           done
 
