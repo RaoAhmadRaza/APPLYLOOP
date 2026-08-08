@@ -95,7 +95,12 @@ class Settings(BaseSettings):
     llm_model: str = "google/gemini-2.5-flash"
 
     # Generous: a long résumé is a lot of input, and a retry costs a whole call.
-    llm_timeout_seconds: float = 120.0
+    #
+    # Raised from 120 on 2026-08-09, after M5's first live gate run died on it 25 minutes
+    # in. 120 was written for the cheap extraction model; a reasoning-class model asked
+    # for structured output over a résumé and a posting routinely runs past it. A timeout
+    # is a ceiling rather than a wait, so raising it costs nothing on a call that answers.
+    llm_timeout_seconds: float = 300.0
 
     # --- M4: matching and scoring --------------------------------------------------
     # Same base URL and key as the chat model — OpenRouter and OpenAI direct both expose

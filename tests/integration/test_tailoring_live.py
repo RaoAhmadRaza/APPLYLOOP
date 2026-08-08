@@ -15,11 +15,14 @@ and the gate prints that bound beside the zero rather than letting the zero trav
 import json
 import os
 import statistics
+import time
 import uuid
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
+import httpx
 import pytest
 import storage
 from db.models import Evidence, Job, Match, Profile, User
@@ -46,6 +49,20 @@ BAR_BLOCK_RATE = 0.20
 MIN_LIVE_CASES = 20
 MIN_HONEST_CASES = 10
 COST_CEILING_PER_APPLICATION = 0.50
+
+# Four at a time, and retries in the harness. Both are M4's settings and both were paid
+# for here: the first live run went sequentially for 25 minutes and then died whole on a
+# single read timeout, spending real money and measuring nothing.
+#
+# The retry lives here rather than in `llm.py` for the reason M4 recorded — widening the
+# production client to survive a test's concurrency is the test dictating production
+# behaviour. The *timeout* was different and did move, because 120s was simply wrong for
+# a reasoning-class model rather than wrong for this harness.
+LIVE_CONCURRENCY = 4
+_RETRY_ATTEMPTS = 3
+# A pair that still fails is recorded, never dropped. A run that quietly measured 37 of
+# 40 pairs and called itself green is the shape of every eval defect in this repo.
+MAX_ERRORS = 2
 
 # The two engineering fixtures. `career_changer` is excluded for the same reason M4's
 # gate excludes it: it holds almost no relevant pairs, so it measures the draw.
@@ -135,17 +152,18 @@ def _postings() -> list[dict[str, Any]]:
     return written + real
 
 
-@pytest.fixture(scope="session")
-def run(engine: Any, _preflight: None) -> dict[str, Any]:
-    """Tailor every seeded pair once, against the real model. This is the spend."""
-    from db.session import make_sync_sessionmaker
-
+def _one(maker: Any, posting: dict[str, Any], profile_name: str) -> dict[str, Any]:
+    """Tailor one pair, retrying transport failures. Never raises out of the run."""
     settings = get_settings()
-    maker = make_sync_sessionmaker(engine)
-    results: list[dict[str, Any]] = []
+    label = {
+        "case": posting["id"],
+        "class": posting["class"],
+        "origin": posting["origin"],
+        "profile": profile_name,
+    }
 
-    for posting in _postings():
-        for profile_name in PROFILES:
+    for attempt in range(_RETRY_ATTEMPTS):
+        try:
             with maker() as session:
                 match = _seed(session, profile_name, posting)
                 outcome = tailor.tailor_match(
@@ -156,18 +174,35 @@ def run(engine: Any, _preflight: None) -> dict[str, Any]:
                     min_bullets=settings.tailor_min_bullets,
                 )
                 session.rollback()  # the eval writes nothing durable
-            assert outcome is not None
-            results.append(
-                {
-                    "case": posting["id"],
-                    "class": posting["class"],
-                    "origin": posting["origin"],
-                    "profile": profile_name,
-                    **outcome.__dict__,
-                }
-            )
+        except (httpx.TimeoutException, httpx.HTTPStatusError, httpx.TransportError) as error:
+            if attempt == _RETRY_ATTEMPTS - 1:
+                return {**label, "error": f"{type(error).__name__}"}
+            time.sleep(2**attempt)
+            continue
+        assert outcome is not None
+        return {**label, **outcome.__dict__}
+    raise AssertionError("unreachable")  # pragma: no cover
 
-    return {"results": results, "model": settings.tailor_model}
+
+@pytest.fixture(scope="session")
+def run(engine: Any, _preflight: None) -> dict[str, Any]:
+    """Tailor every seeded pair once, against the real model. This is the spend."""
+    from db.session import make_sync_sessionmaker
+
+    settings = get_settings()
+    maker = make_sync_sessionmaker(engine)
+    pairs = [(posting, profile_name) for posting in _postings() for profile_name in PROFILES]
+
+    started = time.monotonic()
+    with ThreadPoolExecutor(max_workers=LIVE_CONCURRENCY) as pool:
+        results = list(pool.map(lambda pair: _one(maker, *pair), pairs))
+
+    return {
+        "results": [row for row in results if "error" not in row],
+        "errors": [row for row in results if "error" in row],
+        "model": settings.tailor_model,
+        "elapsed_s": int(time.monotonic() - started),
+    }
 
 
 def _adversarial(run: dict[str, Any]) -> list[dict[str, Any]]:
@@ -207,6 +242,18 @@ def test_fabrication_guard(run: dict[str, Any]) -> None:
         "inconclusive, not green"
     )
     assert not escaped, f"a fabrication reached a document: {[row['case'] for row in escaped]}"
+
+
+def test_every_pair_produced_a_result(run: dict[str, Any]) -> None:
+    """A run that measured 37 of 40 pairs and called itself green is the defect shape
+    this repo keeps finding. Errors are printed and counted, never dropped."""
+    for row in run["errors"]:
+        print(f"    ERROR  {row['case']:12} {row['profile']:20} {row['error']}")
+    print(f"\n  pairs attempted       {len(run['results']) + len(run['errors'])}")
+    print(f"  errors                {len(run['errors'])}   ceiling {MAX_ERRORS}")
+    print(f"  wall clock            {run['elapsed_s']}s at concurrency {LIVE_CONCURRENCY}")
+
+    assert len(run["errors"]) <= MAX_ERRORS
 
 
 def test_the_run_actually_called_a_model(run: dict[str, Any]) -> None:
