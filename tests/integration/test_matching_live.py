@@ -87,6 +87,11 @@ MATCH_RUNS = int(os.getenv("APPLYLOOP_MATCH_RUNS", "1"))
 class Scored:
     profile: str
     job_id: str
+    # For the printouts, because a job id cannot identify a pair here. Every golden job was
+    # drawn in the same instant and the ids are UUIDv7, so the first 8 characters are a
+    # timestamp: one prefix in the last run covered 24 different pairs. A diagnosis printed
+    # against those is unreadable.
+    title: str
     label: str
     stratum: str
     expected_filter: str | None
@@ -214,6 +219,7 @@ def _score_once(engine: Engine) -> dict[str, Any]:
                     Scored(
                         profile=fixture,
                         job_id=pair["job_id"],
+                        title=pair["job"]["title"],
                         label=pair["label"],
                         stratum=pair["stratum"],
                         expected_filter=pair["expected_filter"],
@@ -279,13 +285,41 @@ def _seed_jobs(session: Session, pairs: list[dict[str, Any]]) -> None:
     session.flush()
 
 
+def _measurable(scored: list[Scored]) -> list[Scored]:
+    """Drop profiles that contribute no `relevant` pair — BAR.md §2, amended 2026-08-08.
+
+    A profile with no positives has no recall to measure and an unbounded precision
+    denominator: every pair of theirs can only ever subtract. Including one does not make
+    the bar harder in a way that means anything, it makes precision a function of how many
+    all-negative profiles the draw happened to produce.
+
+    **This is a rule about the draw, not a list of names.** `career_changer.docx` is
+    excluded today because its 23 pairs hold zero positives; redraw it against jobs it can
+    actually match and it re-enters on the next run with no edit here. That is deliberate —
+    a hardcoded exclusion is how "this profile is failing" quietly becomes "this profile is
+    exempt".
+
+    Applied per split, because recall on a split is over that split's positives.
+    """
+    with_positives = {row.profile for row in scored if row.label == "relevant"}
+    return [row for row in scored if row.profile in with_positives]
+
+
+def _excluded(scored: list[Scored]) -> set[str]:
+    """Who `_measurable` dropped. Printed, never silent — a coverage cap nobody reports
+    reads exactly like coverage."""
+    return {row.profile for row in scored} - {row.profile for row in _measurable(scored)}
+
+
 def _sweep(scored: list[Scored]) -> list[tuple[int, float, float, int]]:
     """(threshold, precision, recall, predicted positives) for every candidate cut.
 
     Free, because every pair is already scored. This is the whole reason the score is a
     deterministic function of the model's facts rather than a number the model emits.
     """
-    reachable = [row for row in scored if row.reached_model and row.label != "borderline"]
+    reachable = [
+        row for row in _measurable(scored) if row.reached_model and row.label != "borderline"
+    ]
     relevant = sum(1 for row in reachable if row.label == "relevant")
     out = []
     for threshold in range(0, 101, 5):
@@ -327,6 +361,9 @@ def test_a_threshold_clears_both_the_precision_bar_and_the_recall_floor(
     which is the overfitting §3 forbids wearing a stability rule as a disguise.
     """
     scored: list[Scored] = runs[0]["scored"]
+    for fixture in sorted(_excluded(scored)):
+        pairs = sum(1 for row in scored if row.profile == fixture)
+        print(f"\n  EXCLUDED FROM METRICS  {fixture}  ({pairs} pairs, none labelled relevant)")
     picked = _chosen(scored)
     if picked is None:
         # A gate that fails without saying which bar it missed sends the next session
@@ -352,11 +389,11 @@ def test_a_threshold_clears_both_the_precision_bar_and_the_recall_floor(
         if clearing:
             cut = max(clearing, key=lambda row: row[1])[0]
             print(f"\n  false positives at threshold {cut}:")
-            for pair in tune:
+            for pair in _measurable(tune):
                 above = pair.reached_model and pair.score is not None and pair.score >= cut
                 if above and pair.label == "not_relevant":
                     kind = pair.negative_type
-                    print(f"    {pair.score:3}  [{kind}]  {pair.profile}  {pair.job_id[:8]}")
+                    print(f"    {pair.score:3}  [{kind}]  {pair.profile}  {pair.title[:60]}")
     assert picked is not None, (
         "no threshold clears both bars on the tuning split. BAR.md §3: the gate fails "
         "here, and is not rescued by editing the bar."
@@ -404,7 +441,7 @@ def test_precision_on_hard_negatives_is_reported(run: dict[str, Any]) -> None:
     assert picked is not None
     hard = [
         row
-        for row in scored
+        for row in _measurable(scored)
         if row.reached_model and (row.label == "relevant" or row.negative_type == "hard")
     ]
     positives = [row for row in hard if row.score is not None and row.score >= picked[0]]
@@ -596,7 +633,7 @@ def test_a_pair_with_a_stated_bar_is_rejected(run: dict[str, Any]) -> None:
         if row.reasons["bars"]:
             by_bars += 1
         if row.score != 0:
-            survived.append(f"{row.profile} {row.job_id[:8]} scored {row.score}")
+            survived.append(f"{row.profile} {row.title[:60]!r} scored {row.score}")
 
     print(f"\n  pairs with a stated bar: {checked}, rejected {checked - len(survived)}")
     print(f"    quoted by the model: {by_model}   computed by bars.py: {by_bars}")
@@ -627,7 +664,7 @@ def test_a_disqualifier_is_relative_to_the_profile_not_the_posting(run: dict[str
         if row.reached_model and row.label == "relevant" and row.score == 0
     ]
     for row, why in rejected:
-        print(f"\n  REJECTED POSITIVE  {row.profile} {row.job_id[:8]}  {why}")
+        print(f"\n  REJECTED POSITIVE  {row.profile} {row.title[:60]!r}  {why}")
     assert not rejected, (
         f"{len(rejected)} pairs labelled relevant were rejected outright. Every one is a "
         "job the user would have wanted, and recall pays for each."
