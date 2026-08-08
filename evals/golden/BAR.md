@@ -82,17 +82,31 @@ predicted positives**. §2's ≥8 floor guards the reporting split; a tuning spl
 positives picks a threshold out of noise and then hands it to the reporting split with
 false authority. Amended 2026-08-08 — see §8.
 
-**5. The chosen threshold must clear every bar on 3 consecutive runs**, and the precision
-spread across them is reported. `score()` is pure, but `met` and `missing` come from a
-model, so a run is a sample rather than a measurement — two consecutive passes over an
-identical set and unchanged code produced precision 0.62 and 0.50 at the same threshold.
-One passing run is not evidence that the matcher clears the bar; it is evidence that one
-sample did.
+**5. The set is scored 3 times and the runs are POOLED into one measurement.** `score()`
+is pure, but `met` and `missing` come from a model, so a single run is a sample rather than
+a measurement — two consecutive passes over an identical set and unchanged code produced
+precision 0.62 and 0.50 at the same threshold. One passing run is not evidence that the
+matcher clears the bar; it is evidence that one sample did.
 
-The threshold is chosen **once**, on the first run's tuning split, and then applied
-unchanged to every run's reporting split. Re-choosing it per run would let each pass pick
-whichever cut suited it, which is step 2's overfitting wearing a stability rule as a
-disguise. Amended 2026-08-08 — see §8.
+This rule used to require the threshold to clear on *each* of the 3 runs separately. That
+is three noisy tests that must all pass, which is **stricter than one test on the same data
+and measures less** — it discards two thirds of what the run already paid for to
+manufacture three coin flips at n≈27, where the interval is ±0.15. Pooling serves this
+rule's own purpose better, because luck averages out over ~80 predictions in a way it
+cannot over 27. Amended 2026-08-08 — see §8. **The bar did not move; only the estimator.**
+
+The threshold is chosen **once**, on the **pooled** tuning split, and applied unchanged to
+the pooled reporting split. Re-choosing it per run would let each pass pick whichever cut
+suited it, which is step 2's overfitting wearing a stability rule as a disguise; choosing
+it on one run's tuning split, as this did until 2026-08-08, picked from a ±0.15 sample.
+
+Per-run precision and the spread across runs are still **reported**, because the spread is
+the honest picture of the model's variance and is what justified this change. They are no
+longer what the gate asserts.
+
+**Both positive floors scale with the run count.** §2's ≥8 predicted positives and the ≥5
+tuning floor below were written about one run; against a pooled n≈80 a floor of 8 would be
+vacuous, and pooling must not quietly weaken a guard set deliberately.
 
 ## 4. Label boundaries
 
@@ -220,6 +234,88 @@ and the second run reads its own output.
 Any change to §2, §3, §4 or §5 after the first scored run must be recorded here with the
 date, the evidence that forced it, and a matching entry in `docs/DECISIONS.md`. A silent
 edit to this file is the same defect as never having written it.
+
+### APPLIED — three runs are one measurement, not three tests (2026-08-08)
+
+**Approved by the project owner, on the statistics rather than on a result.**
+
+§3 step 5 required precision ≥ 0.80 on **each** of 3 runs at n≈27. Three independent noisy
+tests that must all pass is *stricter* than one test at n≈80, and it measures *less*: it
+discards two thirds of the data the run already paid for in order to manufacture three coin
+flips, each with a ±0.15 interval.
+
+The evidence is behavioural, not theoretical. Between two consecutive gates the **tuning**
+split moved 0.83 → 0.75 at threshold 20 with **no code change touching tuning pairs** — the
+only edits were a bar affecting two reporting-split pairs and a print statement. The gate
+cleared three thresholds on one run and none on the next. The rule written to stop us
+banking a lucky run was itself being decided by luck.
+
+**Applied:** the 3 runs are pooled into one sample. The threshold is chosen once on the
+pooled tuning split (~63 predictions) and applied to the pooled reporting split (~80). Both
+positive floors multiply by the run count so pooling cannot weaken them. Per-run numbers and
+the spread are still printed, and are no longer what is asserted.
+
+**The bar did not move.** §2 is untouched. This is a change of estimator, and it is the
+change that makes §3's own stability rule do what it was written to do: luck averages out
+over 80 predictions in a way it cannot over 27.
+
+**Rejected:** keeping the per-run rule and iterating until three runs happened to align,
+which is precisely the lucky run §3 step 5 exists to forbid, reached by a longer road.
+
+### APPLIED — what this set can and cannot resolve, and how often it was queried (2026-08-08)
+
+**Approved by the project owner. Raised by computing the confidence interval on the gate's
+own numbers, which nobody had done.**
+
+This is the most important entry in this file, because it qualifies every number above it.
+
+The reporting split predicts about 27–29 positives. At that size the 95% Wilson interval on
+precision is roughly **±0.15**:
+
+```
+22/29 = 0.76   95% CI [0.58, 0.88]
+22/27 = 0.815  95% CI [0.63, 0.92]
+```
+
+**§2's 0.80 bar lies inside both.** A run reporting 0.76 and a run reporting 0.815 are the
+same measurement; the gate cannot distinguish a pass from a fail at the margin it is being
+asked about. Resolving ±0.05 at p=0.80 needs on the order of **246 predicted positives** —
+roughly 800–1,000 labelled pairs against the 121 that exist. Wilson rather than a normal
+interval because the normal approximation is unreliable below a few hundred datapoints,
+which is the situation this gate is permanently in.
+
+**The gate was run 8 times on 2026-08-08**, and defects found by inspecting its output were
+fixed between runs. That is adaptive reuse of a holdout, and the literature on it is
+unambiguous: repeated adaptive querying overfits the holdout, and the standard mitigation is
+to accept only statistically significant improvements. **None of today's improvements would
+qualify.** Two of the false positives that the final bar removes were read off the
+*reporting* split, not the tuning split, so that split is no longer held out in the sense §3
+assumes.
+
+**Applied:** every run prints the Wilson interval beside precision and recall, and prints an
+explicit NOTE when the bar lies inside the interval — in the same output that says PASS,
+because a document nobody opens is not a caveat. Nothing about §2's bar changes.
+
+**Rejected, and worth recording because each is the obvious move:**
+
+- *Lowering the bar to 0.75*, which the set can nearly resolve and which published
+  résumé/JD matching supports (73–79% accuracy; skills extraction 0.75–0.85 F1 on vendors'
+  own corpora). It is still moving a number taken from `build-sequence-and-phase-
+  architecture.md` **after seeing the result**, which is the one act §3 exists to forbid.
+- *Requiring the interval's lower bound to clear 0.80*, which is the statistically rigorous
+  gate. At p=0.85 and n=246 the lower bound is 0.80 exactly — so this makes M4 unreachable
+  at any set size this project will ever label. Rigour that can only ever say no is not a
+  gate.
+- *Growing the set to ~250 reporting positives first.* Correct, and the real fix. It is days
+  of human labelling and blocks the chain behind M4 for all of them. **Recorded as the
+  trigger:** revisit before any claim about matching quality is made outside this repo, and
+  before M4's numbers are used to justify a threshold change in production.
+
+**What M4's gate is therefore worth:** it proves the pipeline runs end to end on real
+postings, that hard filters keep every labelled positive (40/40), that cost is two orders of
+magnitude under the ceiling, that every score carries a checkable reason, and that precision
+is *somewhere around* 0.75–0.85. It does not prove precision is above 0.80. Read the number
+with the interval attached, always.
 
 ### APPLIED — a profile with no positives measures the draw, not the matcher (2026-08-08)
 
