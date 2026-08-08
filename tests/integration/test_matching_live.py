@@ -403,6 +403,19 @@ def test_a_threshold_clears_both_the_precision_bar_and_the_recall_floor(
     print(f"\n  threshold          {threshold}   (chosen on run 1's tuning split)")
     print(f"  tuning  precision  {picked[1]:.2f}  recall {picked[2]:.2f}  n={picked[3]}")
 
+    # **Printed whether the gate passes or fails, and printed for the reporting split.**
+    # A run that clears on tune and misses on report says nothing about *which* of the two
+    # is at fault: §3 takes the lowest threshold clearing both bars, which is by
+    # construction the point of least margin, so a tuning 0.81 landing at 0.70 could be the
+    # selection rule or could be the matcher. Without this the difference is invisible and
+    # the next session's only way to look is another paid run. It is a diagnostic — the
+    # threshold is still chosen by §3 on the tuning split alone, above, before this runs.
+    print("\n  reporting-split sweep, run 1 (diagnostic — NOT how the threshold is chosen):")
+    for row in _sweep([r for r in runs[0]["scored"] if r.split == "report"]):
+        mark = "  <- chosen" if row[0] == threshold else ""
+        clears = "PASS" if row[1] >= BAR_PRECISION and row[2] >= BAR_RECALL else "    "
+        print(f"    {row[0]:3}  p={row[1]:.2f}  r={row[2]:.2f}  n={row[3]:2}  {clears}{mark}")
+
     # Every run's reporting split, at that one threshold. Collected before asserting so a
     # failure shows the whole spread rather than stopping at the first bad pass — the
     # spread is the measurement, and one number without it is what this rule exists to
@@ -423,6 +436,18 @@ def test_a_threshold_clears_both_the_precision_bar_and_the_recall_floor(
         spread = max(row[1] for row in results) - min(row[1] for row in results)
         print(f"  precision spread   {spread:.2f} across {len(results)} runs")
     print(f"\n  MATCH_THRESHOLD={threshold}")
+
+    # The sweep above says whether a different cut would have cleared; this says what to
+    # change if none would. Same reasoning as the tuning-split list, on the split that
+    # actually decides the gate.
+    if any(precision < BAR_PRECISION for _, precision, _, _ in results):
+        print(f"\n  reporting-split false positives at threshold {threshold}, run 1:")
+        for pair in _measurable([r for r in runs[0]["scored"] if r.split == "report"]):
+            above = pair.reached_model and pair.score is not None and pair.score >= threshold
+            if above and pair.label == "not_relevant":
+                print(
+                    f"    {pair.score:3}  [{pair.negative_type}]  {pair.profile}  {pair.title[:55]}"
+                )
 
     for index, precision, recall, positives in results:
         assert positives >= MIN_PREDICTED_POSITIVES, (
