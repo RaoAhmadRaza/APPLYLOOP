@@ -738,6 +738,80 @@ Undetected until now because M3's parse gate only calls completions — **M4 is 
 in the repo to POST `/embeddings` at all**. Both combinations are now documented in
 `.env.example`. A default is only correct next to the default it was written for.
 
+### Making the gate green: what four measured attempts found (2026-08-08, afternoon)
+
+The gate still fails. It fails **differently**, and the distance travelled is the record.
+
+```
+                                          report precision   blocker
+coverage only, 64 pairs                        0.42-0.50     precision
++ model-quoted disqualifiers                   0.57          precision
++ deterministic bars                           0.57*         arithmetic ceiling 0.62
++ 57 more pairs (121 total)                    0.80 @ t=35   RECALL (0.38 vs 0.50)
+```
+
+\* the country-scope bar was inert for that whole run — see below.
+
+**A ratio cannot express "fatal".** `score()` was `met / (met + missing)`, so "ITAR: must
+be a U.S. person" cost one bullet in fifteen and a role a UK citizen legally cannot hold
+scored 94. 7 of 8 false positives were right-craft, right-band postings differing on
+exactly one dimension. `MatchFacts` gained a third partition and a non-empty one scores 0.
+
+**Splitting the work by mechanism, because the prompt measurably could not hold it all.**
+Extraction was 8/8 when rule 4 covered only clauses that must be *read*; adding two more
+categories to the same rule dropped it to 9/13 and lost a threshold that had been
+clearing. So `bars.py` computes country scope, required language and eligibility windows,
+and the prompt keeps ITAR-style clauses, timezone refusals and stated right-to-work. Each
+bar is a function of the **pair**, never the posting alone — the same "current university
+students and recent graduates" that bars a senior is exactly who a junior should see.
+
+**Strict in the sampler, permissive in `bars.py`.** A bar that fires wrongly removes a job
+the user could have had; a draw that skips one costs nothing but a different sample. The
+first sampler borrowed the permissive rule and barely filtered — a GB-authorised profile
+drew San Francisco and New York, because the region table names countries and those are
+cities.
+
+**Three location bugs, all found by reading output rather than code.** "Remote, United
+States" is the most common location string in the pool and the globality check matched
+the word *remote* first, reading every US remote posting as open to the world.
+"Americas, Europe, Asia, Africa, Oceania" is breadth, not scope, and only "Europe" is in
+the table so a count-based rule scored it 1. And `work_auth_regions` was never seeded onto
+the golden profiles, so `_country_scope` saw `None` on every pair and never fired for a
+whole gate run — the 0.42 → 0.57 came from language and eligibility alone. **A fixture
+that omits a column tests the code around it.**
+
+**`derive.work_auth_regions` must not return `[]` for a résumé stating only where someone
+CANNOT work.** "Requires visa sponsorship to work in the United Kingdom" excludes the UK
+and says nothing about Canada; `[]` read downstream as "authorised nowhere" and would have
+barred every located job for that profile — including the single role the set labels them
+a good fit for. The column holds where they *are* authorised.
+
+**The set could not satisfy its own bar, and that was arithmetic.** With 8 positives in
+the reporting split, §2's precision ≥0.80 *and* ≥8 predicted positives together force
+recall of 0.88–1.00 against a documented floor of 0.50. No matcher quality could pass. The
+extension to 121 pairs (45 relevant) puts 24 positives in the reporting split, and the
+recall floor is the binding constraint again — the bar enforced by the clause written to
+enforce it.
+
+### Two defects open at the end of the session
+
+**The set carries labels from two versions of one rule.** BAR.md §6 rule 2 — "a
+remote-friendly role in a city the profile never named is `relevant`" — was written about
+*cities*. Mid-session a refinement was approved: a remote posting scoped to a *country*
+the candidate cannot work in is `not_relevant`. The original 64 were labelled before it,
+the new 57 after. `bars.py` implements the newer rule and therefore contradicts four older
+labels: Bangkok for a GB profile, and France / Netherlands / Turkey for a US one. Nobody
+reconciled the two, and it was invisible until a deterministic bar disagreed with a human.
+
+**Model-quoted disqualifiers are net-negative.** On the 121-pair run, `bars.py` produced
+10 correct rejections and 0 spurious; the model produced 6 correct and ~11 spurious —
+quoting a pay disclosure, a `To apply:` URL, "Remote work flexibility within Canada", a
+hedged export-control clause for the third time, a timezone window the candidate is
+actually inside, a sponsorship refusal for someone who needs no sponsorship, and — twice —
+**the candidate's own résumé sentence**, which reached the model because the prompt now
+sends it. Recommended: keep the partition in `reasons_json` as advisory for M6, and gate
+the score on `bars` alone.
+
 ### Decisions
 
 **No cross-encoder in v1 — an explicit override of §7.2, with a trigger.** §7 asks that
@@ -836,6 +910,7 @@ matcher that matches nothing passes the gate.
 | A stored profile embedding | Profile embeds exceed ~1% of a run's `embed_tokens`. Today it is one call per user per run, against a staleness rule keyed on two independently-mutating inputs. | M4 |
 | A salary hard filter | A `jobs.salary_min` column exists. Today both sides are missing on 99% of the pool. | M4 |
 | **A `disqualifiers` partition on `MatchFacts`, gated in `score()`** | **TRIGGER FIRED, 2026-08-08** — it is the reason M4's gate fails. Coverage is a flat ratio, so a fatal requirement ("ITAR: must be a U.S. person", "Bilingual Mandarin required") costs the same as one missed nice-to-have and a legally impossible role scores 94. Needs: a third partition of verbatim spans, a `score()` that gates rather than averages, and an offline test using this session's 11 hard negatives as fixtures — the prompt change is the risky half, since it is the same instruction the labelling model failed to follow. | M4 |
+| **A second analytics profile, or a wider `_on_craft` for analytics** | **TRIGGER FIRED, 2026-08-08.** `career_changer` holds **1 relevant pair in 23**. The extension drew 7 pairs for her and not one is a UK analytics role: `on_topic` requires a posting to name two of the profile's own skills, and the pool's UK analytics postings do not clear that bar. The golden set therefore measures three profiles, not four. Recorded rather than fixed by relabelling — bending a label to disguise it would corrupt the only instrument M4 has. | M4 |
 | **Country-scope awareness in the golden sampler** | Any profile drawing < 5 `relevant` pairs. Fired once already: `career_changer` (needs UK sponsorship) drew 16 pairs and holds **1** positive, because the draw is blind to which countries a profile can legally work in and handed it US- and Mexico-scoped roles. Not fixed by relabelling — that would be inventing positives. The sampler needs the same `work_auth` × posting-scope reasoning the filter layer already has. | M4 |
 | **`make verify-live-*` exiting 0 having run nothing** | A live target silently no-ops when its key is absent from the shell (the `skipif` reads `os.getenv`, and `.env` is not loaded into the process). Caught by reading the output, not by the exit code. Fix is to fail rather than skip when `APPLYLOOP_LIVE_*` is set explicitly but the key is missing — an opt-in run that finds no key is a mistake, not a supported state. | M4 |
 | `jobs.locations_norm` + GIN | Pool > ~50k, or the funnel query shows up in `match.scored.elapsed_ms`. | M4 |

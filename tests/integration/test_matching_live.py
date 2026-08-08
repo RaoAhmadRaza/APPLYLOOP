@@ -618,10 +618,17 @@ def test_a_disqualifier_is_relative_to_the_profile_not_the_posting(run: dict[str
     A rule that fired on the sentence rather than on the pair would destroy recall while
     looking like it fixed precision.
     """
-    for row in run["scored"]:
-        if not row.reached_model or row.label != "relevant":
-            continue
-        assert not row.reasons["disqualifiers"], (
-            f"{row.profile} {row.job_id[:8]} is labelled relevant but the scorer called "
-            f"it disqualified: {row.reasons['disqualifiers']}"
-        )
+    # Collected, not asserted in the loop. A rejected positive costs recall directly, and
+    # stopping at the first one hides how many there are and whether they share a cause —
+    # which is the whole question when recall falls off a cliff.
+    rejected = [
+        (row, row.reasons["disqualifiers"] + row.reasons["bars"])
+        for row in run["scored"]
+        if row.reached_model and row.label == "relevant" and row.score == 0
+    ]
+    for row, why in rejected:
+        print(f"\n  REJECTED POSITIVE  {row.profile} {row.job_id[:8]}  {why}")
+    assert not rejected, (
+        f"{len(rejected)} pairs labelled relevant were rejected outright. Every one is a "
+        "job the user would have wanted, and recall pays for each."
+    )
