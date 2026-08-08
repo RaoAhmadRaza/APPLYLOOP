@@ -90,6 +90,19 @@ def _golden() -> dict[str, Any]:
 
 
 def _labelled(data: dict[str, Any]) -> list[dict[str, Any]]:
+    """The pairs the gate is allowed to count.
+
+    A `proposed` set — one a model pre-labelled for a human to review — is refused
+    outright rather than counted. Letting one through would make the gate a measurement
+    of whether two models agree with each other, which is exactly the circularity the
+    golden set exists to break.
+    """
+    status = data["_meta"].get("status", "confirmed")
+    if status != "confirmed":
+        pytest.skip(
+            "golden set is marked 'proposed' — a human must review the labels and set "
+            "_meta.status to 'confirmed' before this gate means anything"
+        )
     pairs = [pair for pair in data["pairs"] if pair["label"] is not None]
     if len(pairs) < 50:
         pytest.skip(f"golden set has {len(pairs)} labelled pairs; needs 50 (BAR.md §2)")

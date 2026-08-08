@@ -28,6 +28,7 @@ import hashlib
 import json
 import os
 import pathlib
+import re
 import sys
 import uuid
 from typing import Any
@@ -54,12 +55,15 @@ SEED = "applyloop-m4-golden-2026-08"
 # BAR.md §7. Per profile, so four profiles produce roughly 50 pairs after the per-stratum
 # caps are hit — the sizes are targets, not guarantees, because a stratum can be short on
 # a small pool and inventing rows to fill it would be worse than reporting the shortfall.
-STRATA = {"on_topic": 4, "filtered_out": 4, "candidate_random": 3, "pool_random": 3}
+# BAR.md needs at least 10 `relevant` labels for precision to mean anything, and the
+# first draw produced 7 — so `on_topic` is much the largest stratum. Everything else is
+# there to keep the set honest rather than to supply positives.
+STRATA = {"on_topic": 8, "filtered_out": 4, "candidate_random": 2, "pool_random": 2}
 
-# Crafts the fixture résumés are in, used only to make `on_topic` plausibly on-craft.
-# Deliberately crude: this stratum decides where to *look* for positives, never what the
-# label is. A human still decides every label.
-ON_TOPIC_WORDS = ("engineer", "developer", "backend", "platform", "infrastructure", "data")
+# How many of the profile's own skills a posting must name to count as on-craft. One
+# would let a single "Python" in a marketing job's tooling list through; two is what
+# separates a role in the craft from a role that merely mentions it.
+_MIN_SKILL_HITS = 2
 
 
 def main() -> int:
@@ -85,7 +89,10 @@ def main() -> int:
             print(f"parsing {path.name} ...", flush=True)
             profile, resume_text = _parse(path)
             profiles[path.name] = {
-                "parsed_json": profile.model_dump(mode="json"),
+                # The résumé, not the whole ProfileRead — the live gate seeds this
+                # straight into `profiles.parsed_json`, and a wrapped copy would put a
+                # ProfileRead dump in the column M4 reads a résumé out of.
+                "parsed_json": profile.parsed_json,
                 "master_resume": resume_text,
                 "locations": profile.locations,
                 "seniority": profile.seniority,
@@ -166,15 +173,7 @@ def _sample(session: Session, fixture: str, profile: ProfileRead) -> list[dict[s
     candidates = [job_id for job_id, failed in verdicts.items() if not failed]
     single_failure = {job_id: failed[0] for job_id, failed in verdicts.items() if len(failed) == 1}
 
-    # Titles only, and only for the candidates — the full payloads are fetched at the end
-    # for the dozen rows actually picked. The pool is five figures; materialising all of
-    # it to read four titles would make this script the slowest thing in the repo.
-    titles = dict(session.execute(select(Job.id, Job.title).where(Job.id.in_(candidates))).all())
-    on_topic = [
-        job_id
-        for job_id in candidates
-        if any(word in titles[job_id].lower() for word in ON_TOPIC_WORDS)
-    ]
+    on_topic = _on_craft(session, candidates, profile)
 
     chosen: list[tuple[str, uuid.UUID]] = []
     taken: set[uuid.UUID] = set()
@@ -183,7 +182,10 @@ def _sample(session: Session, fixture: str, profile: ProfileRead) -> list[dict[s
     # The first draw after adding the round-robin still produced zero work-auth pairs for
     # exactly that reason, while looking entirely plausible.
     for stratum, source, preordered in (
-        ("on_topic", on_topic, False),
+        # `on_topic` is ranked by skill overlap and `filtered_out` is round-robined
+        # across filters. Both orderings ARE the stratum; shuffling either throws away
+        # the only thing that made it worth drawing.
+        ("on_topic", on_topic, True),
         ("filtered_out", _across_filters(single_failure, fixture), True),
         ("candidate_random", candidates, False),
         ("pool_random", list(verdicts), False),
@@ -213,6 +215,69 @@ def _sample(session: Session, fixture: str, profile: ProfileRead) -> list[dict[s
         }
         for stratum, job_id in chosen
     ]
+
+
+def _on_craft(
+    session: Session, candidates: list[uuid.UUID], profile: ProfileRead
+) -> list[uuid.UUID]:
+    """Candidates whose posting names at least two of the profile's own skills.
+
+    **This replaces matching generic title words, which did not work.** The first draw
+    used ("engineer", "developer", "data", …) against the title, and produced an
+    `on_topic` stratum of RF engineers, mechanical engineers, equipment-qualification
+    engineers and mobile QA — the word "engineer", four unrelated crafts. Labelled
+    honestly, the whole 56-pair set yielded **7 relevant against a bar of 10**, which
+    makes precision unmeasurable.
+
+    Skills come from the résumé the M3 parse produced, so this stays a property of the
+    candidate rather than a hand-written list of what we hope to find. It decides only
+    where to *look* for positives; a human still decides every label, and the other three
+    strata are untouched so the draw as a whole is still matcher-independent.
+
+    Ordered by how many skills matched, so the most plausible pairs are drawn first —
+    that ordering is the point, and unlike the shuffled strata it must not be reshuffled.
+    """
+    terms = _skills(profile)
+    if not terms or not candidates:
+        return []
+
+    # Counted in Python, over one plain SELECT. The first attempt put one regex per skill
+    # into SQL — nineteen scans over full descriptions across seven thousand candidates
+    # per profile — and had to be killed after minutes. One compiled alternation over a
+    # truncated description is a single pass per row and is trivially readable.
+    #
+    # The description is cut because a posting's requirements sit near the top; the tail
+    # is benefits and equal-opportunity boilerplate, which no skill should match against.
+    pattern = re.compile(
+        r"\b(" + "|".join(re.escape(term) for term in terms) + r")\b", re.IGNORECASE
+    )
+    rows = session.execute(
+        select(Job.id, Job.title, func.left(func.coalesce(Job.description, ""), 4000)).where(
+            Job.id.in_(candidates)
+        )
+    ).all()
+
+    scored: list[tuple[int, str, uuid.UUID]] = []
+    for job_id, title, description in rows:
+        # Distinct skills, not total mentions: a posting that says "Python" twelve times
+        # is not more on-craft than one naming Python, Kafka and Terraform once each.
+        found = {match.group(1).lower() for match in pattern.finditer(f"{title} {description}")}
+        if len(found) >= _MIN_SKILL_HITS:
+            scored.append((len(found), str(job_id), job_id))
+
+    # Most overlap first; the id breaks ties so the draw stays reproducible.
+    return [job_id for _, _, job_id in sorted(scored, key=lambda row: (-row[0], row[1]))]
+
+
+def _skills(profile: ProfileRead) -> list[str]:
+    """The résumé's own skill words, deduplicated and long enough to mean something."""
+    parsed = ParsedResume.model_validate(profile.parsed_json)
+    terms: list[str] = []
+    for skill in parsed.skills:
+        terms += skill.keywords or ([skill.name] if skill.name else [])
+    # Two characters would match "R" and "C" against half the pool; the profiles that
+    # matter here name real technologies.
+    return sorted({term.strip() for term in terms if len(term.strip()) > 2})
 
 
 def _across_filters(single_failure: dict[uuid.UUID, str], salt: str) -> list[uuid.UUID]:

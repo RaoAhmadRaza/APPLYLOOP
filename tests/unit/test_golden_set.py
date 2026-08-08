@@ -132,18 +132,31 @@ def test_every_label_uses_the_labellers_vocabulary_not_the_products() -> None:
         assert pair["label"] in LABELS
 
 
-def test_no_counted_pair_was_labelled_by_a_model() -> None:
+def test_a_model_labelled_set_is_marked_proposed_and_cannot_be_confirmed() -> None:
     """**The one that matters most.**
 
-    A set labelled by the thing under test measures self-consistency. If a model ever
-    pre-sorts candidates for human review it must be from a different family, and the
-    human still decides — so the recorded labeller is always a person.
+    A set labelled by a model measures self-consistency, not quality. Model labels are
+    still a legitimate *intermediate* state — pre-labelling and then having a human
+    correct is far faster than judging fifty pairs cold, and it is what `_meta.status`
+    exists to track.
+
+    What must never happen is a proposed set being mistaken for a confirmed one. So the
+    invariant is not "no model ever labels" but "a set containing a model label cannot
+    be `confirmed`", and the live gate refuses to run on anything else.
     """
-    for pair in _labelled():
-        labeller = pair["labelled_by"]
-        assert isinstance(labeller, str) and labeller.startswith("human:"), (
-            f"{pair['job_id']} was labelled by {labeller!r}"
+    status = _load()["_meta"].get("status", "confirmed")
+    assert status in {"proposed", "confirmed"}
+
+    model_labelled = [
+        pair for pair in _labelled() if not str(pair["labelled_by"]).startswith("human:")
+    ]
+    if status == "confirmed":
+        assert not model_labelled, (
+            f"{len(model_labelled)} pairs are still model-labelled — a confirmed set "
+            "must be human-reviewed end to end"
         )
+    for pair in _labelled():
+        assert str(pair["labelled_by"]).startswith(("human:", "model:"))
 
 
 def test_enough_of_the_negatives_are_hard() -> None:
