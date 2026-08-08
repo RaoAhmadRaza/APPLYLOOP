@@ -241,4 +241,35 @@ obvious moves, and a future session will otherwise propose them again confidentl
 The human read required by §1 is logged here too: one line per live run, with the reader's
 initials, the number of documents read, and what was found.
 
-*(No entries yet. This file predates every case, every validator and every document.)*
+### LOGGED — the case set was confirmed, and what the review found (2026-08-09)
+
+**Confirmed by the project owner, `human:MAR`, against `vaults.json` rather than against the
+cases' own descriptions.** Thirty-two offline cases and ten live temptations read; all
+`expect` values upheld; no case corrected. §2 and §3 are untouched — **no bar moved.**
+
+Three findings recorded at confirmation because they qualify what a green run means:
+
+**Class F3 has one real case, not three.** `F3-02` cites a `skill` claim and `P-01` cites a
+handle that does not exist, so rule 1 rejects both before any content check runs; their text
+is never examined. §4's taxonomy is therefore covered 2/1/1/3/3 across F1–F5, not 2/2/3/3/3.
+**A second genuine F3 case is owed**, and must be reviewed on its own rather than added under
+this confirmation — a case nobody read cannot inherit a signature.
+
+**The retention cases are self-graded, and that is accepted.** `OK-04/05/06` survive on verb
+inflections, and `CL-01` on connective words, that the author of `words.py` also chose. The
+ruling: which verbs a rewrite may use is a product judgement, not a fabrication question. So
+the offline retention number is a **floor on the mechanism** and never a measurement of the
+product — the live gate's retention, over a real model's output, is the one that measures
+anything, and it is reported rather than gated because there is no prior number to gate against.
+
+**Coverage is lopsided and it was not treated as blocking.** Eleven of thirteen fabrications
+are `senior_backend.pdf`. Accepted because the validator is profile-agnostic and the skills
+and faithful cases reach the other fixtures; recorded because "it passed" and "it was tried
+against every résumé" are different sentences.
+
+**Rejected:** correcting `S-03`, which was authored expecting `PyTorch` to be unfindable and
+turned out to be findable. It stands as a happy-path case. The lesson lives in DECISIONS
+instead: PROJECT_STATE's note about `two_column.pdf` describes a parse *run*, not the fixture.
+
+*(This file predated every case, every validator and every document. The entry above is the
+first thing added to it.)*
