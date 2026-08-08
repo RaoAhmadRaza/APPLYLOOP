@@ -12,6 +12,9 @@ x-app: &app
     # Overrides .env: inside the network the hosts are service names, not localhost.
     DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:?set POSTGRES_USER in .env}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/${POSTGRES_DB:?set POSTGRES_DB in .env}
     REDIS_URL: redis://redis:6379/0
+    # Falls back to the local MinIO, and gets out of the way the moment .env names a
+    # real endpoint — the only difference between this box and R2 is this one string.
+    STORAGE_ENDPOINT_URL: ${STORAGE_ENDPOINT_URL:-http://minio:9000}
 
 services:
   db:
@@ -45,6 +48,41 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  # M5's blob store, locally. Nothing in the code knows this is MinIO — R2 and S3 speak
+  # the same protocol, so switching is one endpoint URL. It is here because M5 is the
+  # first stage that *must* write blobs: M3's upload path degrades to a 503 without a
+  # bucket, but a generated document that cannot be stored is not a document.
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${STORAGE_ACCESS_KEY_ID:-applyloop}
+      MINIO_ROOT_PASSWORD: ${STORAGE_SECRET_ACCESS_KEY:-change-me-locally}
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # One-shot: create the bucket. `mb --ignore-existing` is idempotent, so this is safe
+  # on every `make up` rather than only the first.
+  minio-init:
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+    restart: "no"
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint:
+      - sh
+      - -c
+      - >
+        mc alias set local http://minio:9000
+        "${STORAGE_ACCESS_KEY_ID:-applyloop}" "${STORAGE_SECRET_ACCESS_KEY:-change-me-locally}"
+        && mc mb --ignore-existing "local/${STORAGE_BUCKET:-applyloop}"
 
   # One-shot. Exactly one service runs migrations: two racing `alembic upgrade head`
   # both take ACCESS EXCLUSIVE on alembic_version, and while that blocks rather than
@@ -115,3 +153,4 @@ services:
 volumes:
   db-data:
   beat-state:
+  minio-data:

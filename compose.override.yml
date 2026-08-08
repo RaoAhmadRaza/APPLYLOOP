@@ -10,6 +10,13 @@ services:
     ports:
       - "6379:6379"
 
+  # Published so a host-side test can reach the same bucket the worker writes to, and
+  # so the console is browsable while debugging a document that did not appear.
+  minio:
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+
   api:
     ports:
       - "8000:8000"
