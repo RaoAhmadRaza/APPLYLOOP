@@ -32,7 +32,7 @@ from sqlalchemy.orm import Session
 
 from workers import llm
 from workers import seniority as bands
-from workers.matching import embed, filters, prompt, score
+from workers.matching import bars, embed, filters, prompt, score
 
 # Statuses a rescore may overwrite. **Not optional.** Without it a re-run drags an
 # `approved` or `applied` match back to `discovered`, and M6's human approval — already
@@ -98,10 +98,12 @@ def match_profile(
             _upsert(session, profile, job, None, None, {}, MatchStatus.SKIPPED)
             continue
 
-        value = score.score(facts)
+        blocked = bars.check(job, view, resume)
+        value = score.score(facts, blocked)
         delta = bands.distance(view.seniority, bands.band(job.title))
         payload = score.reasons(
             facts,
+            bars=blocked,
             similarity=similarity,
             seniority_delta=delta,
             filters_passed=filters.active(view, prefs),

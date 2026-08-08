@@ -35,7 +35,7 @@ from schemas.profile import ProfileRead
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session
 from workers import llm
-from workers.matching import embed, filters, prompt, score
+from workers.matching import bars, embed, filters, prompt, score
 
 GOLDEN = pathlib.Path(__file__).parents[2] / "evals" / "golden"
 PAIRS = GOLDEN / "pairs.json"
@@ -198,9 +198,11 @@ def _score_once(engine: Engine) -> dict[str, Any]:
                     )
                     tokens["prompt"] += sum(entry.prompt_tokens for entry in usage)
                     tokens["completion"] += sum(entry.completion_tokens for entry in usage)
-                    value = score.score(facts)
+                    blocked = bars.check(job, view, profile.master_resume or "")
+                    value = score.score(facts, blocked)
                     reasons = score.reasons(
                         facts,
+                        bars=blocked,
                         similarity=0.0,
                         seniority_delta=None,
                         filters_passed=filters.active(view, prefs),
@@ -520,7 +522,14 @@ def test_every_requirement_is_findable_in_the_posting(run: dict[str, Any]) -> No
         if not row.reached_model:
             continue
         haystack = descriptions[row.job_id]
-        for span in list(row.reasons["met"]) + list(row.reasons["missing"]):
+        spans = (
+            list(row.reasons["met"])
+            + list(row.reasons["missing"])
+            # A fabricated disqualifier is the worst span this stage can emit: it does not
+            # merely mislead, it deletes the job from the user's results outright.
+            + list(row.reasons["disqualifiers"])
+        )
+        for span in spans:
             total += 1
             if _normalise(span) in haystack:
                 grounded += 1
@@ -543,3 +552,71 @@ def _normalise(text: str) -> str:
     reportlab-style artefacts, smart quotes and casing must not fail a real quote.
     """
     return "".join(character for character in text.lower() if character.isalnum())
+
+
+# ---- prompt quality: the instruction the labelling model kept failing ------------
+
+
+def test_a_pair_with_a_stated_bar_is_rejected(run: dict[str, Any]) -> None:
+    """**The outcome, not the mechanism.**
+
+    `disqualifier_expected` is set only on pairs whose posting states a bar the profile
+    fails, detected by searching the stored description rather than by judgement. Two
+    things can reject them — the model quoting the clause, or `bars.py` computing it — and
+    which one fires is an implementation detail that has already changed once.
+
+    An earlier version asserted the model specifically, and it failed on a pair the
+    coverage ratio had correctly scored 0: a correct outcome reported as a defect. Then it
+    passed 0/0, because the deterministic layer rejected every flagged pair before
+    extraction mattered — an empty population asserting nothing at all. Both are the same
+    mistake, which is testing how rather than what.
+
+    What matters is that none of these becomes a false positive. The per-mechanism counts
+    are printed, because a swing there is worth seeing even when the property holds.
+    """
+    data = _golden()
+    expected = {pair["job_id"] for pair in data["pairs"] if pair.get("disqualifier_expected")}
+    assert expected, "no pair carries disqualifier_expected — this test proves nothing"
+
+    by_model = 0
+    by_bars = 0
+    survived: list[str] = []
+    checked = 0
+    for row in run["scored"]:
+        if not row.reached_model or row.job_id not in expected:
+            continue
+        checked += 1
+        if row.reasons["disqualifiers"]:
+            by_model += 1
+        if row.reasons["bars"]:
+            by_bars += 1
+        if row.score != 0:
+            survived.append(f"{row.profile} {row.job_id[:8]} scored {row.score}")
+
+    print(f"\n  pairs with a stated bar: {checked}, rejected {checked - len(survived)}")
+    print(f"    quoted by the model: {by_model}   computed by bars.py: {by_bars}")
+    for line in survived:
+        print(f"    SURVIVED  {line}")
+    assert checked, "no flagged pair reached the model — the filters took them all"
+    assert not survived, (
+        f"{len(survived)} of {checked} postings state a bar the profile fails, and "
+        "nothing rejected them; these are exactly the false positives precision is lost to"
+    )
+
+
+def test_a_disqualifier_is_relative_to_the_profile_not_the_posting(run: dict[str, Any]) -> None:
+    """The control that stops the fix becoming a keyword blocklist.
+
+    Both Proxify postings say "unable to consider applications from candidates in other
+    time zones". For the Portland profile that is fatal; for the Kraków profile, which
+    sits inside CET, it is not — and `two_column.pdf` labels one of them `relevant`.
+    A rule that fired on the sentence rather than on the pair would destroy recall while
+    looking like it fixed precision.
+    """
+    for row in run["scored"]:
+        if not row.reached_model or row.label != "relevant":
+            continue
+        assert not row.reasons["disqualifiers"], (
+            f"{row.profile} {row.job_id[:8]} is labelled relevant but the scorer called "
+            f"it disqualified: {row.reasons['disqualifiers']}"
+        )

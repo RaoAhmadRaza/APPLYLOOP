@@ -33,7 +33,7 @@ def coverage(facts: MatchFacts) -> float | None:
     return len(facts.met) / stated
 
 
-def score(facts: MatchFacts) -> int | None:
+def score(facts: MatchFacts, bars: list[str] | None = None) -> int | None:
     """0–100, or None when the posting stated no requirements.
 
     Deliberately one term. Cosine similarity is **not** folded in: it decides who gets
@@ -47,8 +47,14 @@ def score(facts: MatchFacts) -> int | None:
     positives were right-craft, right-band postings differing on exactly one dimension.
     Weighting the term instead of gating it would just move the number a candidate needs
     to overcome; there is no coverage high enough to make an illegal application good.
+
+    `bars` is the same verdict reached without a model — see `bars.py`. Two arguments
+    rather than one list because the provenances have different contracts: a span in
+    `facts.disqualifiers` is quoted from the posting and the live gate checks it is
+    findable there, while a bar is a sentence this repo wrote about the pair and has
+    nothing to be findable in.
     """
-    if facts.disqualifiers:
+    if facts.disqualifiers or bars:
         # 0, not None. None already means "the posting stated no requirements", and a
         # rejection that reads as "nothing to go on" would put this job back in front of
         # anything sorting nulls last.
@@ -77,6 +83,7 @@ def label(value: int | None, *, threshold: int, seniority_delta: int | None) -> 
 def reasons(
     facts: MatchFacts,
     *,
+    bars: list[str] | None = None,
     similarity: float,
     seniority_delta: int | None,
     filters_passed: list[str],
@@ -95,6 +102,7 @@ def reasons(
         met=facts.met,
         missing=facts.missing,
         disqualifiers=facts.disqualifiers,
+        bars=bars or [],
         coverage=coverage(facts),
         similarity=similarity,
         seniority_delta=seniority_delta,

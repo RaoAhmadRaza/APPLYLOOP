@@ -95,6 +95,11 @@ class MatchReasons(Schema):
     # `reasons_json` rather than only consumed by `score()`, because "you scored 0" is
     # not a reason and M6 puts this in front of a human.
     disqualifiers: list[str]
+    # The same verdict reached without a model: country scope, a required language, an
+    # eligibility window. Separate from `disqualifiers` because these are sentences this
+    # repo wrote about the pair, not spans quoted from the posting — so the grounding
+    # check applies to one and not the other.
+    bars: list[str]
     coverage: float | None
     similarity: float
     seniority_delta: int | None

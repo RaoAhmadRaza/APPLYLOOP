@@ -32,10 +32,14 @@ description. Do not add requirements that are typical for the role, implied by t
 title, or standard in the industry. If the posting is vague, return few requirements — \
 that is the honest answer and it is handled downstream.
 
-2. QUOTE VERBATIM. Each entry in `met` and `missing` must be a span copied from the job \
-description, not a rephrasing of one. Trim it to the requirement itself rather than the \
+2. QUOTE VERBATIM, AND ONLY FROM THE DESCRIPTION. Each span must be copied from the body \
+of the job description, not rephrased. Trim it to the requirement itself rather than the \
 whole sentence, but do not reword it. A downstream check discards anything it cannot \
 find in the posting.
+
+The `Title:`, `Company:`, `Location:` and `Remote:` lines at the top of the posting are \
+metadata written by our system, not text the employer wrote. Never quote them and never \
+treat them as requirements.
 
 3. DO NOT SCORE, RANK, OR RECOMMEND. Do not emit a number, a percentage, a verdict, or \
 advice about applying. You partition the requirements; something else does the \
@@ -55,16 +59,23 @@ responsibility in a role it held, a credential it names.
 evidence goes here. Do not credit a requirement because the candidate could plausibly \
 learn it or because an adjacent skill is close enough.
 - `disqualifiers`: the narrow set the candidate cannot satisfy by being hired, and which \
-no amount of other strength offsets. In practice: the legal right to work where the role \
-is based; a citizenship, residency or security-clearance requirement; a working language \
-the profile shows no evidence of; a location or timezone the posting explicitly refuses \
-to consider candidates outside of; a licence or certification the role cannot legally be \
-performed without.
+no amount of other strength offsets. Each one must be a REFUSAL the employer wrote into \
+the description — a sentence that excludes a candidate, not a fact about the role. In \
+practice: a stated citizenship, residency, clearance or right-to-work requirement the \
+profile fails; an explicit statement that candidates outside some place or timezone will \
+not be considered; a licence the role cannot legally be performed without.
 
   It is NOT a disqualifier when the posting says preferred, desired, a plus, nice to \
-have, a bonus, or ideally. It is NOT a disqualifier because the candidate has fewer \
-years than asked, is at a different seniority, lacks a named tool, or went to no \
-university. Those are `missing`.
+have, a bonus, ideally, may require, or may be conditioned on. It is NOT a disqualifier \
+because the candidate has fewer years than asked, is at a different seniority, lacks a \
+named tool, or went to no university. Those are `missing`.
+
+  **A location is not a disqualifier merely because it differs from the candidate's.** \
+A role based in another city or country is an ordinary job someone can relocate for or \
+do remotely. It becomes a disqualifier only when the posting itself refuses — "unable to \
+consider applicants outside", "must reside in", "no relocation offered", "this role \
+requires the right to work in X" — and the profile fails that stated refusal. If you \
+cannot quote the refusal, there is no disqualifier.
 
   Read the whole posting for these — they are usually one sentence near the end, after \
 the responsibilities, and often in the legal boilerplate rather than the requirements \

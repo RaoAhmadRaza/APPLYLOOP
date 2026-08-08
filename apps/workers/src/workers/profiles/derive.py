@@ -13,6 +13,7 @@ from datetime import UTC, date, datetime
 from schemas.enums import Seniority, WorkAuth
 from schemas.resume import ParsedResume, ResumeWork
 
+from workers import regions
 from workers import seniority as bands
 
 # Fallback when the title says nothing — "Software Engineer" carries no band. Years of
@@ -83,27 +84,6 @@ _WORK_AUTH_PHRASES: list[tuple[WorkAuth, tuple[str, ...]]] = [
         ("citizen", "citizenship", "us national", "u.s. national"),
     ),
 ]
-
-# Region tokens and the words a résumé uses to name them. ISO-3166 alpha-2, plus `EU` as
-# a bloc. Deliberately short: these are the places the fixtures and the pool actually
-# name, and an unmatched country yields no token rather than a wrong one — which is the
-# safe direction, because a missing region is silence (never drops) and a wrong region is
-# a filter decision made on a guess.
-_REGION_WORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("US", ("united states", "u.s.", "usa", "us", "american", "america")),
-    ("GB", ("united kingdom", "uk", "u.k.", "britain", "british", "england")),
-    ("EU", ("european union", "eu", "eea", "european")),
-    ("CA", ("canada", "canadian")),
-    ("AU", ("australia", "australian")),
-    ("NZ", ("new zealand",)),
-    ("IN", ("india", "indian")),
-    ("DE", ("germany", "german")),
-    ("FR", ("france", "french")),
-    ("NL", ("netherlands", "dutch")),
-    ("IE", ("ireland", "irish")),
-    ("PL", ("poland", "polish")),
-    ("SG", ("singapore",)),
-)
 
 # Clause separators. Work-authorisation prose is one or two short sentences, and the
 # polarity flips between them — "EU citizen. Requires H-1B sponsorship for roles based in
@@ -245,7 +225,7 @@ def work_auth_regions(resume: ParsedResume) -> list[str] | None:
     for clause in _CLAUSE_SPLIT.split(stated):
         if not clause.strip():
             continue
-        found = _regions_in(clause)
+        found = regions.named_in(clause)
         # A clause asking for sponsorship names places the candidate CANNOT work in
         # freely, even when it also claims a status ("EU citizen, needs H-1B for the US").
         if any(phrase in clause for phrase in needs):
@@ -254,22 +234,6 @@ def work_auth_regions(resume: ParsedResume) -> list[str] | None:
             allowed |= found
 
     return sorted(allowed - blocked)
-
-
-def _regions_in(clause: str) -> set[str]:
-    """Region tokens named in one clause, matched on word boundaries.
-
-    Boundaries because the short forms are substrings of ordinary words: `us` appears in
-    "status" and "because", `eu` in "european" and "euro", `uk` in "ukraine". A substring
-    match here would authorise a region the résumé never mentioned, which is the one
-    failure direction that costs a user real applications.
-    """
-    return {
-        token
-        for token, words in _REGION_WORDS
-        for word in words
-        if re.search(rf"(?<!\w){re.escape(word)}(?!\w)", clause)
-    }
 
 
 def _span(role: ResumeWork, today: date | None) -> tuple[int, int] | None:

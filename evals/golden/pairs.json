@@ -401,7 +401,8 @@
       "labelled_by": "human:MAR",
       "negative_type": "hard",
       "rationale": "Business analysis is the analytics craft; remote, and the title states no band above them",
-      "split": "report"
+      "split": "report",
+      "disqualifier_expected": true
     },
     {
       "profile": "career_changer.docx",
@@ -512,7 +513,8 @@
       "labelled_by": "human:MAR",
       "negative_type": "hard",
       "rationale": "Game numerical design is analytical work, but it is game design rather than business analytics",
-      "split": "report"
+      "split": "report",
+      "disqualifier_expected": true
     },
     {
       "profile": "career_changer.docx",
@@ -534,7 +536,8 @@
       "labelled_by": "human:MAR",
       "negative_type": "hard",
       "rationale": "Combines data engineering with ML development — a real step beyond a first analyst role, and arguable either way",
-      "split": "report"
+      "split": "report",
+      "disqualifier_expected": true
     },
     {
       "profile": "career_changer.docx",
@@ -578,7 +581,8 @@
       "labelled_by": "human:MAR",
       "negative_type": "hard",
       "rationale": "Experienced cloud engineer, and the posting refuses sponsorship — BAR.md rule 3 settles it regardless of fit",
-      "split": "report"
+      "split": "report",
+      "disqualifier_expected": true
     },
     {
       "profile": "career_changer.docx",
@@ -644,7 +648,8 @@
       "labelled_by": "human:MAR",
       "negative_type": "hard",
       "rationale": "Paid-media analytics is a genuine adjacent path, but this is a marketing role and the posting refuses sponsorship",
-      "split": "tune"
+      "split": "tune",
+      "disqualifier_expected": true
     },
     {
       "profile": "career_changer.docx",
@@ -754,7 +759,8 @@
       "labelled_by": "human:MAR",
       "negative_type": "hard",
       "rationale": "Application software engineering; same craft, and the profile names no location so Starbase does not disqualify it",
-      "split": "tune"
+      "split": "tune",
+      "disqualifier_expected": true
     },
     {
       "profile": "plain.txt",
@@ -776,7 +782,8 @@
       "labelled_by": "human:MAR",
       "negative_type": "hard",
       "rationale": "The same role on another team",
-      "split": "report"
+      "split": "report",
+      "disqualifier_expected": true
     },
     {
       "profile": "plain.txt",
@@ -872,7 +879,8 @@
       "labelled_by": "human:MAR",
       "negative_type": "hard",
       "rationale": "Backend payments engineering. Go rather than their Python or Java, but the craft and the domain are the same",
-      "split": "tune"
+      "split": "tune",
+      "disqualifier_expected": true
     },
     {
       "profile": "plain.txt",
@@ -938,7 +946,8 @@
       "labelled_by": "human:MAR",
       "negative_type": "easy",
       "rationale": "German-language strategy and operations",
-      "split": "tune"
+      "split": "tune",
+      "disqualifier_expected": true
     },
     {
       "profile": "plain.txt",
@@ -1027,7 +1036,8 @@
       "labelled_by": "human:MAR",
       "negative_type": "hard",
       "rationale": "Hardware and robotics lead: engineering, and a lead band, but hardware rather than backend",
-      "split": "report"
+      "split": "report",
+      "disqualifier_expected": true
     },
     {
       "profile": "plain.txt",
@@ -1049,7 +1059,8 @@
       "labelled_by": "human:MAR",
       "negative_type": "easy",
       "rationale": "French-language field sales",
-      "split": "report"
+      "split": "report",
+      "disqualifier_expected": true
     },
     {
       "profile": "plain.txt",
@@ -1137,7 +1148,8 @@
       "labelled_by": "human:MAR",
       "negative_type": "hard",
       "rationale": "Python and FastAPI are squarely the craft, but the posting pins CET +/-3 and Portland is nine hours outside it",
-      "split": "report"
+      "split": "report",
+      "disqualifier_expected": true
     },
     {
       "profile": "senior_backend.pdf",
@@ -1257,7 +1269,8 @@
       "labelled_by": "human:MAR",
       "negative_type": "hard",
       "rationale": "An accelerator programme is an early-career intake; the craft matches and the band does not, which is what makes it hard",
-      "split": "report"
+      "split": "report",
+      "disqualifier_expected": true
     },
     {
       "profile": "senior_backend.pdf",
@@ -1279,7 +1292,8 @@
       "labelled_by": "human:MAR",
       "negative_type": "hard",
       "rationale": "Senior Python backend, exactly the craft — but the same CET +/-3 constraint as the other Proxify posting",
-      "split": "report"
+      "split": "report",
+      "disqualifier_expected": true
     },
     {
       "profile": "senior_backend.pdf",
@@ -1599,7 +1613,8 @@
       "labelled_by": "human:MAR",
       "negative_type": "hard",
       "rationale": "Data science is the right craft, but an accelerator programme is an early-career intake against a senior engineer",
-      "split": "report"
+      "split": "report",
+      "disqualifier_expected": true
     },
     {
       "profile": "two_column.pdf",
@@ -1665,7 +1680,8 @@
       "labelled_by": "human:MAR",
       "negative_type": "hard",
       "rationale": "Architecture is a plausible destination for a senior engineer, but the posting refuses sponsorship",
-      "split": "report"
+      "split": "report",
+      "disqualifier_expected": true
     },
     {
       "profile": "two_column.pdf",
@@ -1731,7 +1747,8 @@
       "labelled_by": "human:MAR",
       "negative_type": "easy",
       "rationale": "IT disaster-recovery programme management",
-      "split": "report"
+      "split": "report",
+      "disqualifier_expected": true
     },
     {
       "profile": "two_column.pdf",
@@ -1775,7 +1792,8 @@
       "labelled_by": "human:MAR",
       "negative_type": "hard",
       "rationale": "Accelerator programme, Java, early-career intake against a senior ML engineer",
-      "split": "report"
+      "split": "report",
+      "disqualifier_expected": true
     },
     {
       "profile": "two_column.pdf",
