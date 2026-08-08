@@ -793,7 +793,7 @@ extension to 121 pairs (45 relevant) puts 24 positives in the reporting split, a
 recall floor is the binding constraint again — the bar enforced by the clause written to
 enforce it.
 
-### Two defects open at the end of the session
+### Two defects open at the end of the session — both closed, next session (2026-08-08)
 
 **The set carries labels from two versions of one rule.** BAR.md §6 rule 2 — "a
 remote-friendly role in a city the profile never named is `relevant`" — was written about
@@ -811,6 +811,91 @@ actually inside, a sponsorship refusal for someone who needs no sponsorship, and
 **the candidate's own résumé sentence**, which reached the model because the prompt now
 sends it. Recommended: keep the partition in `reasons_json` as advisory for M6, and gate
 the score on `bars` alone.
+
+### How both were closed (2026-08-08, evening)
+
+Both recommendations were put to the project owner and both were taken. Neither is a code
+defect — they are policy, which is why the previous session stopped rather than guessing.
+
+**A model-quoted disqualifier is now advisory: `score()` gates on `bars` alone.** The
+partition stays in `MatchFacts` and in `reasons_json`, so M6 can still show a human why the
+model was uneasy about a posting; it no longer touches the number. The asymmetry that
+decided it is the cost of being wrong in each direction. A bar is a sentence this repo
+computed about the *pair* from columns it owns, and it can be wrong only the same way every
+time — a unit test catches it. A quoted span is the model's reading, wrong differently each
+run, and every spurious one deletes a job the user could have had. The measured split, 10/0
+against 6/~11, is the same argument in numbers.
+
+We knowingly give up as many as 6 correct rejections a pure function cannot reach — an
+ITAR-shaped export clause, a timezone refusal, a stated right-to-work requirement. If that
+shows up as false positives in the gate, the answer is to move the recoverable ones into
+`bars.py`, not to re-arm the model: the prompt has now been iterated four times and each
+version regressed a different way.
+
+**§6 R2's two versions were reconciled in favour of country scope, and five labels
+flipped.** The contradiction set was *computed*, not recalled: running `bars.check` over
+all 121 pairs found exactly four disagreements with a human label — Bangkok/GB,
+France/Netherlands/Turkey for the US profile — and no others. The fifth,
+`career_changer.docx` against a Canada-scoped role, had no bar to disagree with because
+that profile's `work_auth_regions` is unknown; it was a label bent by hand and it was
+flipped on the same reasoning.
+
+The scan is the part worth keeping. Two people can hold two versions of a labelling rule
+indefinitely; the disagreement only became visible when code computed the same judgement
+and the two answers could be diffed. **A deterministic implementation of a labelling rule
+is an audit of the labels.** It also bounded the blast radius — four, not "somewhere in the
+first 64" — which is what made a targeted relabel defensible instead of a full re-pass.
+
+`two_column.pdf` keeps two Netherlands roles as `relevant`, because that profile is
+authorised `EU`. That the scan left them alone is the evidence the rule is about the right
+to work rather than about a posting naming a foreign country.
+
+The set goes 45 → **40 relevant**, the reporting split 24 → **22 positives**. It moves both
+terms of recall against us. A relabel taken mid-gate is only admissible in that direction.
+
+### The run that followed: the blocker moved back to precision (2026-08-08, evening)
+
+Both changes did what the measurement predicted, in both directions.
+
+```
+                        before (report split)      after (tuning split)
+recall  @ t=35              0.38   ← blocker            0.50
+recall  @ t<=10              —                          1.00
+precision @ t=35            0.80                        0.69   ← blocker
+                                              best 0.80 @ t=55, recall 0.22
+```
+
+Unchanged and passing: filter recall 1.00 (40/40), cost $0.303/1k, grounding 0.98.
+
+**The price of demoting the model is exactly the pairs predicted, and it is legible.** Of
+13 postings stating a bar the profile fails, 10 were rejected and 3 survived — two of them
+the Proxify postings pinning CET ±3 against a Portland candidate, at 55 and 50. A timezone
+refusal is the category `bars.py` structurally cannot compute and the model genuinely reads.
+That is the trade taken with open eyes; the answer, if it costs a gate, is to move
+recoverable categories *into* `bars.py`, not to re-arm a prompt that has now regressed four
+different ways.
+
+**What actually failed the run was a profile, not a mechanism** — see BAR.md §8's third
+amendment. Three of the four false positives at threshold 35 belonged to
+`career_changer.docx`, which the §6 R2 reconciliation had left with **zero** positives in 23
+pairs. Its worst one is the sharpest version of the point: a pair relabelled `not_relevant`
+under the country-scope rule, for the one profile whose `work_auth_regions` is `None` and
+for which that rule can therefore never fire. A label the code cannot reach is not a bar,
+it is a guaranteed false positive. **Check that a rule can fire for a profile before
+labelling under it.**
+
+Approved: exclude from precision and recall any profile contributing no positive to the
+split, printed rather than silent, expressed as a property of the draw so a redraw re-admits
+it. Filter recall, grounding and cost still count every pair.
+
+**Two reporting defects the diagnosis exposed, both fixed.** The gate printed
+`job_id[:8]` — but every golden job was drawn in the same instant and the ids are UUIDv7, so
+the prefix is a timestamp: one value covered 24 distinct pairs and no printed finding could
+be traced to a posting. `Scored` now carries the title. And one pair reported as a rejected
+positive was not rejected by anything — the model returned `met=[]` and quoted the LinkedIn
+`#LI-DNI` no-index tag as a disqualifier, so coverage was 0/n and the score was 0 by
+arithmetic. One degenerate extraction in 102, left as a failing assertion rather than
+explained away: it costs recall exactly like a bar would.
 
 ### Decisions
 

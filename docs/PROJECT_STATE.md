@@ -7,9 +7,10 @@ CLAUDE.md §9 says what "in scope" means. This file says what is *true* — what
 proven, with what evidence, and what is known to be broken.
 
 > Last updated: **2026-08-08**, end of day, mid-M4. The set is 121 human-confirmed pairs
-> and the gate has run five times against a real model. It still **fails** — but the
-> blocker has moved from **precision** to **recall**, and the two causes are located and
-> written down. See *M4 gate* and *Next*.
+> and the gate has run seven times against a real model. It still **fails**, now on
+> **precision 0.75 against a bar of 0.80, at the recall floor** — one false positive short.
+> Recall is no longer a blocker at any threshold. The three remaining false positives are
+> named, and two of the three are the same cause. See *M4 gate* and *Next*.
 
 ---
 
@@ -21,7 +22,7 @@ proven, with what evidence, and what is known to be broken.
 | **M1** | ATS ingestion + registry | ✅ **proven** 2026-08-06 | Six adapters green against live boards (gate asked for three). Second run writes only diffs — live PostHog board: `fetched: 12, inserted: 0, updated: 0, closed: 0`. `detect()` resolves a real careers URL. CI log reads `beat ingested 13 jobs unattended`. |
 | **M2** | Aggregators + dedupe | ✅ **proven** 2026-08-07, one clause pending | See below. |
 | **M3** | Profiles & résumé parsing | ✅ **proven** 2026-08-07 | Live gate **24/24 against a real model** (OpenAI, `gpt-5.4-nano` class). See below. |
-| **M4** | Matching | 🔴 **gate run 5×, still failing — blocker moved to recall** | Set is 121 human-confirmed pairs (`human:MAR`, 0 borderline, 45 relevant). **Precision now reaches 0.80 at threshold 35 — the bar — but recall is 0.38 against a floor of 0.50.** 16 labelled-relevant pairs are rejected outright: ~11 by the model quoting non-refusals, 4 by a country-scope rule that contradicts four older labels. Both causes located, neither fixed. See DECISIONS.md → M4 → *Making the gate green* and *Two defects open*. |
+| **M4** | Matching | 🔴 **gate run 7×, still failing — one false positive short on precision** | Set is 121 human-confirmed pairs (`human:MAR`, 0 borderline, **40 relevant**). At threshold 35 on the tuning split: **precision 0.75 against a bar of 0.80, recall 0.50 exactly at the floor, n=12.** 9 true positives, 3 false. Recall clears at every threshold ≤35 and reaches 1.00 at ≤10 — it is no longer a blocker anywhere. The three false positives are named below and **two of the three are craft drift**, which the score does not model. See DECISIONS.md → M4 → *The run that followed*. |
 | M5–M11 | — | ⬜ | Strict chain from M4. **M5 is not in scope until the golden-set bar is met.** |
 
 ### M3 gate, item by item
@@ -38,34 +39,57 @@ promoted column the user set.
 
 ### M4 gate, item by item
 
-**Latest gate run — 121 pairs, real model and embeddings:**
+**Latest gate run — 121 pairs, real model and embeddings, `career_changer.docx` excluded
+from precision/recall by BAR.md §2:**
 
 ```
-filter recall          1.00 (45/45)      bar >=0.90   PASS
-cost / 1k scored       $0.303 cold       bar <=$2.00  PASS
-requirement grounding  0.97 (1808/1857)               PASS
-stated bars rejected   12 of 13          bars.py 10, model 6
-precision              0.80 @ t=35       bar >=0.80   REACHED
-recall                 0.38 @ t=35       bar >=0.50   FAIL   <- the blocker
+filter recall          1.00 (40/40)      bar >=0.90   PASS
+cost / 1k scored       $0.297 cold       bar <=$2.00  PASS
+requirement grounding  0.98 (1789/1828)               PASS
+stated bars rejected   10 of 13          bars.py 10, model 9 (advisory)
+recall                 0.50 @ t=35       bar >=0.50   MET (1.00 at t<=10)
+precision              0.75 @ t=35       bar >=0.80   FAIL   <- the blocker
 ```
 
-**The blocker is now recall, and the cause is over-rejection.** 16 pairs labelled
-relevant score 0. On this run `bars.py` produced 10 correct rejections and **0** spurious;
-the model produced 6 correct and **~11** spurious — a pay disclosure, a `To apply:` URL,
-"Remote work flexibility within Canada", a hedged export-control clause, a timezone window
-the candidate is inside, a sponsorship refusal for someone needing no sponsorship, and
-twice **the candidate's own résumé sentence**, which reaches the model because the prompt
-now sends it.
+**One false positive short.** 12 predicted positives, 9 correct. At n=12 the bar needs 10.
 
-**Four of the 16 are the set disagreeing with itself**, not a matcher error: BAR.md §6
-rule 2 ("a remote role in a *city* the profile never named is relevant") and the
-country-scope refinement approved mid-session are two versions of one rule, and the
-original 64 pairs were labelled under the first while the new 57 were labelled under the
-second.
+The three, now legible because `Scored` carries the title — the printed `job_id[:8]` was a
+UUIDv7 timestamp and one prefix covered 24 distinct pairs:
+
+```
+47  [hard]  senior_backend  Lead Site Reliability & Security Engineer
+53  [hard]  senior_backend  Sales Engineer Enterprise
+44  [hard]  two_column      Senior DevOps Engineer
+```
+
+**Two of the three are craft drift**, which the score does not model: it is coverage of the
+posting's stated requirements, and a sales-engineering posting genuinely does list Python
+and AWS. The third states "Dealbreakers (must-haves)" the profile lacks, and a ratio
+dilutes a must-have to one bullet among many.
+
+**How the blocker got here.** It was precision, then recall, now precision again, and each
+move was a measured change rather than a re-run:
+
+```
+                                     report precision   blocker
+coverage only, 64 pairs                 0.42-0.50       precision
++ model-quoted disqualifiers            0.57            precision
++ deterministic bars                    0.57            arithmetic ceiling 0.62
++ 57 more pairs (121 total)             0.80 @ t=35     RECALL 0.38
++ model disqualifiers demoted           tuning 0.69     precision, recall now 0.50
++ all-negative profile excluded         tuning 0.75     precision, one FP short
+```
+
+Two costs were taken knowingly. Demoting the model's disqualifiers to advisory gave back
+the two Proxify postings pinning CET ±3 against a Portland candidate (surviving at 37 and
+67) — a timezone refusal is what `bars.py` structurally cannot compute. And one pair per run
+is lost to a **degenerate extraction**: the model returns `met=[]` on a relevant pair, so
+coverage is 0/n and the score is 0 by arithmetic with no bar and no disqualifier. It was a
+different pair in each of the last two runs.
 
 | Clause | Status | Evidence |
 |---|---|---|
-| Golden-set precision meets the bar set **in advance** | 🟡 **precision 0.80 REACHED at t=35; recall 0.38 vs 0.50 blocks** | `evals/golden/BAR.md` was committed **alone and first**, before any scored output existed — `git log --diff-filter=A` on it is what makes "in advance" auditable. It pins precision ≥ 0.80, a recall floor, filter recall ≥ 0.90, a minimum positive count below which a run is *inconclusive*, a pool floor, a per-filter cap and a cost ceiling. `evals/golden/pairs.json` holds **121 stratified pairs, human-confirmed by `human:MAR`** — 45 relevant, 76 not_relevant, **0 borderline**, hard negatives 51 overall and 44/52 (85%) among the strata the matcher judges. Built in two passes: a model proposed 64 and a human corrected **19**; then 57 more were drawn and labelled from scratch. The reporting split went from **8 reachable positives to 24**, which is what made the bar satisfiable at all — at 8, §2's precision ≥0.80 *and* ≥8 predicted positives together demanded recall of 0.88–1.00 against a floor of 0.50. **The split is now an explicit per-pair field**, stratified over (profile, label); it used to be `scored[:20]` over a profile-grouped file, which put 80% of one résumé in the tuning half. BAR.md §3 and §7 both amended with approval, logged in its §8. Building and reviewing the set found more than it measured — see DECISIONS.md → M4. |
+| Golden-set precision meets the bar set **in advance** | 🔴 **recall 0.50 MET at t=35; precision 0.75 vs 0.80 blocks — one false positive** | `evals/golden/BAR.md` was committed **alone and first**, before any scored output existed — `git log --diff-filter=A` on it is what makes "in advance" auditable. It pins precision ≥ 0.80, a recall floor, filter recall ≥ 0.90, a minimum positive count below which a run is *inconclusive*, a pool floor, a per-filter cap and a cost ceiling. `evals/golden/pairs.json` holds **121 stratified pairs, human-confirmed by `human:MAR`** — **40 relevant**, 81 not_relevant, **0 borderline**, hard negatives 56 overall. Five were relabelled 2026-08-08 when BAR.md §6 R2's country-scope refinement was reconciled against the 64 pairs labelled before it; `bars.check` over all 121 found exactly four such contradictions and no others. Built in two passes: a model proposed 64 and a human corrected **19**; then 57 more were drawn and labelled from scratch. The reporting split went from **8 reachable positives to 22**, which is what made the bar satisfiable at all — at 8, §2's precision ≥0.80 *and* ≥8 predicted positives together demanded recall of 0.88–1.00 against a floor of 0.50. **The split is now an explicit per-pair field**, stratified over (profile, label); it used to be `scored[:20]` over a profile-grouped file, which put 80% of one résumé in the tuning half. BAR.md §3 and §7 both amended with approval, logged in its §8. Building and reviewing the set found more than it measured — see DECISIONS.md → M4. |
 | Hard filters demonstrably drop mismatches **before** embedding | ✅ **offline and live** — filter recall **1.00 (45/45)** measured against the confirmed set, clearing the ≥0.90 bar. | Proven structurally rather than by a call-order spy: `test_matching.py` asserts **no `job_embeddings` row exists** for a filtered job — an embedding row is the physical receipt that a job reached a paid stage. Plus the counter chain is asserted non-increasing, and `set(ids_sent_to_llm) ⊆ set(filtered_ids)`. 34 filter tests cover all five polarity laws. |
 | Cost per 1,000 jobs scored is measured | ✅ **measured: $0.303 / 1k scored, cold**, against a $2.00 ceiling. | `llm.complete_json` takes a caller-owned `usage` sink, appended **per attempt including the one that raises**; `match.scored` carries `embed_tokens`/`prompt_tokens`/`completion_tokens`. The live gate asserts `prompt_tokens > 0` **and** `embed_tokens > 0`, which is also the anti-stub proof — a fake reports zero. |
 | Every score carries a human-readable reason | 🟡 **0.97 grounded (1808/1857)** — passing on the ratio, but the ungrounded tail includes the *candidate's own résumé sentence* quoted as a posting requirement, twice. A fabrication-shaped defect one milestone before M5's validator, and the reason the model's disqualifier partition is recommended for demotion to advisory. | `MatchReasons` is the `reasons_json` contract; `test_matching.py` asserts every written match has a non-empty summary and a non-empty partition. The live gate additionally asserts every requirement span is **findable in the posting** — M5's fabrication problem caught a milestone early. |
@@ -139,18 +163,19 @@ this first.
 ## Test surface
 
 ```
-580 pass, no network            make test
+616 pass, no network            make test
  12 live, all 8 real feeds      make verify-live-feeds       APPLYLOOP_LIVE_FEEDS=1
   9 live, all 6 real ATS boards make verify-live             APPLYLOOP_LIVE_ATS=1
   3 live, aggregator            make verify-live-aggregator  ← SKIPPED, needs a proxy
  24 live, résumé parsing        make verify-live-parse       ← GREEN 2026-08-07 (4 model
                                                              calls/run, well under a cent)
   3 live, object storage        make verify-live-storage     ← SKIPPED, needs a bucket
- 10 live, the M4 gate           make verify-live-match       ← RAN 2026-08-08: 7 pass,
-                                                             3 FAIL. Gate not met.
+ 11 live, the M4 gate           make verify-live-match       ← RAN 2026-08-08 (3 runs,
+                                                             ~22 min, ~$0.04): 7 pass,
+                                                             4 FAIL. Gate not met.
 ```
 
-ruff + format + mypy clean on 149 files. Live suites are deliberately **not** in CI — a
+ruff + format + mypy clean on 153 files. Live suites are deliberately **not** in CI — a
 build must not go red because a third party had a bad afternoon, layer 3 spends a metered
 budget, and the parse suite spends real money.
 
@@ -174,10 +199,28 @@ budget, and the parse suite spends real money.
   column-major, so pdfminer recovers the reading order. A real two-column résumé from a
   word processor may not. The fixture still earns its place by proving neither column is
   *dropped*; the reading-order risk stays unmeasured until a real one arrives.
-- **`score()` weighs a disqualifier like a nice-to-have.** This is why M4's gate fails.
-  Coverage is a flat ratio, so "ITAR: must be a U.S. person" costs one bullet out of
-  fifteen and a legally impossible role scores 94. 7 of 8 false positives are `hard`
-  negatives. The fix is a `disqualifiers` partition — deferred with a fired trigger.
+- **The score has no notion of craft.** This is what M4's gate now fails on. It is coverage
+  of the posting's stated requirements, and a sales-engineering posting really does list
+  Python and AWS — so `Sales Engineer Enterprise`, remote in the candidate's own state with
+  her exact stack, scores 53. Two of the three remaining false positives are this. BAR.md
+  §6 R5 defines the craft chains; nothing in the scorer reads them. *(The older form of this
+  entry — "`score()` weighs a disqualifier like a nice-to-have" — is fixed: `bars.py` gates,
+  and a non-empty bar scores 0.)*
+- **A must-have is worth one bullet.** The third false positive states "Dealbreakers
+  (must-haves)" the profile lacks, and a flat ratio dilutes them among the requirements the
+  profile does meet. Same shape as the disqualifier defect, one rung less fatal: it is not
+  "cannot be hired", it is "will not be".
+- **The model returns `met=[]` on a relevant pair, about once per run.** Coverage is then
+  0/n and the score is 0 by arithmetic — no bar, no disqualifier, nothing to read in
+  `reasons_json`. A different pair each run (`Senior Software Engineer, Full Stack`, then
+  `DevOps Engineer IV (Obs)`), so it is a sampling artefact of the model rather than a bad
+  posting. It costs a positive every time and is indistinguishable from a rejection in the
+  output — the gate reports it as a rejected positive, which is where it was found.
+- **A timezone refusal is no longer caught.** Model-quoted disqualifiers are advisory as of
+  2026-08-08, and `bars.py` cannot compute "unable to consider applications from candidates
+  in other time zones". The two Proxify postings survive at 37 and 67 against a Portland
+  profile. Accepted knowingly — see DECISIONS.md; the fix, if it costs the gate, is to move
+  the category into `bars.py`, not to re-arm the prompt.
 - **The live gate is not deterministic.** Two consecutive runs, identical set and code:
   p=0.62/r=0.62 and p=0.50/r=0.50 at the same threshold. `met`/`missing` come from a model,
   so the "deterministic score" claim covers only the arithmetic half of the path.
@@ -229,31 +272,39 @@ budget, and the parse suite spends real money.
 
 ## Next
 
-**Close M4's gate.** The set is confirmed, the bar is set, the gate runs, and it fails at
-one located place. In order:
+**Close M4's gate. It needs one more true positive or one fewer false positive** at
+threshold 35, where recall already sits exactly on its floor. Three false positives remain
+and their causes are not the same, so the choice of fix is a design fork and **wants a
+human**, not a default:
 
-1. **Give the score a notion of a disqualifier.** `MatchFacts` gains a third partition of
-   verbatim spans — stated requirements whose absence is fatal (legal work status,
-   language, an explicit location or timezone exclusion, a licence) — and `score()` gates
-   on it instead of averaging it into coverage. Today a role a UK citizen legally cannot
-   hold scores 94. **The prompt change is the risky half**: extracting disqualifiers is
-   the same instruction the labelling model failed to follow on ITAR, "Mandarin required"
-   and CET±3, so it needs an offline test with this session's 11 hard negatives as
-   fixtures before any paid run.
-2. **Re-run the gate. Expect variance** — two consecutive runs moved precision 0.62 → 0.50
-   at a fixed threshold, because `met`/`missing` come from a model. A threshold worth
-   pinning should hold across more than one run.
-3. Only then set `MATCH_THRESHOLD`. §14 is still open on it; **do not hardcode a number**,
-   and do not take one from a single run.
+1. **Give the score a notion of craft** — two of the three are craft drift, and BAR.md §6 R5
+   already defines the chains. Not a hard filter: filter recall must hold ≥0.90 and title
+   classification is exactly the machinery that would kill `CLI Engineer` or `Fullstack
+   Software Engineer`, both labelled relevant here.
+2. **Weight a stated must-have** — the third posting labels its own "Dealbreakers
+   (must-haves)". A flat ratio cannot see the difference between a must-have and a
+   nice-to-have that the posting itself has already marked.
+3. **The reranker §7.2 asked for.** DECISIONS.md overrode it with a trigger — recall@N
+   below ~0.95 — and **that trigger has not fired**: filter recall is 1.00. Its job here
+   would be precision, which is a different argument from the one that was deferred, and it
+   should be made explicitly rather than assumed.
 
-**Three bar-vs-reality contradictions are open and need a human**, none of them fixable by
-editing a result:
+Whichever is picked: **do not re-run the gate hoping.** Precision moved 0.62 → 0.50 on
+identical input once already, `make verify-live-match` is three runs for that reason, and a
+fourth run is sampling. Only after a threshold clears on all three does `MATCH_THRESHOLD`
+get set — §14 is still open on it, and no number may come from a single run.
+
+**Two bar-vs-reality contradictions are open and need a human**, neither fixable by editing
+a result:
 
 - §2's pool floor (≥200/profile) is **unmeasurable** in a harness §7 requires to seed only
   stored payloads. It belongs against the real pool.
-- Requirement spans can quote the résumé rather than the posting (0.97, passing on ratio).
-- `career_changer` holds 1 positive in 16 pairs — the sampler is blind to which countries a
-  profile may legally work in. Fixing it by relabelling would be inventing positives.
+- Requirement spans can quote the résumé rather than the posting (0.98, passing on ratio).
+
+*(The third — `career_changer` holding almost no positives — was resolved 2026-08-08: BAR.md
+§2 now excludes a profile with no positives from precision and recall, printed rather than
+silent, as a property of the draw so a redraw re-admits it. **Redrawing it is still the real
+fix** and is unblocked whenever someone wants a labelling pass.)*
 
 Two smaller items, both blocked on credentials rather than on code:
 
