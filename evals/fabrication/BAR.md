@@ -241,6 +241,58 @@ obvious moves, and a future session will otherwise propose them again confidentl
 The human read required by §1 is logged here too: one line per live run, with the reader's
 initials, the number of documents read, and what was found.
 
+### LOGGED — the first two live runs, and the defect the block-rate bar caught (2026-08-09)
+
+**No bar moved.** §2 is untouched. What moved was the system §2 measures, which is what a
+bar is for — and recording the distinction matters more than the fix, because "the run
+failed so we changed a number" and "the run failed so we fixed what it measured" look
+identical in a diff.
+
+**Run 1 measured nothing and cost money.** Sequential, 25 minutes, then `httpx.ReadTimeout`
+out of the session fixture — all six clauses errored. Two causes: `LLM_TIMEOUT_SECONDS` was
+120, written for the cheap extraction model, and a reasoning-class model runs past it; and
+the harness had no retry, no concurrency and no per-pair isolation, so one failure took the
+whole run. M4 solved the identical shape for 429s and the fix had not been carried over.
+Applied: timeout to 300 (a ceiling, not a wait), retry with backoff **in the harness** on
+M4's recorded reasoning, concurrency 4, and an explicit error count against a ceiling of 2
+so a run can never quietly measure 37 of 40 pairs.
+
+**Run 2 passed five clauses and failed one, correctly.**
+
+```
+live seeded cases  20   escapes 0     bar 0        PASS   bound ~15%, printed
+pairs attempted    40   errors  0     ceiling 2    486s at concurrency 4
+retention, live    0.98            2 bullets stripped in the entire run
+cost/application   $0.0577         ceiling $0.50  PASS   $2.31 total
+block rate         0.95            ceiling 0.20   FAIL
+```
+
+**Every block read `only N traceable bullets, need 6`, with retention at 0.98.** The
+validator was barely stripping anything; `TAILOR_MIN_BULLETS = 6` was refusing documents
+that were entirely true. `two_column.pdf` holds **four** bullet claims and could never
+satisfy a floor of six by any model output; `plain.txt` and `career_changer.docx` hold
+three. `senior_backend.pdf` holds exactly six, so the floor demanded the model use every
+single one — while the résumé prompt tells it to *prefer fewer, stronger bullets*. The
+setting contradicted the prompt and was unsatisfiable for three of four fixtures.
+
+M4 wrote this lesson down one milestone earlier and it was not applied here: **a label the
+code cannot reach is not a bar, it is a guaranteed false positive.** Its M5 form: *a floor
+the vault cannot reach is not a quality bar, it is a guaranteed block* — and it fails in
+the flattering direction, because the printed reason looks like model quality.
+
+**Applied:** the floor is capped at the number of bullet claims the vault holds, and the
+default drops from 6 to 3 — the fewest an experience section can carry and still be a
+document rather than a stub. Both are changes to the stage, not to §2.
+
+**Rejected:** raising the 0.20 block-rate ceiling, which is the move that would have made
+run 2 green without learning anything, and is exactly what §3 step 4 forbids.
+
+**The honest accounting:** this set has now been queried **twice**, and a change was made
+between run 2 and run 3 from reading its output. The change was forced by arithmetic — a
+floor of six against a vault of four — rather than fitted to a result, which is the only
+reason it is not the adaptive analysis M4's §8 warns about. Anyone reading run 3's numbers
+should know they follow a fix made after seeing run 2.
+
 ### LOGGED — the case set was confirmed, and what the review found (2026-08-09)
 
 **Confirmed by the project owner, `human:MAR`, against `vaults.json` rather than against the

@@ -133,7 +133,7 @@ def test_a_fabricated_skill_blocks_the_whole_document() -> None:
         vault=_vault("senior_backend.pdf"),
     )
 
-    call = validate.verdict(report, strip_ceiling=0.30, min_bullets=1)
+    call = validate.verdict(report, strip_ceiling=0.30, min_bullets=1, available_bullets=6)
 
     assert call.blocked
     assert call.reason is not None and "Rust" in call.reason
@@ -155,8 +155,40 @@ def test_a_document_stripped_past_the_ceiling_is_blocked_rather_than_shipped_sho
     )
 
     assert report.strip_rate == pytest.approx(2 / 3)
-    assert validate.verdict(report, strip_ceiling=0.30, min_bullets=1).blocked
-    assert not validate.verdict(report, strip_ceiling=0.90, min_bullets=1).blocked
+    assert validate.verdict(report, strip_ceiling=0.30, min_bullets=1, available_bullets=6).blocked
+    assert not validate.verdict(
+        report, strip_ceiling=0.90, min_bullets=1, available_bullets=6
+    ).blocked
+
+
+def test_a_floor_the_vault_cannot_reach_is_not_a_bar() -> None:
+    """M5's first live gate blocked 19 of 20 honest pairs on this, with retention at 0.98.
+
+    `two_column.pdf` holds four bullet claims, so a floor of six could never be satisfied
+    by any model output — the stage would refuse every document it was ever asked for, and
+    the printed reason would look like model quality. M4 recorded the same shape: *a label
+    the code cannot reach is not a bar, it is a guaranteed false positive.*
+    """
+    report = validate.resume(
+        bullets=[
+            TailoredBullet(evidence_id=claim["id"], text=claim["text"])
+            for claim in VAULTS["two_column.pdf"]["claims"]
+            if claim["kind"] == "bullet"
+        ],
+        skills=[],
+        vault=_vault("two_column.pdf"),
+    )
+
+    assert len(report.kept) == 4, "every stored bullet survives; nothing here is a strip"
+    assert not validate.verdict(
+        report, strip_ceiling=0.30, min_bullets=6, available_bullets=4
+    ).blocked, "a vault with four bullets cannot owe six"
+    # The cap is a cap, not a licence. Where the vault *could* have supplied enough, the
+    # floor still bites — otherwise "capped by availability" would quietly mean "never".
+    thin = validate.resume(bullets=report.kept[:2], skills=[], vault=_vault("two_column.pdf"))
+    assert validate.verdict(thin, strip_ceiling=0.30, min_bullets=3, available_bullets=4).blocked, (
+        "the floor still bites when the vault could have supplied more"
+    )
 
 
 def test_too_few_surviving_bullets_is_not_a_document() -> None:
@@ -172,8 +204,10 @@ def test_too_few_surviving_bullets_is_not_a_document() -> None:
         vault=_vault("senior_backend.pdf"),
     )
 
-    assert validate.verdict(report, strip_ceiling=0.30, min_bullets=6).blocked
-    assert not validate.verdict(report, strip_ceiling=0.30, min_bullets=1).blocked
+    assert validate.verdict(report, strip_ceiling=0.30, min_bullets=6, available_bullets=6).blocked
+    assert not validate.verdict(
+        report, strip_ceiling=0.30, min_bullets=1, available_bullets=6
+    ).blocked
 
 
 # ------------------------------------------------- the counterpart: it must keep things

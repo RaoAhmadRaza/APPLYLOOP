@@ -223,7 +223,9 @@ def cover_letter(
     return LetterReport(paragraphs=good, rejected=rejected)
 
 
-def verdict(report: ResumeReport, *, strip_ceiling: float, min_bullets: int) -> Verdict:
+def verdict(
+    report: ResumeReport, *, strip_ceiling: float, min_bullets: int, available_bullets: int
+) -> Verdict:
     """Ship this résumé, or block it? The caller owns both ceilings.
 
     Stripping is the normal case and blocking is the loud one. Three things earn it:
@@ -237,7 +239,17 @@ def verdict(report: ResumeReport, *, strip_ceiling: float, min_bullets: int) -> 
     shipping nothing — it looks finished.
 
     **Too few bullets** blocks because a two-bullet résumé is not a document a user would
-    send, however true it is.
+    send, however true it is — but the floor is capped by what the vault can actually
+    supply. A résumé with four stored bullets cannot produce six, so an uncapped floor of
+    six is not a quality bar for that profile, it is a guaranteed block: the stage would
+    refuse every document it was ever asked for and the reason would look like model
+    quality. M4 recorded the same shape one milestone earlier — *a label the code cannot
+    reach is not a bar, it is a guaranteed false positive.*
+
+    M5's first live gate blocked 19 of 20 honest pairs on exactly this, with retention at
+    0.98: the validator was barely stripping anything, and the floor was unsatisfiable for
+    one fixture and only satisfiable by using every single bullet for the other — which
+    the résumé prompt explicitly tells the model not to do.
     """
     if report.fabricated_skills:
         return Verdict(True, f"skills not in the vault: {', '.join(report.fabricated_skills)}")
@@ -246,8 +258,17 @@ def verdict(report: ResumeReport, *, strip_ceiling: float, min_bullets: int) -> 
             True,
             f"{report.strip_rate:.0%} of bullets were untraceable, ceiling {strip_ceiling:.0%}",
         )
-    if len(report.kept) < min_bullets:
-        return Verdict(True, f"only {len(report.kept)} traceable bullets, need {min_bullets}")
+    floor = min(min_bullets, available_bullets)
+    if len(report.kept) < floor:
+        return Verdict(
+            True,
+            f"only {len(report.kept)} traceable bullets, need {floor}"
+            + (
+                f" (capped from {min_bullets} by {available_bullets} in the vault)"
+                if floor != min_bullets
+                else ""
+            ),
+        )
     return Verdict(False, None)
 
 

@@ -151,8 +151,16 @@ class Settings(BaseSettings):
     tailor_strip_ceiling: float = 0.30
 
     # A résumé with fewer than this many surviving bullets is not a document a user would
-    # send, however true every line of it is.
-    tailor_min_bullets: int = 6
+    # send, however true every line of it is. **Capped at what the vault can supply** —
+    # see `validate.verdict`.
+    #
+    # Three, not six. Six was chosen before any real vault had been looked at, and M5's
+    # first live gate blocked 19 of 20 honest pairs on it: `two_column.pdf` holds four
+    # bullet claims and could never satisfy it, and `senior_backend.pdf` holds exactly
+    # six, so the floor demanded every one of them while the résumé prompt tells the model
+    # to prefer fewer and stronger. Three is the fewest an experience section can carry
+    # and still be a document rather than a stub.
+    tailor_min_bullets: int = 3
 
     # The cost dial. Every match tailored is a strong-model call, so an unattended fan-out
     # over a full shortlist is real money per tick — deliberately small until M7 owns the

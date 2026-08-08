@@ -25,7 +25,7 @@ from datetime import UTC, datetime
 import storage
 from db.events import record
 from db.models import Document, Match
-from schemas.enums import DocumentType, MatchStatus
+from schemas.enums import DocumentType, EvidenceKind, MatchStatus
 from schemas.tailoring import CoverLetterDraft, TailoredResume
 from sqlalchemy import update
 from sqlalchemy.dialects.postgresql import insert
@@ -105,7 +105,14 @@ def tailor_match(
 
     # ---- the guardrail, before anything is rendered ---------------------------------
     report = validate.resume(bullets=drafted.bullets, skills=drafted.skills, vault=work.vault)
-    call = validate.verdict(report, strip_ceiling=strip_ceiling, min_bullets=min_bullets)
+    call = validate.verdict(
+        report,
+        strip_ceiling=strip_ceiling,
+        min_bullets=min_bullets,
+        available_bullets=sum(
+            1 for claim in work.vault.claims.values() if claim.kind == EvidenceKind.BULLET.value
+        ),
+    )
     letter_report = validate.cover_letter(
         paragraphs=letter.paragraphs,
         vault=work.vault,
