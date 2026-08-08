@@ -185,34 +185,55 @@ def test_similarity_is_recorded_but_is_not_in_the_score() -> None:
 # ---- disqualifiers: a gate, not a term ------------------------------------------
 
 
-def test_a_disqualifier_zeroes_a_score_that_coverage_would_have_made_excellent() -> None:
+def test_a_bar_zeroes_a_score_that_coverage_would_have_made_excellent() -> None:
     """**The defect that failed M4's first live gate.**
 
-    Coverage is a ratio, so "must be a U.S. person" costs one bullet out of fifteen and a
-    role a UK citizen legally cannot hold scores 94. 7 of 8 false positives were exactly
-    this shape: right craft, right band, one fatal clause.
+    Coverage is a ratio, so "open only to current university students" costs one bullet out
+    of fifteen and a role the candidate cannot hold scores 94. 7 of 8 false positives were
+    exactly this shape: right craft, right band, one fatal clause.
     """
     facts = MatchFacts(
         met=[f"requirement {index}" for index in range(14)],
         missing=[],
-        disqualifiers=["must be a U.S. person"],
+        disqualifiers=[],
         summary="Strong match on the engineering requirements.",
     )
 
     assert score.coverage(facts) == 1.0
-    assert score.score(facts) == 0
+    assert score.score(facts, ["eligibility: open only to current university students"]) == 0
 
 
-def test_a_disqualifier_scores_zero_rather_than_none() -> None:
+def test_a_bar_scores_zero_rather_than_none() -> None:
     """`None` already means "the posting stated no requirements" — nothing to go on.
 
     A rejection that arrives as None would sort with the unknowns rather than the
     rejects, and anything ordering nulls last puts an illegal application back on top.
     """
-    facts = MatchFacts(met=[], missing=[], disqualifiers=["UK work permit required"], summary="")
+    facts = MatchFacts(met=[], missing=[], disqualifiers=[], summary="")
 
-    assert score.score(facts) is not None
-    assert score.score(facts) == 0
+    assert score.score(facts, ["work authorisation: the posting is scoped to the US"]) is not None
+    assert score.score(facts, ["work authorisation: the posting is scoped to the US"]) == 0
+
+
+def test_a_model_quoted_disqualifier_is_advisory_and_does_not_touch_the_score() -> None:
+    """**Measured, not preferred.**
+
+    On the 121-pair gate run `bars.py` produced 10 correct rejections and 0 spurious; the
+    model produced 6 correct and ~11 spurious — a pay disclosure, a `To apply:` URL, a
+    timezone window the candidate is inside, a sponsorship refusal for someone needing
+    none, and twice the candidate's own résumé sentence. Each spurious one deletes a job
+    the user could have had, and recall pays for it. It still reaches `reasons_json`, so
+    M6 can show a human why the model was uneasy — see the reason test below.
+    """
+    facts = MatchFacts(
+        met=["Python", "Postgres", "Celery"],
+        missing=["Kubernetes"],
+        disqualifiers=["Compensation: $180,000 - $220,000"],
+        summary="Strong match.",
+    )
+
+    assert score.score(facts) == 75
+    assert score.score(facts, []) == 75
 
 
 def test_an_empty_disqualifier_list_leaves_the_coverage_path_untouched() -> None:

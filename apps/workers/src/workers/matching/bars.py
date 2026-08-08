@@ -1,12 +1,16 @@
 """Disqualifiers a `WHERE` clause could find, computed here instead of asked of a model.
 
-**Why this is separate from `MatchFacts.disqualifiers`.** Both zero a score; they differ
-in who decides and what that costs. The model reads a posting and quotes a refusal — real
-comprehension, and the only way to catch "unable to consider applications from candidates
-in other time zones". These three checks need no comprehension at all, and asking for
-them measurably made the model worse: extraction was 8/8 when the prompt was responsible
-only for clauses that must be read, and 9/13 after two more categories were added to the
-same rule. Attention is finite and a prompt is not a list.
+**Why this is separate from `MatchFacts.disqualifiers`, and why only this one gates.**
+The model reads a posting and quotes a refusal — real comprehension, and the only way to
+catch "unable to consider applications from candidates in other time zones". These three
+checks need no comprehension at all, and asking for them measurably made the model worse:
+extraction was 8/8 when the prompt was responsible only for clauses that must be read, and
+9/13 after two more categories were added to the same rule. Attention is finite and a
+prompt is not a list.
+
+Measured on the 121-pair gate run, that difference is not stylistic: these checks produced
+10 correct rejections and **0** spurious, the model 6 correct and ~11 spurious. So a bar
+zeroes a score and a model-quoted disqualifier is advisory — see `score.score`.
 
 They also fail differently. A model miss is invisible and moves between runs; a bug here
 fails a unit test the same way every time. §3.5's ordering applied one rung lower: never

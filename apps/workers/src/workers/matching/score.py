@@ -41,20 +41,28 @@ def score(facts: MatchFacts, bars: list[str] | None = None) -> int | None:
     hand-labelled pairs — which is over-fitting with extra steps.
 
     **A disqualifier is a gate, not a term.** Coverage is a ratio, and a ratio cannot
-    express "fatal": a posting that adds "ITAR: must be a U.S. person" to fifteen matched
-    bullets scores 94 while being a role the candidate legally cannot hold. That
+    express "fatal": a posting that adds "open only to current university students" to
+    fifteen matched bullets scores 94 while being a role the candidate cannot hold. That
     arithmetic is what failed M4's first gate at precision 0.50–0.62 — 7 of 8 false
     positives were right-craft, right-band postings differing on exactly one dimension.
     Weighting the term instead of gating it would just move the number a candidate needs
     to overcome; there is no coverage high enough to make an illegal application good.
 
-    `bars` is the same verdict reached without a model — see `bars.py`. Two arguments
-    rather than one list because the provenances have different contracts: a span in
-    `facts.disqualifiers` is quoted from the posting and the live gate checks it is
-    findable there, while a bar is a sentence this repo wrote about the pair and has
-    nothing to be findable in.
+    **Only `bars` gates.** `facts.disqualifiers` is advisory — it rides along in
+    `reasons_json` for M6 to show a human, and does not touch the number. That is a
+    measurement, not a preference: on the 121-pair gate run `bars.py` produced 10 correct
+    rejections and 0 spurious, while the model produced 6 correct and ~11 spurious —
+    quoting a pay disclosure, a `To apply:` URL, a timezone window the candidate is inside,
+    a sponsorship refusal for someone needing none, and twice the candidate's own résumé
+    sentence. A gate that fires wrongly deletes a job the user could have had, and recall
+    pays for every one.
+
+    So the two arguments are two provenances with different contracts, and now different
+    authority: a bar is a sentence this repo computed about the *pair* and can defend, while
+    a span in `facts.disqualifiers` is the model's reading of the posting and is reported
+    rather than obeyed.
     """
-    if facts.disqualifiers or bars:
+    if bars:
         # 0, not None. None already means "the posting stated no requirements", and a
         # rejection that reads as "nothing to go on" would put this job back in front of
         # anything sorting nulls last.
