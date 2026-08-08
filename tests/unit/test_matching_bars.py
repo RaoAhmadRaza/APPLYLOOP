@@ -246,3 +246,61 @@ def test_the_engineering_titles_the_golden_set_calls_relevant_are_untouched() ->
         "Systems Engineer, Data Intelligence & Analytics Team",
     ):
         assert bars.check(_job(title=title), profile, "Python") == [], title
+
+
+# ---- timezone window: the category the model was carrying ------------------------
+
+_PROXIFY = (
+    "Located in the CET timezone (+/- 3 hours), we are unable to consider "
+    "applications from candidates in other time zones."
+)
+
+
+def test_a_stated_timezone_window_bars_a_candidate_outside_it() -> None:
+    """**Two of the reporting split's seven false positives, at 69 and 55.**
+
+    `bars.py` could not compute this when model-quoted disqualifiers were demoted to
+    advisory, so the category was knowingly given up. This is it coming back as a pure
+    function of the pair.
+    """
+    job = _job(locations=["CET (+/- 3 hours)"], description=_PROXIFY)
+    portland = _profile(locations=["Portland, Oregon"])
+
+    assert bars.check(job, portland, "") != []
+
+
+def test_the_same_posting_does_not_bar_a_candidate_inside_the_window() -> None:
+    """**The control, and it is not hypothetical.**
+
+    Four golden postings carry that sentence verbatim. Two are labelled `relevant` and two
+    are not, and the sentence is identical in all four — only the candidate differs. A rule
+    reading the posting alone would look like a precision fix and would delete both true
+    positives.
+    """
+    job = _job(locations=["Time zone: CET (+/- 3 hours)"], description=_PROXIFY)
+    krakow = _profile(locations=["Kraków"])
+
+    assert bars.check(job, krakow, "") == []
+
+
+def test_a_region_that_spans_the_window_is_not_barred() -> None:
+    """A country is not a timezone. The US runs from -10 to -4, so "United States" settles
+    nothing about a window at UTC-5 — and a range that overlaps at all must pass."""
+    job = _job(locations=["EST (+/- 2 hours)"], description="EST (+/- 2 hours)")
+
+    assert bars.check(job, _profile(locations=["Portland, Oregon"]), "") == []
+
+
+def test_a_zone_without_a_tolerance_states_no_window() -> None:
+    """ "We are a CET-based team" is not a rule. Inventing the tolerance would be this file
+    guessing at how far either side the employer will actually go."""
+    job = _job(description="We are a CET-based team and work core hours together.")
+
+    assert bars.check(job, _profile(locations=["Portland, Oregon"]), "") == []
+
+
+def test_a_profile_with_no_location_is_never_barred_on_time_zones() -> None:
+    """Silence passes, as everywhere else here. `plain.txt` names no city at all."""
+    job = _job(locations=["CET (+/- 3 hours)"], description=_PROXIFY)
+
+    assert bars.check(job, _profile(locations=[]), "") == []

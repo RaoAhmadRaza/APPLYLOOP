@@ -1,9 +1,8 @@
 """Disqualifiers a `WHERE` clause could find, computed here instead of asked of a model.
 
 **Why this is separate from `MatchFacts.disqualifiers`, and why only this one gates.**
-The model reads a posting and quotes a refusal — real comprehension, and the only way to
-catch "unable to consider applications from candidates in other time zones". These three
-checks need no comprehension at all, and asking for them measurably made the model worse:
+The model reads a posting and quotes a refusal — real comprehension. These checks need no
+comprehension at all, and asking for them measurably made the model worse:
 extraction was 8/8 when the prompt was responsible only for clauses that must be read, and
 9/13 after two more categories were added to the same rule. Attention is finite and a
 prompt is not a list.
@@ -19,11 +18,12 @@ ask a model for something a pure function can decide.
 **Not hard filters.** These are irreversible in a `WHERE` clause and merely wrong in a
 score. A filter that drops a real match removes it before anything can measure the
 mistake; a score of 0 is visible in the golden set as a lost positive. BAR.md floors
-filter recall at 0.90 for that reason, and none of these three is confident enough to
-spend that budget.
+filter recall at 0.90 for that reason, and none of these is confident enough to spend
+that budget.
 
 Every check keeps `filters.py`'s polarity: **silence passes.** An unmappable location, an
-unstated language and an absent eligibility clause all yield nothing.
+unstated language, an absent eligibility clause, a job family the résumé has worked in and
+a timezone window the profile's own region spans all yield nothing.
 """
 
 import re
@@ -93,6 +93,35 @@ _FAMILIES: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (
 )
 
 
+# A stated working-hours window: a named zone and how far either side of it the employer
+# will go. Both halves are required — a posting that merely mentions CET has stated no
+# window, and inventing a tolerance would be this file guessing.
+_TIMEZONE_WINDOW = re.compile(
+    r"\b(CET|CEST|EET|EEST|WET|GMT|UTC|BST|EST|EDT|CST|PST|PDT|IST)\b"
+    r"[^.\n]{0,20}?[+±]/?-\s*(\d+(?:\.\d+)?)\s*h",
+    re.I,
+)
+
+# What those zone names are worth in UTC hours. Daylight variants included as themselves
+# rather than normalised, because a posting saying CEST means the summer window.
+_ZONE_OFFSETS: dict[str, float] = {
+    "WET": 0.0,
+    "GMT": 0.0,
+    "UTC": 0.0,
+    "BST": 1.0,
+    "CET": 1.0,
+    "CEST": 2.0,
+    "EET": 2.0,
+    "EEST": 3.0,
+    "IST": 5.5,
+    "EST": -5.0,
+    "EDT": -4.0,
+    "CST": -6.0,
+    "PST": -8.0,
+    "PDT": -7.0,
+}
+
+
 def check(job: Job, profile: ProfileRead, resume: str) -> list[str]:
     """Every deterministic bar this pair trips. Empty is the common case."""
     found = [
@@ -100,6 +129,7 @@ def check(job: Job, profile: ProfileRead, resume: str) -> list[str]:
         _language(job, resume),
         _eligibility(job, profile),
         _family(job, resume),
+        _timezone(job, profile),
     ]
     return [bar for bar in found if bar]
 
@@ -171,6 +201,51 @@ def _family(job: Job, resume: str) -> str | None:
         if any(word in title for word in titles) and not any(word in lowered for word in evidence):
             return f"role is {name}; the résumé shows no experience in it"
     return None
+
+
+def _timezone(job: Job, profile: ProfileRead) -> str | None:
+    """A stated working-hours window the profile's own location cannot reach.
+
+    **The category the model was carrying until it was demoted to advisory**, and the one
+    the other bars here structurally could not compute: `Located in the CET timezone (+/- 3
+    hours), we are unable to consider applications from candidates in other time zones`
+    costs two false positives on the reporting split at 69 and 55.
+
+    It is the sharpest pair-relative case in the file. Four postings in the golden set
+    carry that exact sentence; two are labelled `relevant` and two are not, and the
+    sentence is identical in all four. Only the candidate differs — Kraków sits inside the
+    window and Portland is nine hours outside it. A rule reading the posting alone would
+    look like a precision fix and would delete both true positives.
+
+    Silence passes four ways, and the fourth is the one that keeps this honest: the
+    posting stated no window, or stated a zone this table cannot price, or the profile
+    named no location, or the region it named **spans** the window. A country is not a
+    timezone — the US runs from -10 to -4 — so a range is compared rather than a point and
+    a bar needs every named region to be wholly outside. Anything a range leaves open
+    stays open.
+    """
+    if not profile.locations:
+        return None
+    haystack = " ".join(list(job.locations or []) + [job.location or "", job.description or ""])
+    match = _TIMEZONE_WINDOW.search(haystack)
+    if match is None:
+        return None
+    centre = _ZONE_OFFSETS.get(match.group(1).upper())
+    if centre is None:
+        return None
+    tolerance = float(match.group(2))
+    low, high = centre - tolerance, centre + tolerance
+
+    spans = [
+        regions.offsets(code) for place in profile.locations for code in regions.named_in(place)
+    ]
+    known = [span for span in spans if span is not None]
+    if not known or any(span[0] <= high and span[1] >= low for span in known):
+        return None
+    return (
+        f"posting requires {match.group(1).upper()} +/- {match.group(2)} hours "
+        f"(UTC{low:+g} to UTC{high:+g}); the profile is in {', '.join(profile.locations)}"
+    )
 
 
 def _eligibility(job: Job, profile: ProfileRead) -> str | None:

@@ -187,3 +187,58 @@ def covers(authorised: set[str], wanted: set[str]) -> bool:
     if "EU" in wanted and expanded & _EU_MEMBERS:
         return True
     return bool(expanded & wanted)
+
+
+# UTC offsets a region spans, as (earliest, latest) in hours. Ranges rather than points
+# because a country is not a timezone: the US runs from -10 to -4 and Portland could be
+# any of them from "Portland, Oregon" alone. A range is what the table can honestly say,
+# and `offsets` below only answers questions the range settles either way.
+#
+# Partial on purpose, like `_EU_MEMBERS`: a region that is missing yields no answer and
+# therefore blocks nothing.
+_UTC_OFFSETS: dict[str, tuple[float, float]] = {
+    "US": (-10.0, -4.0),
+    "CA": (-8.0, -3.5),
+    "MX": (-8.0, -5.0),
+    "BR": (-5.0, -2.0),
+    "AR": (-3.0, -3.0),
+    "UY": (-3.0, -3.0),
+    "CO": (-5.0, -5.0),
+    "GB": (0.0, 1.0),
+    "IE": (0.0, 1.0),
+    "PT": (0.0, 1.0),
+    # The bloc spans WET through EET, so it settles a question only for a window that
+    # misses all of it.
+    "EU": (0.0, 3.0),
+    "DE": (1.0, 2.0),
+    "FR": (1.0, 2.0),
+    "NL": (1.0, 2.0),
+    "PL": (1.0, 2.0),
+    "IT": (1.0, 2.0),
+    "ES": (1.0, 2.0),
+    "CH": (1.0, 2.0),
+    "SE": (1.0, 2.0),
+    "NO": (1.0, 2.0),
+    "BG": (2.0, 3.0),
+    "RO": (2.0, 3.0),
+    "EG": (2.0, 3.0),
+    "ZA": (2.0, 2.0),
+    "IL": (2.0, 3.0),
+    "TR": (3.0, 3.0),
+    "AE": (4.0, 4.0),
+    "IN": (5.5, 5.5),
+    "TH": (7.0, 7.0),
+    "VN": (7.0, 7.0),
+    "SG": (8.0, 8.0),
+    "HK": (8.0, 8.0),
+    "TW": (8.0, 8.0),
+    "AU": (8.0, 11.0),
+    "JP": (9.0, 9.0),
+    "KR": (9.0, 9.0),
+    "NZ": (12.0, 13.0),
+}
+
+
+def offsets(code: str) -> tuple[float, float] | None:
+    """The UTC offset range a region spans, or None when the table does not say."""
+    return _UTC_OFFSETS.get(code)
