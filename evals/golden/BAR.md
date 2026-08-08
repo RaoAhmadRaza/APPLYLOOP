@@ -169,6 +169,37 @@ and the second run reads its own output.
 
 ## 8. Amendment log
 
-Empty. Any change to §2, §3, §4 or §5 after the first scored run must be recorded here
-with the date, the evidence that forced it, and a matching entry in `docs/DECISIONS.md`.
-A silent edit to this file is the same defect as never having written it.
+Any change to §2, §3, §4 or §5 after the first scored run must be recorded here with the
+date, the evidence that forced it, and a matching entry in `docs/DECISIONS.md`. A silent
+edit to this file is the same defect as never having written it.
+
+### OPEN — §7's hard-negative floor contradicts §7's own sampling plan (2026-08-08)
+
+**Not yet amended. A human decides.** Raised before any pair was scored.
+
+§7 requires ≥60% of `not_relevant` labels to be `hard`, and §7 also defines four strata,
+**two of which exist to produce structurally easy negatives**: `filtered_out` verifies
+that a hard filter dropped something correctly, and `pool_random` is the uniform
+calibration draw whose whole job is to scream if a filter has emptied the pool. A
+Head of Marketing that failed a seniority filter is an easy negative *by construction*,
+and that is the stratum working, not failing.
+
+Measured on the first fully labelled 64-pair set:
+
+```
+overall                                    12/32 hard = 38%
+on_topic + candidate_random (reached the model)   5/8  hard = 63%
+filtered_out                                5/16 hard = 31%
+pool_random                                 2/8  hard = 25%
+```
+
+The floor exists so that "precision on hard negatives" is a meaningful number, and that
+metric is only computed over pairs the matcher actually judged. So the coherent version
+is: **scope the ≥60% floor to `on_topic` + `candidate_random`, and add an absolute floor
+of ≥10 hard negatives overall** so the set cannot decay toward easy as it grows.
+
+Deliberately left unapplied. Editing a bar to match a result is the exact move §3 forbids,
+and the fact that it would be a *correct* edit here is not a reason to make it silently —
+it is the reason to write it down and let someone else agree. Until it is applied,
+`test_enough_of_the_negatives_are_hard` enforces the original wording on any `confirmed`
+set.

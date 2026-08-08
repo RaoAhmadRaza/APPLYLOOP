@@ -38,7 +38,7 @@ promoted column the user set.
 
 | Clause | Status | Evidence |
 |---|---|---|
-| Golden-set precision meets the bar set **in advance** | 🟡 **bar set, set unlabelled** | `evals/golden/BAR.md` was committed **alone and first**, before any scored output existed — `git log --diff-filter=A` on it is what makes "in advance" auditable. It pins precision ≥ 0.80, a recall floor, filter recall ≥ 0.90, a minimum positive count below which a run is *inconclusive*, a pool floor, a per-filter cap and a cost ceiling. `evals/golden/pairs.json` holds 56 stratified pairs with every label blank. **Blocked on a human labelling them.** |
+| Golden-set precision meets the bar set **in advance** | 🟡 **bar set, 64 pairs model-PROPOSED, awaiting human review** | `evals/golden/BAR.md` was committed **alone and first**, before any scored output existed — `git log --diff-filter=A` on it is what makes "in advance" auditable. It pins precision ≥ 0.80, a recall floor, filter recall ≥ 0.90, a minimum positive count below which a run is *inconclusive*, a pool floor, a per-filter cap and a cost ceiling. `evals/golden/pairs.json` holds **64 stratified pairs, all labelled by a model and marked `_meta.status: proposed`** — 23 relevant, 32 not_relevant, 9 borderline, each with a one-line rationale. **The live gate refuses to run on a `proposed` set**; a human must review, correct, set `labelled_by` to `human:<initials>` and flip the status. Building the set took four draws and found more than it measured — see DECISIONS.md → M4 → "The golden set's own construction". |
 | Hard filters demonstrably drop mismatches **before** embedding | ✅ **offline; live half waits on labels** | Proven structurally rather than by a call-order spy: `test_matching.py` asserts **no `job_embeddings` row exists** for a filtered job — an embedding row is the physical receipt that a job reached a paid stage. Plus the counter chain is asserted non-increasing, and `set(ids_sent_to_llm) ⊆ set(filtered_ids)`. 34 filter tests cover all five polarity laws. |
 | Cost per 1,000 jobs scored is measured | ✅ **mechanism ships** | `llm.complete_json` takes a caller-owned `usage` sink, appended **per attempt including the one that raises**; `match.scored` carries `embed_tokens`/`prompt_tokens`/`completion_tokens`. The live gate asserts `prompt_tokens > 0` **and** `embed_tokens > 0`, which is also the anti-stub proof — a fake reports zero. |
 | Every score carries a human-readable reason | ✅ | `MatchReasons` is the `reasons_json` contract; `test_matching.py` asserts every written match has a non-empty summary and a non-empty partition. The live gate additionally asserts every requirement span is **findable in the posting** — M5's fabrication problem caught a milestone early. |
@@ -112,7 +112,7 @@ this first.
 ## Test surface
 
 ```
-567 pass, no network            make test
+577 pass, no network            make test
  12 live, all 8 real feeds      make verify-live-feeds       APPLYLOOP_LIVE_FEEDS=1
   9 live, all 6 real ATS boards make verify-live             APPLYLOOP_LIVE_ATS=1
   3 live, aggregator            make verify-live-aggregator  ← SKIPPED, needs a proxy
@@ -147,6 +147,19 @@ budget, and the parse suite spends real money.
   column-major, so pdfminer recovers the reading order. A real two-column résumé from a
   word processor may not. The fixture still earns its place by proving neither column is
   *dropped*; the reading-order risk stays unmeasured until a real one arrives.
+- **The golden set's hard-negative quota contradicts its own sampling plan.** BAR.md §7
+  wants ≥60% of negatives `hard`, but two of its four strata exist to produce structurally
+  easy ones. Measured: 38% overall, 63% among pairs that reached the model. Recorded as an
+  **open, unapplied amendment** in BAR.md §8 — editing a bar to match a result is what §3
+  forbids, and it being a correct edit is not a reason to make it quietly.
+- **The pool contains 101 copies of one posting.** `Bluelight Consulting / senior software
+  engineer (flask/react)`, plus Jobgether ×42, distinct `external_id`s and uncollapsed by
+  `dedupe_key`. This fires M2's deferred fuzzy-dedupe trigger. The sampler works around it
+  with a per-`(company, title)` cap, which still misses the same role reposted under
+  punctuation variants — two Cloudflare pairs in the set are one role.
+- **M3 does not always split a skills line.** `two_column.pdf` parses to three skills whose
+  `name` is the whole résumé line with `keywords` empty. Anything reading `parsed_json.skills`
+  must handle both shapes — **M5 will read that field to ground résumé text**.
 - **`POST /profiles/{id}/resume` is unauthenticated**, like every other route here. It
   accepts an upload for any profile id. M8's problem, stated so it is not discovered.
 
