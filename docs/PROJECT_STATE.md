@@ -316,8 +316,9 @@ budget, and the parse suite spends real money.
 - **The cover letter is grounded and stilted.** Every paragraph of the second real letter
   opened with the same clause, because the validator's allowed vocabulary leaves almost
   nothing connective to write with. A prompt line now forbids it and **has not been
-  re-measured against a live model**. This is the gap between "passes the gate" and "a
-  person would send this", and it is the first thing the next live run should look at.
+  re-measured**. **Deferred to M6/M7 deliberately** — the gate's question is whether the
+  system invented anything, not whether the prose is good, and a style pass belongs where
+  a user is looking at the output. See DECISIONS → deferred.
 - **`.env` reaches unit tests despite `conftest`'s `_ignore_dotenv`.** Found while a
   settings validator was briefly in place: a unit test's failure quoted `tailor_model` and
   `environment` values that exist only in the local `.env`. Harmless while every field is
@@ -375,9 +376,12 @@ budget, and the parse suite spends real money.
    and a base64 service-account key close it; `make verify-live-drive` proves it. The
    folder **must** be in a Shared Drive — a service account's own Drive has a 0 GB quota.
 
-**Read the letter before signing anything off.** The résumés are good. The letters are
-grounded and read like restated bullets, and no bar in BAR.md catches that. It is the one
-part of M5 where "the gate passes" and "this is shippable" genuinely differ.
+**The Drive mirror does not block the gate.** Same shape as R2 for M3: the clause is
+proven last, when credentials exist, and nothing else waits on it.
+
+**The letters read like restated bullets, and that is deferred, not ignored.** The gate
+asks whether the system invented anything; prose quality is a different question and it
+belongs where a human is reading the output. See DECISIONS → deferred.
 
 **M6 is not in scope until M5's gate is green.**
 
