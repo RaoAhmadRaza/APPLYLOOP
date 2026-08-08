@@ -75,7 +75,12 @@ def is_configured() -> bool:
 
 
 def complete_json[T: BaseModel](
-    schema: type[T], *, system: str, user: str, usage: list[Usage] | None = None
+    schema: type[T],
+    *,
+    system: str,
+    user: str,
+    usage: list[Usage] | None = None,
+    model: str | None = None,
 ) -> T:
     """One structured completion, validated into `schema`.
 
@@ -86,6 +91,12 @@ def complete_json[T: BaseModel](
     them do not want. **Appended once per attempt, including the attempt that raises** —
     a corrective re-ask resends the whole transcript, so it is exactly where a silent 2×
     would hide from a cost measurement.
+
+    `model` overrides `LLM_MODEL` for this call. §7.2 decided scoring gets a cheap model
+    and tailoring gets a strong one, routed — one key through OpenRouter, two slugs. The
+    override lives here rather than in a second client because everything else about the
+    call is identical, and a second client is a second place for the strict-schema
+    rewrite and the usage sink to drift.
     """
     settings = get_settings()
     if settings.llm_api_key is None:
@@ -99,7 +110,9 @@ def complete_json[T: BaseModel](
 
     with client() as http:
         for attempt in range(MAX_ATTEMPTS):
-            content = _ask(http, settings.llm_model, messages, schema.__name__, body_schema, usage)
+            content = _ask(
+                http, model or settings.llm_model, messages, schema.__name__, body_schema, usage
+            )
             try:
                 return schema.model_validate_json(content)
             except ValidationError as error:

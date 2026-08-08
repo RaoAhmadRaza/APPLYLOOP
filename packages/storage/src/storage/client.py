@@ -22,6 +22,7 @@ from storage.settings import Settings, get_settings
 # Object key prefix. Everything under one prefix so a lifecycle rule or a bulk delete
 # can target résumés without touching M5's generated PDFs, which land next to them.
 RESUME_PREFIX = "resumes"
+DOCUMENT_PREFIX = "documents"
 
 
 class StorageError(RuntimeError):
@@ -52,6 +53,21 @@ def build_key(profile_id: uuid.UUID, suffix: str) -> str:
     the key is all `profiles.resume_url` stores.
     """
     return f"{RESUME_PREFIX}/{profile_id}/{uuid.uuid4().hex}{suffix}"
+
+
+def build_document_key(match_id: uuid.UUID, kind: str, version: int, suffix: str) -> str:
+    """`documents/<match_id>/<kind>-v<version>-<random>.pdf`.
+
+    Keyed by match rather than by profile because that is what `documents` rows are keyed
+    by, and because it makes "everything generated for this application" one prefix.
+
+    `version` is in the name as well as on the row so that an object cannot be silently
+    replaced by a later render of the same document — same reasoning as `build_key`'s
+    random component, one level up. The random component stays for the same reason it
+    exists there: two renders of the same version must not collide on a key a reader is
+    mid-fetch on.
+    """
+    return f"{DOCUMENT_PREFIX}/{match_id}/{kind}-v{version}-{uuid.uuid4().hex}{suffix}"
 
 
 def put(key: str, data: bytes, content_type: str) -> str:

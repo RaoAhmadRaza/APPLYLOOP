@@ -15,6 +15,7 @@ local checkout with no bucket still boots, still runs the suite, and still inges
 
 from storage.client import (
     StorageError,
+    build_document_key,
     build_key,
     delete,
     get,
@@ -26,6 +27,7 @@ from storage.settings import Settings, get_settings
 __all__ = [
     "Settings",
     "StorageError",
+    "build_document_key",
     "build_key",
     "delete",
     "get",
