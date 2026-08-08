@@ -164,6 +164,26 @@ def test_a_model_labelled_set_is_marked_proposed_and_cannot_be_confirmed() -> No
         assert str(pair["labelled_by"]).startswith(("human:", "model:"))
 
 
+def test_a_confirmed_set_has_no_unlabelled_pairs() -> None:
+    """The invariant that makes extending the set safe.
+
+    Every consumer filters on `label is not None`, so an unlabelled pair does not fail —
+    it silently shrinks the denominator. Add 80 rows to a `confirmed` set, label 40, and
+    the gate reports precision over the half someone finished, with no indication that it
+    is measuring half a set.
+
+    So `confirmed` means *fully* labelled. The extension flow drops the set back to
+    `proposed`, which this permits and the live gate refuses to run on.
+    """
+    if _load()["_meta"].get("status", "confirmed") != "confirmed":
+        pytest.skip("golden set is 'proposed' — unlabelled pairs are expected mid-extension")
+    unlabelled = [pair for pair in _pairs() if pair["label"] is None]
+    assert not unlabelled, (
+        f"{len(unlabelled)} pairs are unlabelled in a confirmed set — every consumer "
+        "filters them out, so this shrinks the denominator rather than failing"
+    )
+
+
 def test_enough_of_the_negatives_are_hard() -> None:
     """BAR.md §7, as amended 2026-08-08. Two floors, because one number could not say it.
 

@@ -61,8 +61,8 @@ BAR_PRECISION = 0.80
 BAR_RECALL = 0.50
 BAR_FILTER_RECALL = 0.90
 MIN_PREDICTED_POSITIVES = 8
-POOL_FLOOR = 200
-PER_FILTER_CAP = 0.70
+# POOL_FLOOR and PER_FILTER_CAP live in `test_filters_live.py` — they are properties of
+# the filters against the real pool, and unmeasurable against seeded payloads.
 COST_CEILING_PER_1K = 2.00
 
 # BAR.md §5. Beside the model names so they cannot go stale unnoticed.
@@ -76,6 +76,11 @@ USD_PER_MTOK = {"embed": 0.02, "prompt": 0.05, "completion": 0.40}
 # one profile's score distribution and applied it to three others — overfitting by
 # construction, through a door §3's "lowest, not best" rule does not cover.
 MIN_TUNE_POSITIVES = 5
+
+# BAR.md §3's stability rule. The chosen threshold must clear every bar on this many
+# consecutive runs. Default 1 so iterating on the prompt costs one pass; the gate itself
+# is run with 3, which is what `make verify-live-match` sets.
+MATCH_RUNS = int(os.getenv("APPLYLOOP_MATCH_RUNS", "1"))
 
 
 @dataclass(frozen=True)
@@ -117,14 +122,35 @@ def _labelled(data: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 @pytest.fixture(scope="session")
-def run(engine: Engine) -> dict[str, Any]:
-    """Score the whole golden set once, for real, and hand every test the summary.
+def runs(engine: Engine) -> list[dict[str, Any]]:
+    """Score the whole golden set `MATCH_RUNS` times.
 
-    Session-scoped because this is the expensive thing in the repo: one pass, then five
-    named assertions over what it produced. It opens its own session and rolls back, so
-    the eval never leaves rows behind — and each golden profile gets its **own** `User`,
-    because `matches` is keyed `(user_id, job_id)` with no `profile_id` and without that
-    an eval run would write into the same rows as the real matcher.
+    More than one because **the gate is not deterministic**: two consecutive passes over
+    an identical set and unchanged code gave precision 0.62 and 0.50 at the same
+    threshold. `score()` is pure, but `met`/`missing` come from a model, so the score
+    inherits the model's variance and a threshold pinned from a single run is pinned to
+    noise. BAR.md §3 requires the chosen threshold to clear on every run.
+    """
+    return [_score_once(engine) for _ in range(MATCH_RUNS)]
+
+
+@pytest.fixture(scope="session")
+def run(runs: list[dict[str, Any]]) -> dict[str, Any]:
+    """The first pass. Everything that is not the threshold reads this.
+
+    Filter recall, grounding, cost and the funnel are properties of one pass; running
+    them three times would triple the spend to re-measure the same thing.
+    """
+    return runs[0]
+
+
+def _score_once(engine: Engine) -> dict[str, Any]:
+    """One full pass over the golden set, for real.
+
+    Opens its own session and rolls back, so the eval never leaves rows behind — and each
+    golden profile gets its **own** `User`, because `matches` is keyed `(user_id, job_id)`
+    with no `profile_id` and without that an eval run would write into the same rows as
+    the real matcher.
     """
     data = _golden()
     pairs = _labelled(data)
@@ -146,8 +172,10 @@ def run(engine: Engine) -> dict[str, Any]:
             view = ProfileRead.model_validate(profile)
             prefs = Prefs.model_validate(profile.prefs_json or {})
 
-            # The real funnel over the real pool — this is what the pool floor and the
-            # per-filter cap are asserted against.
+            # The funnel over the **seeded** pool — this profile's stored payloads, not
+            # production. It attributes which filter dropped each pair, which is what the
+            # per-pair `expected_filter` assertions need. It is NOT a measurement of the
+            # filters against the real pool; that is `test_filters_live.py`.
             candidate_ids, funnel = filters.candidates(session, view, prefs)
             funnels[fixture] = funnel.as_payload()
 
@@ -279,14 +307,19 @@ def _chosen(scored: list[Scored]) -> tuple[int, float, float, int] | None:
 
 
 def test_a_threshold_clears_both_the_precision_bar_and_the_recall_floor(
-    run: dict[str, Any],
+    runs: list[dict[str, Any]],
 ) -> None:
     """The headline.
 
     The recall floor is not decoration: without it, a threshold of 100 labels nothing a
     good fit, precision is 1.0 by vacuity, and a matcher that matches nothing passes.
+
+    The threshold is chosen **once**, by §3's procedure, on the first run's tuning split.
+    It is then applied unchanged to every run's reporting split and must clear on all of
+    them. Re-choosing per run would let each pass pick whichever cut happened to suit it,
+    which is the overfitting §3 forbids wearing a stability rule as a disguise.
     """
-    scored: list[Scored] = run["scored"]
+    scored: list[Scored] = runs[0]["scored"]
     picked = _chosen(scored)
     if picked is None:
         # A gate that fails without saying which bar it missed sends the next session
@@ -323,22 +356,37 @@ def test_a_threshold_clears_both_the_precision_bar_and_the_recall_floor(
     )
 
     threshold = picked[0]
-    report = [row for row in scored if row.split == "report"]
-    rows = [row for row in _sweep(report) if row[0] == threshold]
-    assert rows, f"threshold {threshold} produced no positives on the reporting split"
-    _, precision, recall, positives = rows[0]
-
-    print(f"\n  threshold          {threshold}")
+    print(f"\n  threshold          {threshold}   (chosen on run 1's tuning split)")
     print(f"  tuning  precision  {picked[1]:.2f}  recall {picked[2]:.2f}  n={picked[3]}")
-    print(f"  report  precision  {precision:.2f}  recall {recall:.2f}  n={positives}")
+
+    # Every run's reporting split, at that one threshold. Collected before asserting so a
+    # failure shows the whole spread rather than stopping at the first bad pass — the
+    # spread is the measurement, and one number without it is what this rule exists to
+    # stop anyone pinning.
+    results = []
+    for index, single in enumerate(runs, start=1):
+        report = [row for row in single["scored"] if row.split == "report"]
+        rows = [row for row in _sweep(report) if row[0] == threshold]
+        if not rows:
+            results.append((index, 0.0, 0.0, 0))
+            continue
+        _, precision, recall, positives = rows[0]
+        results.append((index, precision, recall, positives))
+
+    for index, precision, recall, positives in results:
+        print(f"  report  run {index}    p={precision:.2f}  r={recall:.2f}  n={positives}")
+    if len(results) > 1:
+        spread = max(row[1] for row in results) - min(row[1] for row in results)
+        print(f"  precision spread   {spread:.2f} across {len(results)} runs")
     print(f"\n  MATCH_THRESHOLD={threshold}")
 
-    assert positives >= MIN_PREDICTED_POSITIVES, (
-        f"{positives} predicted positives on the reporting split — BAR.md §2 calls this "
-        "inconclusive, not green"
-    )
-    assert precision >= BAR_PRECISION
-    assert recall >= BAR_RECALL
+    for index, precision, recall, positives in results:
+        assert positives >= MIN_PREDICTED_POSITIVES, (
+            f"run {index}: {positives} predicted positives on the reporting split — "
+            "BAR.md §2 calls this inconclusive, not green"
+        )
+        assert precision >= BAR_PRECISION, f"run {index}: precision {precision:.2f}"
+        assert recall >= BAR_RECALL, f"run {index}: recall {recall:.2f}"
 
 
 def test_precision_on_hard_negatives_is_reported(run: dict[str, Any]) -> None:
@@ -374,25 +422,23 @@ def test_a_filtered_pair_never_reached_a_paid_stage(run: dict[str, Any]) -> None
             assert row.reasons == {}
 
 
-def test_the_filters_did_not_quietly_empty_the_pool(run: dict[str, Any]) -> None:
-    """BAR.md §2's pool floor.
+def test_the_funnel_is_reported(run: dict[str, Any]) -> None:
+    """Print where each profile's pool went, and assert only what is measurable here.
 
-    Measured before the bar was set: an exact-array location filter left every fixture
-    profile with at most three candidates out of 1,458 — which produces excellent
-    precision over nothing at all and passes every other clause of the gate.
+    **The pool floor and the per-filter cap moved to `test_filters_live.py`.** They cannot
+    be asserted in this harness: §7 requires a golden run to seed only the stored payloads,
+    so the pool is one profile's pairs — 16 rows — and a floor of 200 is a failure the
+    matcher cannot fix. Asserting them here reported a defect that did not exist while
+    saying nothing about the filters against the pool that actually bills. See BAR.md §8.
     """
     for fixture, funnel in run["funnels"].items():
         print(f"\n  {fixture}: {funnel}")
-        assert funnel["candidates"] >= POOL_FLOOR, f"{fixture} left {funnel['candidates']}"
-
-
-def test_no_single_filter_drops_almost_everything(run: dict[str, Any]) -> None:
-    """A filter that drops everything and one that drops nothing are the same defect."""
-    for fixture, funnel in run["funnels"].items():
-        pool = funnel["pool"]
-        for name, dropped in funnel.items():
-            if name.startswith("dropped_"):
-                assert dropped <= PER_FILTER_CAP * pool, f"{fixture}: {name} took {dropped}/{pool}"
+        assert (
+            funnel["pool"]
+            == sum(funnel[key] for key in funnel if key.startswith("dropped_"))
+            + funnel["candidates"]
+            + funnel["already_scored"]
+        ), f"{fixture}: the funnel does not sum to the pool — a job was counted twice"
 
 
 def test_the_filters_rarely_kill_something_genuinely_relevant(run: dict[str, Any]) -> None:

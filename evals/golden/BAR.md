@@ -37,8 +37,8 @@ matcher that needs tuning.
 | **recall@threshold** | **≥ 0.50** | Without a recall floor the gate is passable by a matcher that matches nothing: set the threshold to 100, label nothing `good_fit`, and precision is 1.0 by vacuity. This is the single most important line in the file. |
 | **filter recall** | **≥ 0.90** | Of pairs labelled relevant, at most one in ten may be killed by a hard filter. Filters are free and irreversible; this is where a silent `WHERE false` shows up. |
 | **predicted positives on the reporting split** | **≥ 8** | Below this the run is **inconclusive, not green**. Precision over three items is noise, and a threshold sweep will always find some cut with two-for-two. |
-| **candidate pool floor, per profile** | **≥ 200** | The filters must leave a usable pool. Measured before this bar was set: an exact-array location filter left every fixture profile with ≤ 3 candidates out of 1,458, which would have produced excellent precision over nothing. |
-| **per-filter cap** | **≤ 0.70 of pool** | No single filter may drop more than 70% of the pool. A filter that drops everything and a filter that drops nothing are the same class of defect and neither raises. |
+| **candidate pool floor, per profile** | **≥ 200**, against the **real pool** | The filters must leave a usable pool. Measured before this bar was set: an exact-array location filter left every fixture profile with ≤ 3 candidates out of 1,458, which would have produced excellent precision over nothing. **Asserted by `make verify-live-pool`, not by the golden run** — see §8, 2026-08-08. |
+| **per-filter cap** | **≤ 0.70 of pool**, against the **real pool** | No single filter may drop more than 70% of the pool. A filter that drops everything and a filter that drops nothing are the same class of defect and neither raises. Same harness as the floor above. |
 | **cost per 1,000 jobs scored** | **≤ $2.00** | Denominator pinned in §5. Generous on purpose — this is a ceiling that catches an accident, not a target to optimise toward. |
 
 ## 3. How the threshold is chosen
@@ -59,13 +59,31 @@ The **procedure** is fixed here; the number is not, and must not be.
 **Split:** each pair carries an explicit `split` of `tune` or `report`, assigned stratified
 over (profile, label) — two of every five, sorted by `job_id`, so the assignment is
 reproducible without an RNG and every profile and both labels appear on both sides.
-Assignment is fixed and never re-rolled. Both numbers are reported side by side; a large
-gap between them *is* the overfitting signal and is worth more than either number alone.
+**A pair's split is frozen the moment it has been scored, and pairs are only ever added.**
+Re-running the stratified assignment over the whole set after a gate run would re-roll the
+split of every pair whose score is now known, which is the result-fitting §3 exists to
+forbid — it would be choosing, with the answers visible, which pairs get to set the
+threshold and which get to judge it. New pairs are assigned by the same deterministic rule
+applied to the new pairs alone, balancing whichever side needs them. Both numbers are
+reported side by side; a large gap between them *is* the overfitting signal and is worth
+more than either number alone.
 
 **The tuning split has a floor too:** no threshold may be chosen on fewer than **5
 predicted positives**. §2's ≥8 floor guards the reporting split; a tuning split with two
 positives picks a threshold out of noise and then hands it to the reporting split with
 false authority. Amended 2026-08-08 — see §8.
+
+**5. The chosen threshold must clear every bar on 3 consecutive runs**, and the precision
+spread across them is reported. `score()` is pure, but `met` and `missing` come from a
+model, so a run is a sample rather than a measurement — two consecutive passes over an
+identical set and unchanged code produced precision 0.62 and 0.50 at the same threshold.
+One passing run is not evidence that the matcher clears the bar; it is evidence that one
+sample did.
+
+The threshold is chosen **once**, on the first run's tuning split, and then applied
+unchanged to every run's reporting split. Re-choosing it per run would let each pass pick
+whichever cut suited it, which is step 2's overfitting wearing a stability rule as a
+disguise. Amended 2026-08-08 — see §8.
 
 ## 4. Label boundaries
 
@@ -188,6 +206,57 @@ and the second run reads its own output.
 Any change to §2, §3, §4 or §5 after the first scored run must be recorded here with the
 date, the evidence that forced it, and a matching entry in `docs/DECISIONS.md`. A silent
 edit to this file is the same defect as never having written it.
+
+### APPLIED — a single run is a sample, not a measurement (2026-08-08)
+
+**Approved by the project owner. Raised by the first live gate run.**
+
+Two consecutive gate runs, identical set, unchanged code, same threshold:
+
+```
+run A   threshold 50   precision 0.62   recall 0.62
+run B   threshold 50   precision 0.50   recall 0.50
+```
+
+`score.py`'s docstring says a re-run over an unchanged pair produces an unchanged score.
+That is true of the arithmetic and false of the pipeline: `met` and `missing` come from a
+model, so the deterministic-scorer argument covers only the second half of the path. A
+0.12 precision swing is larger than the margin most threshold choices turn on.
+
+Left alone, this makes the bar passable by luck. Anyone re-running a failing gate until it
+goes green would be sampling, not fixing — and the procedure in §3 would not catch it,
+because each individual run followed the procedure correctly.
+
+**Applied:** §3 gains step 5 — the threshold is chosen once and must clear on 3
+consecutive runs, with the spread reported. `APPLYLOOP_MATCH_RUNS` drives it (default 1
+for iteration, 3 in `make verify-live-match`).
+
+### APPLIED — the pool floor was unmeasurable where it was asserted (2026-08-08)
+
+**Approved by the project owner. Raised by the first live gate run, which failed on it.**
+
+§2 floors the candidate pool at 200 per profile. §7 requires a golden run to **seed the
+stored payloads rather than reading production**, so that a pair cannot rot when
+`close_missing` or a dedupe promotion removes a job. Those two clauses cannot both hold:
+the seeded pool is one profile's pairs — 16 rows — so the floor fails by construction, no
+matter how good the filters are. The first gate run duly reported
+`career_changer.docx left 10`, which is not a defect and never was.
+
+Left where it was, the clause did two harmful things at once: it reported a failure that
+did not exist, and it said nothing about the filters against the pool that actually bills.
+
+**Applied:** the floor and the per-filter cap move to `tests/integration/test_filters_live.py`
+(`make verify-live-pool`), which runs `filters.candidates()` for each fixture profile
+against the real open pool. Read-only — it constructs `ProfileRead` in memory with a
+synthetic `user_id`, so it inserts nothing and `_already_scored` matches nothing.
+
+The golden run keeps a funnel print and one assertion that the funnel **sums to the pool**,
+which is the only property of it that is true in that harness — and which catches a job
+being attributed to two filters.
+
+**Rejected:** deleting the clause, which would lose the guard that caught the `WHERE false`
+location filter; and seeding golden runs from production, which would make precision move
+with no code change — the exact rot §7's payload pinning exists to prevent.
 
 ### APPLIED — §3's split was positional, and therefore a profile split (2026-08-08)
 

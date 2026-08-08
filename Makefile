@@ -129,8 +129,17 @@ verify-live-parse:
 # this one is materially more expensive than the parse suite — and because the whole
 # point is that it cannot be made green by a fake. It prints the threshold the data
 # supports; that number goes into MATCH_THRESHOLD.
+# APPLYLOOP_MATCH_RUNS=3 because the gate is not deterministic: two consecutive passes
+# over an identical set gave precision 0.62 and 0.50 at the same threshold. The chosen
+# threshold must clear on all three. Override to 1 while iterating on the prompt.
 verify-live-match:
-	APPLYLOOP_LIVE_MATCH=1 uv run pytest tests/integration/test_matching_live.py -q -s
+	APPLYLOOP_LIVE_MATCH=1 APPLYLOOP_MATCH_RUNS=3 uv run pytest tests/integration/test_matching_live.py -q -s
+
+# BAR.md §2's pool floor and per-filter cap, which are properties of the filters against
+# the REAL pool and cannot be measured in the golden harness — §7 pins that to stored
+# payloads, so its pool is 16 rows per profile. Read-only: no model, no writes, no cost.
+verify-live-pool:
+	APPLYLOOP_LIVE_POOL=1 uv run pytest tests/integration/test_filters_live.py -q -s
 
 # Object storage against a real bucket. Needs STORAGE_* set; skips otherwise, because
 # unconfigured storage is a supported state.
