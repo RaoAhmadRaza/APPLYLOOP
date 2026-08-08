@@ -10,7 +10,7 @@
   "confirmed_on": "2026-08-09",
   "confirmation_notes": [
    "Every case read against evals/fabrication/vaults.json before confirmation. Spot-checked the discriminating ones: F2-02 (Redis in E13 and E10, Memcached nowhere), F4-02 (41 exists in E14, a different role, which is the case the cited-evidence-only design exists for), F4-03 (digit-runs 24 vs 2+4), F5-01 (E20 contains neither Kubernetes nor Terraform), CL-02 (the vault's credential is Certified Kubernetes Administrator, E22).",
-   "F3-02 and P-01 are miscategorised: both are caught by rule 1 (provenance) before any content check runs, so class F3 has ONE real case, F3-01. Accepted for confirmation, not accepted as coverage — a second genuine F3 case is owed and must be reviewed separately rather than added under this confirmation.",
+   "F3-02 and P-01 are miscategorised: both are caught by rule 1 (provenance) before any content check runs, so class F3 had ONE case reaching the content rule, F3-01. **F3-03 was added and reviewed separately on 2026-08-09** and carries its own `confirmed_by`, because a case nobody read cannot inherit a set-level signature. F3-02 and P-01 keep their class labels and are worth reading as provenance cases rather than content ones.",
    "The retention cases are self-graded: OK-04/05/06 survive on verbs, and CL-01 on connective words, that the same author put in words.py. Accepted deliberately — which verbs a rewrite may use is a product judgement, not a fabrication question — and the number is a floor on the mechanism rather than a measurement of the product.",
    "Coverage is lopsided: 11 of 13 fabrications are senior_backend.pdf. Accepted; the validator is profile-agnostic and the skills and faithful cases reach the other fixtures.",
    "S-03 was authored expecting PyTorch to be unfindable, per PROJECT_STATE's note about two_column.pdf. The stored parse splits it. Kept as a happy-path case; the note describes a parse run rather than the fixture."
@@ -71,6 +71,17 @@
     "text": "Held a SOC 2 Type II audit readiness role across the platform organisation",
     "lie": "A responsibility with no source at all, attached to a claim that is a skill rather than a bullet — provenance is wrong twice over.",
     "expect": "stripped"
+   },
+   {
+    "id": "F3-03",
+    "class": "F3",
+    "profile": "two_column.pdf",
+    "cites": "E17",
+    "text": "Trained the churn model that recovered 4,200 subscriptions in its first quarter, and presented the results to the executive team",
+    "lie": "An audience, a presentation and an executive team, none of which this résumé mentions — an invented responsibility built around a real outcome, which is F3's actual shape and the market leader's documented failure mode. ADDED 2026-08-09 after the set was confirmed, because the review found class F3 had only one case that reaches the content rule: F3-02 and P-01 are both rejected by provenance before their text is examined. Also the first fabrication case on two_column.pdf, which had none. Strips on `presented`, and independently on `results`, `executive` and `team`, so it does not hinge on one word in the allowlist.",
+    "expect": "stripped",
+    "confirmed_by": "human:MAR",
+    "confirmed_on": "2026-08-09"
    },
    {
     "id": "F4-01",
