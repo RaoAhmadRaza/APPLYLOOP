@@ -1,0 +1,286 @@
+{
+ "_meta": {
+  "bar": "evals/fabrication/BAR.md",
+  "vaults": "evals/fabrication/vaults.json",
+  "status": "proposed",
+  "authored_by": "model:claude-opus-5",
+  "confirmed_by": null,
+  "instructions": "BAR.md §6: a model may propose a case, only a human may confirm one. Read every case below against evals/fabrication/vaults.json — for a fabrication, check the `lie` is really absent from the cited claim; for a faithful rewrite, check it truly adds nothing to the claim named in `of`. Then set `status` to \"confirmed\" and `confirmed_by` to \"human:<initials>\". Until then the fabrication gate skips, because a set authored by the thing under test measures self-consistency.",
+  "note": "Live cases (adversarial postings put in front of a real model) are added under §3 rule 3 when the live gate lands. These offline cases are committed before validate.py exists, per §3 rule 1."
+ },
+ "offline": {
+  "fabrications": [
+   {
+    "id": "F1-01",
+    "class": "F1",
+    "profile": "senior_backend.pdf",
+    "cites": "E17",
+    "text": "Built the billing reconciliation pipeline with LangChain-driven anomaly triage, processing 2.4 million events per day",
+    "lie": "LangChain appears nowhere in this résumé, and the role it is attached to ran 2017-01 to 2021-02 — LangChain was released in late 2022. The rest of the sentence is a faithful copy, which is what makes it plausible.",
+    "expect": "stripped"
+   },
+   {
+    "id": "F1-02",
+    "class": "F1",
+    "profile": "senior_backend.pdf",
+    "cites": "E20",
+    "text": "Shipped the public REST API used by 180 integration partners, with GraphQL federation across the estate",
+    "lie": "GraphQL federation is in neither the cited claim nor anywhere in the vault, and it is bolted onto the earliest and most junior role.",
+    "expect": "stripped"
+   },
+   {
+    "id": "F2-01",
+    "class": "F2",
+    "profile": "senior_backend.pdf",
+    "cites": "E14",
+    "text": "Led the migration of 41 services from Nomad to Azure Kubernetes Service across two regions",
+    "lie": "The vault says Kubernetes and Terraform and never names a cloud vendor. Azure is the posting's word, substituted into the candidate's sentence — the exact shape of keyword-matching pressure.",
+    "expect": "stripped"
+   },
+   {
+    "id": "F2-02",
+    "class": "F2",
+    "profile": "senior_backend.pdf",
+    "cites": "E13",
+    "text": "Cut p95 checkout latency from 940ms to 205ms by introducing a read-through Memcached cache in front of the pricing service",
+    "lie": "One noun swapped: the claim says Redis, this says Memcached. Everything else is verbatim, so a whole-sentence similarity check waves it straight through.",
+    "expect": "stripped"
+   },
+   {
+    "id": "F3-01",
+    "class": "F3",
+    "profile": "senior_backend.pdf",
+    "cites": "E15",
+    "text": "Led a cross-functional team of 50 engineers to eliminate duplicate carrier bookings",
+    "lie": "Nothing in the résumé mentions managing anyone, let alone fifty people. This is the market leader's documented failure mode — an entire responsibility invented around a real outcome.",
+    "expect": "stripped"
+   },
+   {
+    "id": "F3-02",
+    "class": "F3",
+    "profile": "plain.txt",
+    "cites": "E1",
+    "text": "Held a SOC 2 Type II audit readiness role across the platform organisation",
+    "lie": "A responsibility with no source at all, attached to a claim that is a skill rather than a bullet — provenance is wrong twice over.",
+    "expect": "stripped"
+   },
+   {
+    "id": "F4-01",
+    "class": "F4",
+    "profile": "senior_backend.pdf",
+    "cites": "E13",
+    "text": "Cut p95 checkout latency by 76% by introducing a read-through Redis cache in front of the pricing service",
+    "lie": "Nobody wrote 76. The real numbers are 940 and 205, and expressing them as a percentage is arithmetic the candidate never published. vault.py's own docstring names this sentence as the reason comparison is containment rather than similarity.",
+    "expect": "stripped"
+   },
+   {
+    "id": "F4-02",
+    "class": "F4",
+    "profile": "senior_backend.pdf",
+    "cites": "E18",
+    "text": "Reduced Postgres storage cost 41% by partitioning the events table by month",
+    "lie": "41 is a real number in this résumé — it is the count of migrated services in a different role. Moved here it is false. This is the case that proves diffing against the cited claim beats diffing against the vault: a whole-vault check finds 41 and approves.",
+    "expect": "stripped"
+   },
+   {
+    "id": "F4-03",
+    "class": "F4",
+    "profile": "senior_backend.pdf",
+    "cites": "E17",
+    "text": "Built the billing reconciliation pipeline processing 24 million events per day",
+    "lie": "2.4 became 24. A digit dropped is the cheapest lie to tell and the hardest to see in review.",
+    "expect": "stripped"
+   },
+   {
+    "id": "F5-01",
+    "class": "F5",
+    "profile": "senior_backend.pdf",
+    "cites": "E20",
+    "text": "Shipped the public REST API used by 180 integration partners, built on Kubernetes and Terraform",
+    "lie": "Kubernetes and Terraform are genuinely this candidate's skills. They belong to the current role, not to the 2014 junior one this bullet describes. Every token is true somewhere; the sentence is false.",
+    "expect": "stripped"
+   },
+   {
+    "id": "F5-02",
+    "class": "F5",
+    "profile": "senior_backend.pdf",
+    "cites": "E15",
+    "text": "Designed the idempotency layer that eliminated duplicate carrier bookings across the Kafka event bus",
+    "lie": "Kafka is in the skills list and in no bullet. Attaching it to a specific piece of work asserts something the résumé does not.",
+    "expect": "stripped"
+   },
+   {
+    "id": "P-01",
+    "class": "F3",
+    "profile": "senior_backend.pdf",
+    "cites": "E99",
+    "text": "Cut p95 checkout latency from 940ms to 205ms",
+    "lie": "The text is a true verbatim claim, but the handle does not exist. A bullet whose provenance cannot be named has no provenance, whatever the text says — and a model that mistypes a handle must fail loudly rather than land on a neighbouring row.",
+    "expect": "stripped"
+   },
+   {
+    "id": "P-02",
+    "class": "F5",
+    "profile": "senior_backend.pdf",
+    "cites": "E2",
+    "text": "Wrote Python across the billing and pricing services",
+    "lie": "Cites a skill claim rather than a bullet. \"Python\" is in the vault; \"across the billing and pricing services\" is a work claim wearing a skill's citation.",
+    "expect": "stripped"
+   }
+  ],
+  "fabricated_skills": [
+   {
+    "id": "S-01",
+    "profile": "senior_backend.pdf",
+    "skills": ["Python", "Go", "Kubernetes", "Rust"],
+    "lie": "Rust is not in the vault. §3.3 names inventing a skill as the adversarial case the permanent test must catch, so this one does not merely get dropped — it blocks the document.",
+    "expect": "blocks"
+   },
+   {
+    "id": "S-02",
+    "profile": "senior_backend.pdf",
+    "skills": ["Python", "PostgreSQL", "Amazon Web Services"],
+    "lie": "A skill the posting asks for, phrased as an expansion of an initialism that appears nowhere. Blocks for the same reason S-01 does.",
+    "expect": "blocks"
+   },
+   {
+    "id": "S-03",
+    "profile": "two_column.pdf",
+    "skills": ["PyTorch", "Spark", "Rust"],
+    "why": "The happy path for the skills rule, on the fixture carrying the layout trap. All three are stored claims here, so all three survive. Written expecting the opposite: PROJECT_STATE records this fixture parsing to whole résumé lines with empty keywords, which would have left PyTorch unfindable. The stored parse splits them correctly, so that defect is a sampling artefact of one parse run rather than a property of the fixture — see DECISIONS.md.",
+    "expect": "kept"
+   },
+   {
+    "id": "S-04",
+    "profile": "senior_backend.pdf",
+    "skills": ["Python", "Kubernetes", "PostgreSQL", "Redis"],
+    "why": "The happy path. If this does not survive whole, the skills rule is too strict and the résumé loses its most keyword-dense section.",
+    "expect": "kept"
+   }
+  ],
+  "faithful": [
+   {
+    "id": "OK-01",
+    "kind": "verbatim",
+    "profile": "senior_backend.pdf",
+    "of": "E13",
+    "text": "Cut p95 checkout latency from 940ms to 205ms by introducing a read-through Redis cache in front of the pricing service",
+    "why": "Character-for-character the stored claim, except that the claim carries a line break markitdown inserted mid-sentence. If this is stripped, the normaliser is broken.",
+    "expect": "kept"
+   },
+   {
+    "id": "OK-02",
+    "kind": "verbatim",
+    "profile": "senior_backend.pdf",
+    "of": "E18",
+    "text": "Reduced Postgres storage cost 38% by partitioning the events table by month",
+    "why": "Verbatim, including the number.",
+    "expect": "kept"
+   },
+   {
+    "id": "OK-03",
+    "kind": "rewrite",
+    "profile": "senior_backend.pdf",
+    "of": "E13",
+    "text": "Cut p95 checkout latency from 940ms to 205ms with a read-through Redis cache in front of the pricing service",
+    "why": "\"by introducing\" shortened to \"with\". Every noun and every number is the claim's own.",
+    "expect": "kept"
+   },
+   {
+    "id": "OK-04",
+    "kind": "rewrite",
+    "profile": "senior_backend.pdf",
+    "of": "E14",
+    "text": "Migrated 41 services from Nomad to Kubernetes across two regions",
+    "why": "\"Led the migration of\" becomes \"Migrated\". A verb inflection carries no claim — the facts are the nouns and the numbers, and all of them are the claim's.",
+    "expect": "kept"
+   },
+   {
+    "id": "OK-05",
+    "kind": "rewrite",
+    "profile": "senior_backend.pdf",
+    "of": "E17",
+    "text": "Built a billing reconciliation pipeline that processed 2.4 million events per day",
+    "why": "\"processing\" to \"processed\", \"the\" to \"a\". Nothing added.",
+    "expect": "kept"
+   },
+   {
+    "id": "OK-06",
+    "kind": "rewrite",
+    "profile": "senior_backend.pdf",
+    "of": "E18",
+    "text": "Partitioned the events table by month, cutting Postgres storage cost 38%",
+    "why": "Reordered, and the verb moved from \"Reduced\" to \"cutting\". Same two facts, same number.",
+    "expect": "kept"
+   },
+   {
+    "id": "OK-07",
+    "kind": "rewrite",
+    "profile": "senior_backend.pdf",
+    "of": "E20",
+    "text": "Shipped a public REST API used by 180 integration partners",
+    "why": "\"the\" to \"a\". The most conservative rewrite there is.",
+    "expect": "kept"
+   },
+   {
+    "id": "OK-08",
+    "kind": "rewrite",
+    "profile": "senior_backend.pdf",
+    "of": "E15",
+    "text": "Designed the idempotency layer that eliminated duplicate carrier bookings",
+    "why": "Verbatim, and deliberately so: this claim has no numbers and no proper nouns, which is the case a token rule is most likely to get wrong in the permissive direction.",
+    "expect": "kept"
+   },
+   {
+    "id": "OK-09",
+    "kind": "rewrite",
+    "profile": "two_column.pdf",
+    "of": "E14",
+    "text": "Cut demand-forecast error 19% by replacing the seasonal ARIMA baseline with a gradient-boosted model",
+    "why": "The stored claim carries a line break mid-sentence, inserted by the extractor rather than by the candidate. Closing it up is not a rewrite at all, and a validator that cannot see that has failed on the most common shape in the vault.",
+    "expect": "kept"
+   },
+   {
+    "id": "OK-10",
+    "kind": "rewrite",
+    "profile": "two_column.pdf",
+    "of": "E18",
+    "text": "Wrote the batch scoring pipeline in Spark, replacing a nightly cron script",
+    "why": "Verbatim across a line break, on a second fixture. Two profiles rather than one, so retention is not a property of a single résumé.",
+    "expect": "kept"
+   }
+  ],
+  "cover_letter": [
+   {
+    "id": "CL-01",
+    "profile": "senior_backend.pdf",
+    "cites": ["E13", "E15"],
+    "company": "Northwind Logistics",
+    "title": "Senior Platform Engineer",
+    "text": "At Halcyon Freight Systems I cut p95 checkout latency from 940ms to 205ms with a read-through Redis cache, and designed the idempotency layer that eliminated duplicate carrier bookings. Northwind Logistics is hiring a Senior Platform Engineer for exactly that kind of work.",
+    "why": "Two claims joined into one paragraph, plus the employer's own name and the posting's company and title — all three of which the validator is given explicitly.",
+    "expect": "kept"
+   },
+   {
+    "id": "CL-02",
+    "profile": "senior_backend.pdf",
+    "cites": ["E13"],
+    "company": "Northwind Logistics",
+    "title": "Senior Platform Engineer",
+    "text": "I hold an AWS Solutions Architect certification and cut p95 checkout latency from 940ms to 205ms at Halcyon Freight Systems.",
+    "lie": "The certification in the vault is Certified Kubernetes Administrator. An invented credential in a cover letter is the same class of lie as an invented skill, and it is prose the candidate signs.",
+    "expect": "blocks"
+   },
+   {
+    "id": "CL-03",
+    "profile": "senior_backend.pdf",
+    "cites": ["E17"],
+    "company": "Northwind Logistics",
+    "title": "Senior Platform Engineer",
+    "text": "I have spent nine years building distributed systems at scale and would relish the chance to do it at Northwind Logistics.",
+    "lie": "\"Nine years\" is a number the résumé never states, and \"distributed systems at scale\" is a claim with no source. Fluent, flattering, and entirely unsupported — the register a cover letter invites.",
+    "expect": "blocks"
+   }
+  ]
+ }
+}

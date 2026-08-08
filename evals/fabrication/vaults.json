@@ -1,0 +1,462 @@
+{
+ "_meta": {
+  "bar": "evals/fabrication/BAR.md",
+  "built_from": "evals/golden/pairs.json",
+  "built_by": "evals/fabrication/build_vaults.py",
+  "note": "Derived. Regenerate when a résumé fixture changes; never hand-edit."
+ },
+ "vaults": {
+  "career_changer.docx": {
+   "companies": [
+    "Peregrine Housing Trust",
+    "Ashfield Academy"
+   ],
+   "titles": [
+    "Junior Data Analyst",
+    "Secondary School Mathematics Teacher"
+   ],
+   "claims": [
+    {
+     "id": "E1",
+     "kind": "skill",
+     "text": "Languages",
+     "source": "skills[0]"
+    },
+    {
+     "id": "E2",
+     "kind": "skill",
+     "text": "SQL",
+     "source": "skills[0].keywords[0]"
+    },
+    {
+     "id": "E3",
+     "kind": "skill",
+     "text": "Python",
+     "source": "skills[0].keywords[1]"
+    },
+    {
+     "id": "E4",
+     "kind": "skill",
+     "text": "Tools",
+     "source": "skills[1]"
+    },
+    {
+     "id": "E5",
+     "kind": "skill",
+     "text": "dbt",
+     "source": "skills[1].keywords[0]"
+    },
+    {
+     "id": "E6",
+     "kind": "skill",
+     "text": "Power BI",
+     "source": "skills[1].keywords[1]"
+    },
+    {
+     "id": "E7",
+     "kind": "skill",
+     "text": "Excel",
+     "source": "skills[1].keywords[2]"
+    },
+    {
+     "id": "E8",
+     "kind": "title",
+     "text": "Junior Data Analyst",
+     "source": "work[0].position"
+    },
+    {
+     "id": "E9",
+     "kind": "bullet",
+     "text": "Rebuilt the tenancy arrears report in dbt, cutting the monthly close from 6 days to 1",
+     "source": "work[0].highlights[0]"
+    },
+    {
+     "id": "E10",
+     "kind": "bullet",
+     "text": "Automated the weekly occupancy extract that three teams had been copying by hand",
+     "source": "work[0].highlights[1]"
+    },
+    {
+     "id": "E11",
+     "kind": "title",
+     "text": "Secondary School Mathematics Teacher",
+     "source": "work[1].position"
+    },
+    {
+     "id": "E12",
+     "kind": "bullet",
+     "text": "Taught A-level statistics to 140 students across eight years",
+     "source": "work[1].highlights[0]"
+    },
+    {
+     "id": "E13",
+     "kind": "credential",
+     "text": "University of Manchester",
+     "source": "education[0]"
+    }
+   ]
+  },
+  "plain.txt": {
+   "companies": [
+    "Cobalt Ledger",
+    "Marrow & Finch"
+   ],
+   "titles": [
+    "Backend Engineer",
+    "Junior Developer"
+   ],
+   "claims": [
+    {
+     "id": "E1",
+     "kind": "skill",
+     "text": "Languages",
+     "source": "skills[0]"
+    },
+    {
+     "id": "E2",
+     "kind": "skill",
+     "text": "Python",
+     "source": "skills[0].keywords[0]"
+    },
+    {
+     "id": "E3",
+     "kind": "skill",
+     "text": "Java",
+     "source": "skills[0].keywords[1]"
+    },
+    {
+     "id": "E4",
+     "kind": "skill",
+     "text": "Infrastructure",
+     "source": "skills[1]"
+    },
+    {
+     "id": "E5",
+     "kind": "skill",
+     "text": "PostgreSQL",
+     "source": "skills[1].keywords[0]"
+    },
+    {
+     "id": "E6",
+     "kind": "skill",
+     "text": "RabbitMQ",
+     "source": "skills[1].keywords[1]"
+    },
+    {
+     "id": "E7",
+     "kind": "skill",
+     "text": "Docker",
+     "source": "skills[1].keywords[2]"
+    },
+    {
+     "id": "E8",
+     "kind": "title",
+     "text": "Backend Engineer",
+     "source": "work[0].position"
+    },
+    {
+     "id": "E9",
+     "kind": "bullet",
+     "text": "Replaced the nightly settlement batch with a streaming consumer, cutting end-of-day\n  reconciliation from four hours to eleven minutes",
+     "source": "work[0].highlights[0]"
+    },
+    {
+     "id": "E10",
+     "kind": "bullet",
+     "text": "Owned the Postgres upgrade from 12 to 16 with no scheduled downtime",
+     "source": "work[0].highlights[1]"
+    },
+    {
+     "id": "E11",
+     "kind": "title",
+     "text": "Junior Developer",
+     "source": "work[1].position"
+    },
+    {
+     "id": "E12",
+     "kind": "bullet",
+     "text": "Built the internal invoicing tool still used by the finance team",
+     "source": "work[1].highlights[0]"
+    },
+    {
+     "id": "E13",
+     "kind": "credential",
+     "text": "University of Edinburgh",
+     "source": "education[0]"
+    }
+   ]
+  },
+  "senior_backend.pdf": {
+   "companies": [
+    "Halcyon Freight Systems",
+    "Verdigris Analytics",
+    "Tessellate Labs"
+   ],
+   "titles": [
+    "Staff Software Engineer",
+    "Senior Backend Engineer",
+    "Backend Engineer"
+   ],
+   "claims": [
+    {
+     "id": "E1",
+     "kind": "skill",
+     "text": "Languages",
+     "source": "skills[0]"
+    },
+    {
+     "id": "E2",
+     "kind": "skill",
+     "text": "Python",
+     "source": "skills[0].keywords[0]"
+    },
+    {
+     "id": "E3",
+     "kind": "skill",
+     "text": "Go",
+     "source": "skills[0].keywords[1]"
+    },
+    {
+     "id": "E4",
+     "kind": "skill",
+     "text": "SQL",
+     "source": "skills[0].keywords[2]"
+    },
+    {
+     "id": "E5",
+     "kind": "skill",
+     "text": "TypeScript",
+     "source": "skills[0].keywords[3]"
+    },
+    {
+     "id": "E6",
+     "kind": "skill",
+     "text": "Infrastructure",
+     "source": "skills[1]"
+    },
+    {
+     "id": "E7",
+     "kind": "skill",
+     "text": "Kubernetes",
+     "source": "skills[1].keywords[0]"
+    },
+    {
+     "id": "E8",
+     "kind": "skill",
+     "text": "Terraform",
+     "source": "skills[1].keywords[1]"
+    },
+    {
+     "id": "E9",
+     "kind": "skill",
+     "text": "PostgreSQL",
+     "source": "skills[1].keywords[2]"
+    },
+    {
+     "id": "E10",
+     "kind": "skill",
+     "text": "Redis",
+     "source": "skills[1].keywords[3]"
+    },
+    {
+     "id": "E11",
+     "kind": "skill",
+     "text": "Kafka",
+     "source": "skills[1].keywords[4]"
+    },
+    {
+     "id": "E12",
+     "kind": "title",
+     "text": "Staff Software Engineer",
+     "source": "work[0].position"
+    },
+    {
+     "id": "E13",
+     "kind": "bullet",
+     "text": "Cut p95 checkout latency from 940ms to 205ms by introducing a read-through Redis cache in front of the\npricing service",
+     "source": "work[0].highlights[0]"
+    },
+    {
+     "id": "E14",
+     "kind": "bullet",
+     "text": "Led the migration of 41 services from Nomad to Kubernetes across two regions",
+     "source": "work[0].highlights[1]"
+    },
+    {
+     "id": "E15",
+     "kind": "bullet",
+     "text": "Designed the idempotency layer that eliminated duplicate carrier bookings",
+     "source": "work[0].highlights[2]"
+    },
+    {
+     "id": "E16",
+     "kind": "title",
+     "text": "Senior Backend Engineer",
+     "source": "work[1].position"
+    },
+    {
+     "id": "E17",
+     "kind": "bullet",
+     "text": "Built the billing reconciliation pipeline processing 2.4 million events per day",
+     "source": "work[1].highlights[0]"
+    },
+    {
+     "id": "E18",
+     "kind": "bullet",
+     "text": "Reduced Postgres storage cost 38% by partitioning the events table by month",
+     "source": "work[1].highlights[1]"
+    },
+    {
+     "id": "E19",
+     "kind": "title",
+     "text": "Backend Engineer",
+     "source": "work[2].position"
+    },
+    {
+     "id": "E20",
+     "kind": "bullet",
+     "text": "Shipped the public REST API used by 180 integration partners",
+     "source": "work[2].highlights[0]"
+    },
+    {
+     "id": "E21",
+     "kind": "credential",
+     "text": "Oregon State University",
+     "source": "education[0]"
+    },
+    {
+     "id": "E22",
+     "kind": "credential",
+     "text": "Certified Kubernetes Administrator",
+     "source": "certificates[0]"
+    }
+   ]
+  },
+  "two_column.pdf": {
+   "companies": [
+    "Nordlys Retail Group",
+    "Baltic Data Works"
+   ],
+   "titles": [
+    "Senior Machine Learning\nEngineer",
+    "Machine Learning Engineer,"
+   ],
+   "claims": [
+    {
+     "id": "E1",
+     "kind": "skill",
+     "text": "Languages",
+     "source": "skills[0]"
+    },
+    {
+     "id": "E2",
+     "kind": "skill",
+     "text": "Python",
+     "source": "skills[0].keywords[0]"
+    },
+    {
+     "id": "E3",
+     "kind": "skill",
+     "text": "Rust",
+     "source": "skills[0].keywords[1]"
+    },
+    {
+     "id": "E4",
+     "kind": "skill",
+     "text": "SQL",
+     "source": "skills[0].keywords[2]"
+    },
+    {
+     "id": "E5",
+     "kind": "skill",
+     "text": "ML",
+     "source": "skills[1]"
+    },
+    {
+     "id": "E6",
+     "kind": "skill",
+     "text": "PyTorch",
+     "source": "skills[1].keywords[0]"
+    },
+    {
+     "id": "E7",
+     "kind": "skill",
+     "text": "scikit-learn",
+     "source": "skills[1].keywords[1]"
+    },
+    {
+     "id": "E8",
+     "kind": "skill",
+     "text": "MLflow",
+     "source": "skills[1].keywords[2]"
+    },
+    {
+     "id": "E9",
+     "kind": "skill",
+     "text": "Data",
+     "source": "skills[2]"
+    },
+    {
+     "id": "E10",
+     "kind": "skill",
+     "text": "Spark",
+     "source": "skills[2].keywords[0]"
+    },
+    {
+     "id": "E11",
+     "kind": "skill",
+     "text": "Airflow",
+     "source": "skills[2].keywords[1]"
+    },
+    {
+     "id": "E12",
+     "kind": "skill",
+     "text": "dbt",
+     "source": "skills[2].keywords[2]"
+    },
+    {
+     "id": "E13",
+     "kind": "title",
+     "text": "Senior Machine Learning\nEngineer",
+     "source": "work[0].position"
+    },
+    {
+     "id": "E14",
+     "kind": "bullet",
+     "text": "Cut demand-forecast error 19% by replacing the\nseasonal ARIMA baseline with a gradient-boosted\nmodel",
+     "source": "work[0].highlights[0]"
+    },
+    {
+     "id": "E15",
+     "kind": "bullet",
+     "text": "Built the feature store that serves 60 million\npredictions per day",
+     "source": "work[0].highlights[1]"
+    },
+    {
+     "id": "E16",
+     "kind": "title",
+     "text": "Machine Learning Engineer,",
+     "source": "work[1].position"
+    },
+    {
+     "id": "E17",
+     "kind": "bullet",
+     "text": "Trained the churn model that recovered 4,200\nsubscriptions in its first quarter",
+     "source": "work[1].highlights[0]"
+    },
+    {
+     "id": "E18",
+     "kind": "bullet",
+     "text": "Wrote the batch scoring pipeline in Spark,\nreplacing a nightly cron script",
+     "source": "work[1].highlights[1]"
+    },
+    {
+     "id": "E19",
+     "kind": "credential",
+     "text": "Jagiellonian University",
+     "source": "education[0]"
+    }
+   ]
+  }
+ }
+}
