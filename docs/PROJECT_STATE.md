@@ -6,7 +6,9 @@ ending one.
 CLAUDE.md §9 says what "in scope" means. This file says what is *true* — what has been
 proven, with what evidence, and what is known to be broken.
 
-> Last updated: **2026-08-08**, end of day. **M4's gate is green** — 12/12, pooled
+> Last updated: **2026-08-09**. `MATCH_THRESHOLD=20` is set and the matcher has written
+> its first 40 `matches` rows against the live pool — see *What runs today*.
+> **M4's gate is green** — 12/12, pooled
 > precision **0.86** against a bar of 0.80, recall 0.89, `MATCH_THRESHOLD=20`. Read it with
 > the caveat that ships beside it: the 95% interval is **[0.75, 0.92]**, so the bar lies
 > *inside* it and the gate cannot resolve a pass from a fail at that margin. The claim is
@@ -96,10 +98,29 @@ and `bars._timezone` now computes that window from the pair rather than reading 
 | Cost per 1,000 jobs scored is measured | ✅ **measured: $0.303 / 1k scored, cold**, against a $2.00 ceiling. | `llm.complete_json` takes a caller-owned `usage` sink, appended **per attempt including the one that raises**; `match.scored` carries `embed_tokens`/`prompt_tokens`/`completion_tokens`. The live gate asserts `prompt_tokens > 0` **and** `embed_tokens > 0`, which is also the anti-stub proof — a fake reports zero. |
 | Every score carries a human-readable reason | 🟡 **0.97 grounded (1808/1857)** — passing on the ratio, but the ungrounded tail includes the *candidate's own résumé sentence* quoted as a posting requirement, twice. A fabrication-shaped defect one milestone before M5's validator, and the reason the model's disqualifier partition is recommended for demotion to advisory. | `MatchReasons` is the `reasons_json` contract; `test_matching.py` asserts every written match has a non-empty summary and a non-empty partition. The live gate additionally asserts every requirement span is **findable in the posting** — M5's fabrication problem caught a milestone early. |
 
-**What runs today, and what it costs:** nothing, until someone sets `MATCH_THRESHOLD`.
-That is deliberate. Part 14 defers the threshold to the golden set, so there is no default
-anywhere in the code — `match_all` records `match.skipped` and does nothing. Both tasks
-are registered in the live worker (verified via `celery inspect registered`).
+**What runs today, and what it costs.** `MATCH_THRESHOLD=20` is now set — in `.env` and in
+`.env.example` — so the interlock is satisfied and the stage runs. There is still no default
+in the code: unset it and `match_all` records `match.skipped` again, which is the Part 14
+enforcement, not a gap.
+
+First real run against the live pool, 2026-08-09, senior backend profile
+(`senior_backend.pdf` parsed by M3, `019fdbee`):
+
+```
+candidates      952 / 25,801 open   hard filters dropped 96% before a paid stage
+embedded_new    952                 779,502 embed tokens, cold — nothing was cached
+shortlisted      40                 MATCH_TOP_N
+explained        40                 failed 0
+above threshold  36  status=discovered  scores 21-82
+below threshold   4  status=skipped     scores 0-15
+tokens           73,643 prompt / 19,310 completion
+```
+
+40 `matches` rows written, every one carrying a non-empty `reasons_json.summary`. The
+threshold separates: nothing lands on 20 itself, and the gap between the lowest kept (21)
+and the highest dropped (15) is real rather than an off-by-one. **That the four dropped
+rows are written at all is the design** — `skipped` is a state in §6.1's machine, so a
+job the matcher considered and rejected is on the record instead of being invisible.
 
 
 ### M2 gate, item by item
@@ -114,7 +135,7 @@ are registered in the live worker (verified via `celery inspect registered`).
 
 ## What runs today
 
-Nine stages, all scheduled by Celery Beat, no manual step:
+Ten stages, all scheduled by Celery Beat, no manual step:
 
 ```
 ingest_all      → ingest_company    every 6h    layer 1, six ATS providers
@@ -122,6 +143,7 @@ ingest_feed     × 8                 6–12h each  layer 3, eight free feeds
 aggregate_all   → aggregate_search  every 12h   layer 2, JobSpy — NO-OPS without a proxy
 grow_registry                       hourly      §4.3 reverse-index
 dedupe_jobs                         every 6h    cross-source collapse
+match_all       → match_profile     every 12h   M4 — LIVE as of 2026-08-09
 ```
 
 Plus one event-driven stage, deliberately **not** on the clock:
@@ -279,8 +301,8 @@ and CLAUDE.md §3.3 is explicit that the validator is the guardrail and the prom
 M3 already built the half M5 depends on: every claim in `evidence` appears verbatim in that
 profile's `master_resume`, asserted in `test_profile_parse.py`.
 
-**Set `MATCH_THRESHOLD=20`** — the number Part 14 deferred to the golden set, now produced
-by it. Chosen on the pooled tuning split, not read off a reporting result.
+~~Set `MATCH_THRESHOLD=20`~~ — **done 2026-08-09**, and a real run wrote 40 `matches` rows
+against the live pool. See *What runs today* above for the funnel it produced.
 
 **Before M4's numbers leave this repo, grow the golden set.** BAR.md §8 records this as a
 trigger rather than a wish. The gate passes on the point estimate and the interval is
