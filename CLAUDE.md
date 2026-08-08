@@ -780,10 +780,11 @@ Stack: Sentry (errors) + Grafana/Prometheus (system) + Langfuse (LLM traces and 
 down is a strict chain.** Do not start a milestone before the one it depends on is
 *proven* — not written, proven, by its E2E test.
 
-> **CURRENT MILESTONE: M4** — matching and scoring.
-> M0/M1 landed 2026-08-06; M2 and M3 landed 2026-08-07. **All four gates green**, M3's
-> live gate 24/24 against a real model.
-> M4 is a strict chain from here: M5 is not in scope until M4's golden-set bar is met.
+> **CURRENT MILESTONE: M5** — documents (tailoring, the fabrication validator, PDF render).
+> M0/M1 landed 2026-08-06; M2 and M3 landed 2026-08-07; **M4 landed 2026-08-08**, gate 12/12,
+> pooled precision 0.86 against a bar of 0.80, `MATCH_THRESHOLD=20`. Read M4's number with
+> the interval BAR.md §8 attaches to it — [0.75, 0.92] — before quoting it anywhere.
+> M6 is not in scope until M5's gate is green, and `test_fabrication_guard` is that gate.
 > *(update this line as milestones land; it tells Claude what "in scope" means today)*
 
 ```
