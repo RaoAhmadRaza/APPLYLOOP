@@ -119,6 +119,14 @@ def _promote(profile: Profile, resume: ParsedResume, years: float | None) -> lis
             profile.work_auth = auth.value
             promoted.append("work_auth")
 
+    if profile.work_auth_regions is None:
+        regions = derive.work_auth_regions(resume)
+        if regions is not None:
+            # `[]` is a real answer — authorisation stated, and it resolves nowhere — so
+            # this writes it, unlike the columns above where falsy means "nothing found".
+            profile.work_auth_regions = regions
+            promoted.append("work_auth_regions")
+
     if not profile.locations:
         places = derive.locations(resume)
         if places:

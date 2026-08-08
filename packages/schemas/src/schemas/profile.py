@@ -25,6 +25,10 @@ class ProfileBase(Schema):
     parsed_json: dict[str, Any] = Field(default_factory=dict)
     prefs_json: dict[str, Any] = Field(default_factory=dict)
     work_auth: WorkAuth | None = None
+    # Where `work_auth` applies. ISO-3166 alpha-2 plus `EU`. `None` is silence and never
+    # drops anything; `[]` is "stated, and nowhere". Derived deterministically in
+    # `profiles/derive.py`, never emitted by a model — it is a filter and prompt input.
+    work_auth_regions: list[str] | None = None
     locations: list[str] = Field(default_factory=list)
     seniority: Seniority | None = None
     salary_floor: int | None = None
@@ -40,6 +44,7 @@ class ProfileUpdate(Schema):
     parsed_json: dict[str, Any] | None = None
     prefs_json: dict[str, Any] | None = None
     work_auth: WorkAuth | None = None
+    work_auth_regions: list[str] | None = None
     locations: list[str] | None = None
     seniority: Seniority | None = None
     salary_floor: int | None = None

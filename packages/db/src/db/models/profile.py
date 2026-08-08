@@ -35,6 +35,19 @@ class Profile(Base, UUIDv7PK, Timestamps):
     parsed_json: Mapped[dict] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
     prefs_json: Mapped[dict] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
     work_auth: Mapped[str | None] = mapped_column(Text)
+    # WHERE the authorisation applies. `work_auth` alone is country-less — "citizen" of
+    # where? — and M4's first live gate showed what that costs: a UK citizen scored 94 on
+    # a SpaceX role whose ITAR clause makes it legally impossible, because nothing in the
+    # prompt could contradict the bare word "citizen".
+    #
+    # A NEW column rather than a changed meaning (§6.2): `work_auth` keeps its exact
+    # semantics, so M3's gate assertions are untouched.
+    #
+    # ISO-3166 alpha-2, plus `EU` as a bloc token. NULL means the résumé did not say and
+    # never drops anything — filters.py's polarity rule. `{}` is different and stronger:
+    # the résumé stated authorisation and it is nowhere, which is what a candidate
+    # needing sponsorship everywhere looks like.
+    work_auth_regions: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
     # TEXT[] over a join table: these are short lists of free-text strings filtered
     # with && (overlap). A join table would buy referential integrity we don't need
     # and cost a join on the hottest M4 query.

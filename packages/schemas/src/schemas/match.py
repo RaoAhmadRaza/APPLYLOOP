@@ -50,14 +50,29 @@ class MatchFacts(Schema):
     with every model version, so a cut calibrated on fifty pairs on Monday is measuring
     something else by Wednesday. A ratio over counted facts moves only when the facts do.
 
-    `met` and `missing` hold **verbatim spans from the job description**, not paraphrases.
-    That is what lets the live gate assert every reason is findable in the posting — a
-    requirement the posting never stated is M5's fabrication problem arriving early, on
-    text a user will read and act on.
+    `met`, `missing` and `disqualifiers` hold **verbatim spans from the job description**,
+    not paraphrases. That is what lets the live gate assert every reason is findable in
+    the posting — a requirement the posting never stated is M5's fabrication problem
+    arriving early, on text a user will read and act on.
+
+    **`disqualifiers` exists because coverage is a ratio and a ratio cannot express
+    "fatal".** M4's first live gate measured precision 0.50–0.62 against a bar of 0.80,
+    and 7 of 8 false positives were postings in the right craft at the right band that
+    stated one thing the candidate could not satisfy — ITAR, a required language, a
+    timezone the posting refused to consider. Averaged into `missing`, "must be a U.S.
+    person" costs one bullet out of fifteen and a legally impossible role scores 94.
     """
 
     met: list[str]
     missing: list[str]
+    # Stated requirements whose absence is fatal rather than fractional: legal work
+    # status, citizenship or clearance, a required language, an explicit location or
+    # timezone exclusion, a licence the role cannot be performed without.
+    #
+    # The list is empty far more often than not. Over-extraction is the dangerous
+    # direction — reading "5+ years preferred" as fatal zeroes out good matches — so the
+    # prompt's boundary is narrow and the default is `missing`.
+    disqualifiers: list[str] = Field(default_factory=list)
     summary: str
 
 
@@ -76,6 +91,10 @@ class MatchReasons(Schema):
     summary: str
     met: list[str]
     missing: list[str]
+    # Why a job was rejected outright, in the posting's own words. Carried into
+    # `reasons_json` rather than only consumed by `score()`, because "you scored 0" is
+    # not a reason and M6 puts this in front of a human.
+    disqualifiers: list[str]
     coverage: float | None
     similarity: float
     seniority_delta: int | None

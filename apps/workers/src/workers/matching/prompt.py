@@ -41,6 +41,12 @@ find in the posting.
 advice about applying. You partition the requirements; something else does the \
 arithmetic.
 
+4. SEPARATE FATAL FROM MERELY UNMET. A requirement belongs in `disqualifiers` only when \
+BOTH hold: the posting states it as mandatory, AND the profile fails it. Everything else \
+that is unmet goes in `missing`. When you are unsure, use `missing` — it is the safe \
+answer, because a requirement wrongly called fatal removes a job the candidate could \
+have had.
+
 How to decide:
 
 - `met`: the profile shows direct evidence of this requirement — a skill it lists, a \
@@ -48,6 +54,21 @@ responsibility in a role it held, a credential it names.
 - `missing`: the posting states it and the profile does not evidence it. Absence of \
 evidence goes here. Do not credit a requirement because the candidate could plausibly \
 learn it or because an adjacent skill is close enough.
+- `disqualifiers`: the narrow set the candidate cannot satisfy by being hired, and which \
+no amount of other strength offsets. In practice: the legal right to work where the role \
+is based; a citizenship, residency or security-clearance requirement; a working language \
+the profile shows no evidence of; a location or timezone the posting explicitly refuses \
+to consider candidates outside of; a licence or certification the role cannot legally be \
+performed without.
+
+  It is NOT a disqualifier when the posting says preferred, desired, a plus, nice to \
+have, a bonus, or ideally. It is NOT a disqualifier because the candidate has fewer \
+years than asked, is at a different seniority, lacks a named tool, or went to no \
+university. Those are `missing`.
+
+  Read the whole posting for these — they are usually one sentence near the end, after \
+the responsibilities, and often in the legal boilerplate rather than the requirements \
+list.
 - A requirement stated twice counts once.
 - `summary`: one sentence, addressed to the candidate, naming the strongest match and \
 the most important gap. No score, no encouragement, no advice.
@@ -73,6 +94,8 @@ Remote: {remote}
 Seniority: {seniority}
 Locations: {locations}
 Work authorisation: {work_auth}
+Authorised to work in: {work_auth_regions}
+Stated on the résumé: {work_auth_stated}
 Target roles: {titles}
 
 {resume}
@@ -100,6 +123,13 @@ def build(job: Job, profile: ProfileRead, prefs: Prefs, resume: str) -> str:
         seniority=profile.seniority or "not stated",
         locations=", ".join(profile.locations) or "not stated",
         work_auth=profile.work_auth or "not stated",
+        # `work_auth` alone is country-less — "citizen" of where? M4's first gate scored a
+        # UK citizen 94 on an ITAR-restricted role because nothing in this block could
+        # contradict the bare word. Two forms, because they fail differently: the derived
+        # region list is precise but only as good as `derive._REGION_WORDS`, and the
+        # résumé's own sentence carries whatever that missed.
+        work_auth_regions=", ".join(profile.work_auth_regions or []) or "not stated",
+        work_auth_stated=profile.parsed_json.get("work_authorization") or "not stated",
         titles=", ".join(prefs.titles) or "not stated",
         resume=resume[:MAX_RESUME_CHARS],
     )

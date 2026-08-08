@@ -39,7 +39,20 @@ def score(facts: MatchFacts) -> int | None:
     Deliberately one term. Cosine similarity is **not** folded in: it decides who gets
     asked, not how good the answer is, and a second weight would be fitted to fifty
     hand-labelled pairs — which is over-fitting with extra steps.
+
+    **A disqualifier is a gate, not a term.** Coverage is a ratio, and a ratio cannot
+    express "fatal": a posting that adds "ITAR: must be a U.S. person" to fifteen matched
+    bullets scores 94 while being a role the candidate legally cannot hold. That
+    arithmetic is what failed M4's first gate at precision 0.50–0.62 — 7 of 8 false
+    positives were right-craft, right-band postings differing on exactly one dimension.
+    Weighting the term instead of gating it would just move the number a candidate needs
+    to overcome; there is no coverage high enough to make an illegal application good.
     """
+    if facts.disqualifiers:
+        # 0, not None. None already means "the posting stated no requirements", and a
+        # rejection that reads as "nothing to go on" would put this job back in front of
+        # anything sorting nulls last.
+        return 0
     share = coverage(facts)
     return None if share is None else round(100 * share)
 
@@ -81,6 +94,7 @@ def reasons(
         summary=facts.summary,
         met=facts.met,
         missing=facts.missing,
+        disqualifiers=facts.disqualifiers,
         coverage=coverage(facts),
         similarity=similarity,
         seniority_delta=seniority_delta,

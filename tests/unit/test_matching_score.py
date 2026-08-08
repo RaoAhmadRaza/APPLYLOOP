@@ -180,3 +180,66 @@ def test_similarity_is_recorded_but_is_not_in_the_score() -> None:
     assert low["coverage"] == high["coverage"]
     assert score.score(facts) == 75
     assert low["similarity"] != high["similarity"]
+
+
+# ---- disqualifiers: a gate, not a term ------------------------------------------
+
+
+def test_a_disqualifier_zeroes_a_score_that_coverage_would_have_made_excellent() -> None:
+    """**The defect that failed M4's first live gate.**
+
+    Coverage is a ratio, so "must be a U.S. person" costs one bullet out of fifteen and a
+    role a UK citizen legally cannot hold scores 94. 7 of 8 false positives were exactly
+    this shape: right craft, right band, one fatal clause.
+    """
+    facts = MatchFacts(
+        met=[f"requirement {index}" for index in range(14)],
+        missing=[],
+        disqualifiers=["must be a U.S. person"],
+        summary="Strong match on the engineering requirements.",
+    )
+
+    assert score.coverage(facts) == 1.0
+    assert score.score(facts) == 0
+
+
+def test_a_disqualifier_scores_zero_rather_than_none() -> None:
+    """`None` already means "the posting stated no requirements" — nothing to go on.
+
+    A rejection that arrives as None would sort with the unknowns rather than the
+    rejects, and anything ordering nulls last puts an illegal application back on top.
+    """
+    facts = MatchFacts(met=[], missing=[], disqualifiers=["UK work permit required"], summary="")
+
+    assert score.score(facts) is not None
+    assert score.score(facts) == 0
+
+
+def test_an_empty_disqualifier_list_leaves_the_coverage_path_untouched() -> None:
+    """The regression direction. Every existing score must be what it was."""
+    facts = MatchFacts(met=["a", "b", "c"], missing=["d"], disqualifiers=[], summary="")
+
+    assert score.score(facts) == 75
+    assert score.coverage(facts) == 0.75
+
+
+def test_the_reason_carries_the_disqualifier_in_the_postings_own_words() -> None:
+    """ "You scored 0" is not a reason, and M6 puts this in front of a human."""
+    facts = MatchFacts(
+        met=["Python"],
+        missing=[],
+        disqualifiers=["Must be a US Citizen (no visa sponsorship available)"],
+        summary="Blocked on work authorisation.",
+    )
+
+    payload = score.reasons(
+        facts,
+        similarity=0.9,
+        seniority_delta=0,
+        filters_passed=[],
+        threshold=80,
+        model="m",
+        embed_model="e",
+    )
+
+    assert payload["disqualifiers"] == ["Must be a US Citizen (no visa sponsorship available)"]

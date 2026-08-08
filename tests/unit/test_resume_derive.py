@@ -280,3 +280,59 @@ def test_an_unstated_authorisation_is_none_not_a_guess() -> None:
 
 def test_an_unrecognised_phrase_is_none_rather_than_the_nearest_match() -> None:
     assert derive.work_auth(ParsedResume(work_authorization="open to relocation")) is None
+
+
+# ---- work_auth_regions: WHERE the authorisation applies --------------------------
+
+
+@pytest.mark.parametrize(
+    ("stated", "expected"),
+    [
+        # The four golden fixtures, verbatim. These are the strings M4's gate runs on.
+        ("UK citizen.", ["GB"]),
+        ("Authorized to work in the United States without sponsorship.", ["US"]),
+        (
+            "EU citizen. Requires H-1B sponsorship for roles\nbased in the United States.",
+            ["EU"],
+        ),
+        ("Requires visa sponsorship to work in the United Kingdom.", []),
+    ],
+)
+def test_the_fixtures_resolve_to_the_regions_they_name(stated: str, expected: list[str]) -> None:
+    assert derive.work_auth_regions(ParsedResume(work_authorization=stated)) == expected
+
+
+def test_silence_is_none_and_never_an_empty_list() -> None:
+    """The distinction the column is built on. `None` means the résumé did not say, and
+    never drops anything; `[]` means it said, and the answer is nowhere."""
+    assert derive.work_auth_regions(ParsedResume()) is None
+    assert derive.work_auth_regions(ParsedResume(work_authorization="")) is None
+    assert derive.work_auth_regions(ParsedResume(work_authorization="Requires sponsorship")) == []
+
+
+def test_polarity_is_decided_per_clause_not_per_document() -> None:
+    """The two_column.pdf shape: one sentence authorises, the next excludes. Reading the
+    document as a whole would either authorise the US — a role that candidate cannot take
+    — or drop the EU, hiding every job they can."""
+    resume = ParsedResume(
+        work_authorization="EU citizen. Requires H-1B sponsorship for roles in the United States."
+    )
+
+    assert derive.work_auth_regions(resume) == ["EU"]
+
+
+def test_a_region_named_only_in_a_sponsorship_clause_is_excluded() -> None:
+    resume = ParsedResume(work_authorization="Canadian citizen. Needs sponsorship for Germany.")
+
+    assert derive.work_auth_regions(resume) == ["CA"]
+
+
+@pytest.mark.parametrize(
+    "stated",
+    ["Current status is unclear", "Because of relocation", "Based in Ukraine", "Euro-based rates"],
+)
+def test_a_short_token_inside_a_longer_word_is_not_a_region(stated: str) -> None:
+    """`us` is in "status" and "because", `uk` in "Ukraine", `eu` in "Euro". A substring
+    match would authorise a country the résumé never named, which is the failure
+    direction that costs a user real applications."""
+    assert derive.work_auth_regions(ParsedResume(work_authorization=stated)) == []

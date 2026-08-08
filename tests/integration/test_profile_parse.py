@@ -142,8 +142,16 @@ def test_the_promoted_columns_are_filled_from_the_parse(
 
     assert profile.seniority == Seniority.STAFF.value
     assert profile.work_auth == WorkAuth.VISA_HOLDER.value
+    # Where that authorisation applies. `work_auth` alone is country-less, which is how a
+    # UK citizen came to score 94 on an ITAR-restricted role in M4's first gate run.
+    assert profile.work_auth_regions == ["EU"]
     assert profile.locations == ["Berlin, DE"]
-    assert sorted(result.promoted) == ["locations", "seniority", "work_auth"]
+    assert sorted(result.promoted) == [
+        "locations",
+        "seniority",
+        "work_auth",
+        "work_auth_regions",
+    ]
 
 
 def test_the_vault_is_populated_and_every_claim_is_in_the_resume(
