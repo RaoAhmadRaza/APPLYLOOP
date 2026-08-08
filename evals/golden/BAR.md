@@ -56,9 +56,16 @@ The **procedure** is fixed here; the number is not, and must not be.
    matcher, or by recording in `docs/DECISIONS.md` why the bar was wrong with the
    evidence that showed it — which is an amendment, made deliberately, not a side effect.
 
-**Split:** 20 pairs tune, 30 pairs report. Assignment is fixed at file creation and never
-re-rolled. Both numbers are reported side by side; a large gap between them *is* the
-overfitting signal and is worth more than either number alone.
+**Split:** each pair carries an explicit `split` of `tune` or `report`, assigned stratified
+over (profile, label) — two of every five, sorted by `job_id`, so the assignment is
+reproducible without an RNG and every profile and both labels appear on both sides.
+Assignment is fixed and never re-rolled. Both numbers are reported side by side; a large
+gap between them *is* the overfitting signal and is worth more than either number alone.
+
+**The tuning split has a floor too:** no threshold may be chosen on fewer than **5
+predicted positives**. §2's ≥8 floor guards the reporting split; a tuning split with two
+positives picks a threshold out of noise and then hands it to the reporting split with
+false authority. Amended 2026-08-08 — see §8.
 
 ## 4. Label boundaries
 
@@ -150,11 +157,20 @@ fail on either — those two are covered by the offline polarity suite only. `lo
 in took a fix: a plain shuffle of the single-failure set produces zero of them, because
 they are 22–43 rows against fourteen thousand location failures.
 
-**Hard negatives.** At least 60% of the `not_relevant` labels must be marked
-`negative_type: hard` — a posting in the same job family as some positive, differing on
-exactly one dimension the product claims to handle. A warehouse role against a backend
-profile is filler, not a negative: a matcher doing nothing but a keyword grep would score
-perfectly against those, and precision over them measures nothing.
+**Hard negatives.** A hard negative is a posting in the same job family as some positive,
+differing on exactly one dimension the product claims to handle. A warehouse role against
+a backend profile is filler, not a negative: a matcher doing nothing but a keyword grep
+would score perfectly against those, and precision over them measures nothing.
+
+Two floors, because one number could not express it (amended 2026-08-08, see §8):
+
+- **≥ 60% of `not_relevant` labels within `on_topic` + `candidate_random`.** Scoped to
+  those two strata because they are the only ones whose pairs reach the matcher, and
+  "precision on hard negatives" is computed over judged pairs only. `filtered_out` and
+  `pool_random` exist *to* produce structurally easy negatives — a Head of Marketing
+  dropped by a seniority filter is the stratum working, not the set decaying.
+- **≥ 10 hard negatives overall**, so the set cannot drift toward easy as it grows. A
+  ratio alone is satisfiable by a set with three negatives in it.
 
 **Job payloads are stored in this directory alongside the id.** A pair pinned only by id
 rots: `close_missing` or a dedupe promotion removes the job from the pool and precision
@@ -173,9 +189,46 @@ Any change to §2, §3, §4 or §5 after the first scored run must be recorded h
 date, the evidence that forced it, and a matching entry in `docs/DECISIONS.md`. A silent
 edit to this file is the same defect as never having written it.
 
-### OPEN — §7's hard-negative floor contradicts §7's own sampling plan (2026-08-08)
+### APPLIED — §3's split was positional, and therefore a profile split (2026-08-08)
 
-**Not yet amended. A human decides.** Raised before any pair was scored.
+**Approved by the project owner before application. No pair had ever been scored.**
+
+§3 said "20 pairs tune, 30 pairs report … fixed at file creation", but no pair carried a
+split field. The live gate took `scored[:20]`, and `scored` is built by iterating fixture
+profiles over a profile-grouped `pairs.json`. A positional cut over a grouped file is a
+**profile** cut. Measured on the 64-pair set at the moment it was confirmed:
+
+```
+tune    n=20  reachable=16  relevant-reachable= 2   career_changer×16, plain×4
+report  n=44  reachable=32  relevant-reachable=14   the other three profiles
+```
+
+So the threshold would have been chosen against two positives belonging almost entirely to
+one résumé — a junior UK analyst — and then applied unchanged to a staff US backend
+engineer and a senior Polish ML engineer. §3 forbids maximising precision on the tuning
+split; it did not anticipate the split itself being degenerate, so the "lowest, not best"
+rule provided no protection.
+
+Latent from file creation. It became *visible* only when human review dropped
+`career_changer` from six positives to one — which is the more useful half of the finding:
+the defect was a property of the split all along, and the labels merely stopped hiding it.
+
+**Applied:** explicit per-pair `split`, stratified over (profile, label); a ≥5 tuning-split
+positive floor; and `test_each_split_carries_every_profile_and_enough_positives` so the
+property fails in the free suite rather than after a paid run. Resulting split: 29 tune /
+35 report, 8 reachable positives on each side, all four profiles on both.
+
+**Why this is not the move §3 forbids.** §3 forbids fitting the split to *results*. There
+were no results — the live gate had never run against a confirmed set, and no score
+existed anywhere in the repo. The assignment is a pure function of `(profile, label,
+job_id)` and is blind to every matcher output. Had a single scored run existed, the honest
+move would have been to extend the set instead.
+
+### APPLIED — §7's hard-negative floor contradicted §7's own sampling plan (2026-08-08)
+
+**Drafted before any pair was scored; approved and applied after human review of the
+labels.** That ordering is the whole defence of this entry and is why the draft was left
+sitting unapplied rather than folded in quietly when it was written.
 
 §7 requires ≥60% of `not_relevant` labels to be `hard`, and §7 also defines four strata,
 **two of which exist to produce structurally easy negatives**: `filtered_out` verifies
@@ -198,8 +251,18 @@ metric is only computed over pairs the matcher actually judged. So the coherent 
 is: **scope the ≥60% floor to `on_topic` + `candidate_random`, and add an absolute floor
 of ≥10 hard negatives overall** so the set cannot decay toward easy as it grows.
 
-Deliberately left unapplied. Editing a bar to match a result is the exact move §3 forbids,
-and the fact that it would be a *correct* edit here is not a reason to make it silently —
-it is the reason to write it down and let someone else agree. Until it is applied,
-`test_enough_of_the_negatives_are_hard` enforces the original wording on any `confirmed`
-set.
+**Applied 2026-08-08**, unchanged from the draft above, after a human reviewed all 64
+labels and corrected 19. Re-measured on the confirmed set:
+
+```
+overall                                    28/48 hard = 58%   (floor: ≥10 absolute → 28)
+on_topic + candidate_random (judged)       21/24 hard = 88%   (floor: ≥60%)
+```
+
+Note the overall figure still sits below the original 60% and the amendment is applied
+anyway — that is the point of it, not an embarrassment to be smoothed over. Filler
+negatives in `filtered_out` and `pool_random` are doing the job those strata were drawn
+for. What moved the judged-stratum number from 63% to 88% was human review flipping
+eleven model-labelled positives to negatives on work-authorisation, ITAR, timezone and
+language grounds — every one of them a posting in the right craft failing on exactly one
+dimension, which is the definition of a hard negative.

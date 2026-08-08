@@ -29,6 +29,11 @@ LABELS = {"relevant", "not_relevant", "borderline"}
 # own opinion, which is the leakage the stratified draw exists to prevent.
 FORBIDDEN = {"score", "cosine", "similarity", "rank", "label_predicted", "good_fit"}
 
+# BAR.md §7. The strata whose pairs reach the matcher — `filtered_out` and `pool_random`
+# are drawn to produce structurally easy negatives, so the hard-negative ratio is scoped
+# away from them.
+JUDGED_STRATA = {"on_topic", "candidate_random"}
+
 
 def _load() -> dict[str, Any]:
     if not PAIRS.exists():
@@ -160,21 +165,22 @@ def test_a_model_labelled_set_is_marked_proposed_and_cannot_be_confirmed() -> No
 
 
 def test_enough_of_the_negatives_are_hard() -> None:
-    """BAR.md §7: at least 60%.
+    """BAR.md §7, as amended 2026-08-08. Two floors, because one number could not say it.
 
     A warehouse role against a backend profile is filler, not a negative — a matcher
     doing nothing but a keyword grep scores perfectly against those, so precision over
     them measures nothing. This is the assertion that stops the set decaying toward easy
     as pairs are added.
 
-    **This clause and BAR.md's own sampling plan currently disagree**, and the
-    disagreement is recorded rather than papered over. Two of the four strata exist to
-    produce structurally easy negatives: `filtered_out` verifies that a filter dropped
-    correctly, and `pool_random` is the uniform calibration draw that screams if a filter
-    has emptied the pool. On the first fully labelled set the share was 12/32 = 38%
-    overall, but 5/8 = 63% among the pairs that actually reached the model. Amending §7
-    to scope the floor to those strata is a deliberate act for a human to take — see the
-    amendment log — so until then this is enforced only on a `confirmed` set.
+    The ratio is scoped to `on_topic` + `candidate_random` because those are the only
+    strata whose pairs reach the matcher, and precision on hard negatives is computed
+    over judged pairs only. The other two strata exist *to* produce easy negatives:
+    `filtered_out` verifies a filter dropped something correctly, and `pool_random` is
+    the uniform calibration draw that screams if a filter has emptied the pool. Holding
+    them to a hard-negative quota penalises those strata for working.
+
+    The absolute floor is what the ratio alone cannot express: a set with three negatives
+    can satisfy any percentage.
     """
     if _load()["_meta"].get("status", "confirmed") != "confirmed":
         pytest.skip(
@@ -184,8 +190,51 @@ def test_enough_of_the_negatives_are_hard() -> None:
     negatives = [pair for pair in _labelled() if pair["label"] == "not_relevant"]
     if not negatives:
         pytest.skip("no negatives labelled yet")
+
     hard = [pair for pair in negatives if pair["negative_type"] == "hard"]
-    assert len(hard) / len(negatives) >= 0.6
+    assert len(hard) >= 10, f"{len(hard)} hard negatives overall; BAR.md §7 floors it at 10"
+
+    judged = [pair for pair in negatives if pair["stratum"] in JUDGED_STRATA]
+    assert judged, "no negatives in the strata that reach the matcher"
+    judged_hard = [pair for pair in judged if pair["negative_type"] == "hard"]
+    assert len(judged_hard) / len(judged) >= 0.6, (
+        f"{len(judged_hard)}/{len(judged)} hard among judged strata — precision on hard "
+        "negatives stops meaning anything below BAR.md §7's floor"
+    )
+
+
+def test_every_pair_declares_its_split() -> None:
+    """BAR.md §3. An explicit field, because the split used to be positional.
+
+    `scored[:20]` over a profile-grouped file is a profile split, not a random one: it put
+    80% of one résumé in the tuning half and chose the threshold on that résumé's score
+    distribution. Nothing caught it because the shape was only visible once the labels
+    changed. A declared field cannot drift when rows are appended or reordered.
+    """
+    for pair in _pairs():
+        assert pair["split"] in {"tune", "report"}
+
+
+def test_each_split_carries_every_profile_and_enough_positives() -> None:
+    """The property the positional split silently lost.
+
+    `filtered_out` pairs never reach the model, so they cannot become predicted positives
+    — the stratum is the offline proxy for reachability, checked here rather than live so
+    a bad split fails in the cheap suite instead of after a paid run.
+
+    §2 floors predicted positives on the *reporting* split at 8. The tuning split had no
+    floor at all, which is how a threshold came to be chosen over two positives.
+    """
+    profiles = {pair["profile"] for pair in _labelled()}
+    for split in ("tune", "report"):
+        rows = [pair for pair in _labelled() if pair["split"] == split]
+        assert {pair["profile"] for pair in rows} == profiles, (
+            f"the {split} split is missing a profile — a threshold fitted on one résumé "
+            "and applied to another is the failure BAR.md §3 exists to prevent"
+        )
+        reachable = [pair for pair in rows if pair["stratum"] != "filtered_out"]
+        relevant = [pair for pair in reachable if pair["label"] == "relevant"]
+        assert len(relevant) >= 5, f"{split} split has {len(relevant)} reachable positives"
 
 
 def test_both_classes_are_represented() -> None:

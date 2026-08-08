@@ -68,8 +68,14 @@ COST_CEILING_PER_1K = 2.00
 # BAR.md §5. Beside the model names so they cannot go stale unnoticed.
 USD_PER_MTOK = {"embed": 0.02, "prompt": 0.05, "completion": 0.40}
 
-# BAR.md §3. Fixed at file creation, never re-rolled.
-TUNE_SPLIT = 20
+# BAR.md §3. Read from each pair's `split` field, never re-derived from position.
+#
+# It used to be `scored[:20]`, and that was wrong in a way nothing caught: `scored` is
+# built by iterating fixtures, and pairs.json is grouped by profile, so a positional cut
+# is a *profile* cut. The tuning split was 80% one résumé, which chose the threshold on
+# one profile's score distribution and applied it to three others — overfitting by
+# construction, through a door §3's "lowest, not best" rule does not cover.
+MIN_TUNE_POSITIVES = 5
 
 
 @dataclass(frozen=True)
@@ -80,6 +86,7 @@ class Scored:
     stratum: str
     expected_filter: str | None
     negative_type: str | None
+    split: str
     reached_model: bool
     score: int | None
     reasons: dict[str, Any]
@@ -181,6 +188,7 @@ def run(engine: Engine) -> dict[str, Any]:
                         stratum=pair["stratum"],
                         expected_filter=pair["expected_filter"],
                         negative_type=pair["negative_type"],
+                        split=pair["split"],
                         reached_model=reached,
                         score=value,
                         reasons=reasons,
@@ -260,9 +268,9 @@ def _chosen(scored: list[Scored]) -> tuple[int, float, float, int] | None:
     Lowest rather than best — maximising precision on the tuning split is exactly how the
     reporting split gets overfitted.
     """
-    tune = scored[:TUNE_SPLIT]
+    tune = [row for row in scored if row.split == "tune"]
     for row in _sweep(tune):
-        if row[1] >= BAR_PRECISION and row[2] >= BAR_RECALL:
+        if row[1] >= BAR_PRECISION and row[2] >= BAR_RECALL and row[3] >= MIN_TUNE_POSITIVES:
             return row
     return None
 
@@ -280,13 +288,42 @@ def test_a_threshold_clears_both_the_precision_bar_and_the_recall_floor(
     """
     scored: list[Scored] = run["scored"]
     picked = _chosen(scored)
+    if picked is None:
+        # A gate that fails without saying which bar it missed sends the next session
+        # guessing, and the three candidate causes — precision, the recall floor, the
+        # tuning-split positive floor — want completely different fixes.
+        tune = [row for row in scored if row.split == "tune"]
+        print("\n  tuning sweep (threshold, precision, recall, n):")
+        for row in _sweep(tune):
+            blocked = [
+                name
+                for name, ok in (
+                    ("precision", row[1] >= BAR_PRECISION),
+                    ("recall", row[2] >= BAR_RECALL),
+                    ("n", row[3] >= MIN_TUNE_POSITIVES),
+                )
+                if not ok
+            ]
+            print(f"    {row[0]:3}  p={row[1]:.2f}  r={row[2]:.2f}  n={row[3]:2}  fails: {blocked}")
+
+        # Which pairs the matcher called a fit and a human did not. "Precision is 0.62"
+        # is a number; this is the thing that tells the next session what to change.
+        clearing = [row for row in _sweep(tune) if row[2] >= BAR_RECALL]
+        if clearing:
+            cut = max(clearing, key=lambda row: row[1])[0]
+            print(f"\n  false positives at threshold {cut}:")
+            for pair in tune:
+                above = pair.reached_model and pair.score is not None and pair.score >= cut
+                if above and pair.label == "not_relevant":
+                    kind = pair.negative_type
+                    print(f"    {pair.score:3}  [{kind}]  {pair.profile}  {pair.job_id[:8]}")
     assert picked is not None, (
         "no threshold clears both bars on the tuning split. BAR.md §3: the gate fails "
         "here, and is not rescued by editing the bar."
     )
 
     threshold = picked[0]
-    report = scored[TUNE_SPLIT:]
+    report = [row for row in scored if row.split == "report"]
     rows = [row for row in _sweep(report) if row[0] == threshold]
     assert rows, f"threshold {threshold} produced no positives on the reporting split"
     _, precision, recall, positives = rows[0]
