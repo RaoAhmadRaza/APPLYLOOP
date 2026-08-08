@@ -1,4 +1,4 @@
-.PHONY: up down logs ps migrate revision shell seed ingest feeds grow dedupe test lint typecheck fmt verify verify-live verify-live-feeds verify-live-aggregator verify-live-parse verify-live-match verify-live-storage parse match clean
+.PHONY: up down logs ps migrate revision shell seed ingest feeds grow dedupe test lint typecheck fmt verify verify-live verify-live-feeds verify-live-aggregator verify-live-parse verify-live-match verify-live-pool verify-live-storage verify-live-drive verify-live-tailor parse match tailor clean
 
 # `make up` is the one command that boots the stack (M0 gate item 1).
 up:
@@ -62,6 +62,14 @@ match:
 	docker compose exec -T worker python -c \
 	  "from workers.tasks.matching import match_profile; print(match_profile.delay('$(id)').get(timeout=600))"
 
+# Tailor one match into a résumé and a cover letter now. make tailor id=<match-uuid>
+# No-ops without LLM_API_KEY *and* without object storage, by design — a document that
+# cannot be stored is not a document, so it records `tailor.skipped` instead. Only acts
+# on a match still at `discovered`; a second run is a no-op by the state machine.
+tailor:
+	docker compose exec -T worker python -c \
+	  "from workers.tasks.tailoring import tailor_match; print(tailor_match.delay('$(id)').get(timeout=600))"
+
 # Collapse the same role seen on several sources onto one canonical row.
 dedupe:
 	docker compose exec -T worker python -c \
@@ -98,7 +106,13 @@ verify: lint typecheck test
 	  | grep -q workers.tasks.profiles.parse_profile
 	docker compose exec -T worker celery -A workers.app inspect registered \
 	  | grep -q workers.tasks.matching.match_all
-	@echo "M0 + M1 + M2 + M3 + M4 gates: all checks passed"
+	docker compose exec -T worker celery -A workers.app inspect registered \
+	  | grep -q workers.tasks.tailoring.tailor_match
+	@# M5 renders inside the worker, not on the developer's machine. The Typst compiler
+	@# ships in the typst wheel, so this proves the arch has one — an ImportError here is
+	@# a wheel that did not build for arm64, which a passing host suite would not show.
+	docker compose exec -T worker python -c "import typst, rendercv"
+	@echo "M0 + M1 + M2 + M3 + M4 + M5 gates: all checks passed"
 
 # M1 gate item 1, against the six real boards. Not in CI — a build must not go red
 # because a third party had a bad afternoon.
@@ -145,3 +159,16 @@ verify-live-pool:
 # unconfigured storage is a supported state.
 verify-live-storage:
 	APPLYLOOP_LIVE_STORAGE=1 uv run pytest tests/integration/test_storage_live.py -q
+
+# M5's mirror clause, against a real Shared Drive. Writes two small files into it.
+# Unlike the targets above, this one FAILS rather than skips when the variable is set and
+# the credentials are not — an opt-in run that finds no key is a mistake, not a state.
+verify-live-drive:
+	APPLYLOOP_LIVE_DRIVE=1 uv run pytest tests/integration/test_drive_live.py -q -s
+
+# M5's gate: the fabrication cases through the real strong model, with nothing stubbed.
+# Its own variable because this is the most expensive suite in the repo — a strong model,
+# two calls per case — and because the whole point is that a fake cannot make it green.
+# Roughly $2-4 a run. Read evals/fabrication/BAR.md §2 before quoting any number it prints.
+verify-live-tailor:
+	APPLYLOOP_LIVE_TAILOR=1 uv run pytest tests/integration/test_tailoring_live.py -q -s

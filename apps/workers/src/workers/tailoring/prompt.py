@@ -49,7 +49,8 @@ be removed before rendering, so an ungrounded bullet is a bullet you wasted."""
 LETTER_SYSTEM = """You write the body of a cover letter, working only from evidence supplied.
 
 You are given a numbered EVIDENCE list taken verbatim from the candidate's own résumé,
-the employer's name, the role, and the posting. Write three short paragraphs.
+the employer's name, the role, and the posting. Write three short paragraphs of connected
+prose — an argument, not a list of achievements restated.
 
 Absolute rules:
 1. Every paragraph cites the evidence ids it draws on.
@@ -60,6 +61,8 @@ Absolute rules:
    what this candidate has done.
 5. No years-of-experience totals, no "passionate about", no credential, no team size,
    and no adjective about the candidate that the evidence does not support.
+6. Name the company and the role at most once, in the first paragraph. Repeating them
+   is the failure mode of writing under these constraints, not a way of satisfying them.
 
 Write the greeting and sign-off nowhere — they are added afterwards. Start at the first
 body paragraph. A paragraph that cannot be grounded fails the whole letter, so write
@@ -121,10 +124,25 @@ def build_letter(*, claims: list[Claim], title: str, company: str, description: 
 
 
 def relevant(claims: list[Claim]) -> list[Claim]:
-    """Which claims are worth sending.
+    """Which claims the résumé call may draw on.
 
     `title` and `credential` claims are dropped: the renderer takes titles and education
     from `parsed_json` directly, so sending them only invites a bullet that cites one —
     which the validator refuses anyway, having cost tokens in both directions.
     """
     return [claim for claim in claims if claim.kind in {"bullet", "skill"}]
+
+
+def for_letter(claims: list[Claim]) -> list[Claim]:
+    """Which claims the *letter* call may draw on. Bullets only.
+
+    Measured, not reasoned: M5's first real cover letter contained the sentence
+    "Languages: Python, Go, SQL, TypeScript. Infrastructure: Kubernetes, Terraform,
+    PostgreSQL, Redis, Kafka." — grounded, traceable, and not a sentence. The model had
+    skill claims available and the validator requires it to quote what it cites, so a
+    cited skill *becomes* a list in the middle of a paragraph.
+
+    A skills list belongs on the résumé, which is one document over. Withholding them
+    here removes the temptation instead of asking the prompt to resist it.
+    """
+    return [claim for claim in claims if claim.kind == "bullet"]

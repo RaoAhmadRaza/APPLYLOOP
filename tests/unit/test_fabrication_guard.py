@@ -73,9 +73,8 @@ def test_fabrication_guard() -> None:
         if report.kept:
             escaped.append((case["id"], case["class"], case["text"]))
 
-    for case in SKILL_CASES:
-        if case["expect"] != "blocks":
-            continue
+    blocking = [case for case in SKILL_CASES if case["expect"] == "blocks"]
+    for case in blocking:
         report = validate.resume(bullets=[], skills=case["skills"], vault=_vault(case["profile"]))
         if not report.fabricated_skills:
             escaped.append((case["id"], "skill", ", ".join(case["skills"])))
@@ -83,10 +82,10 @@ def test_fabrication_guard() -> None:
     by_class: dict[str, int] = {}
     for case in FABRICATIONS:
         by_class[case["class"]] = by_class.get(case["class"], 0) + 1
-    print(
-        f"\n  seeded fabrications caught: {len(FABRICATIONS) + 2 - len(escaped)}"
-        f"/{len(FABRICATIONS) + 2}   by class: {by_class}"
-    )
+    # Counted from the data, never from a literal: cases are only ever added (BAR.md §3
+    # rule 3), so a hardcoded total silently stops counting the newest ones.
+    total = len(FABRICATIONS) + len(blocking)
+    print(f"\n  seeded fabrications caught: {total - len(escaped)}/{total}  by class: {by_class}")
 
     assert not escaped, (
         "a seeded fabrication reached a document — BAR.md §2's catch rate is 1.00 and "

@@ -38,6 +38,9 @@ TASK_MODULES = [
     # M3. No beat entry: parsing fires on upload, not on a clock.
     "workers.tasks.profiles",
     "workers.tasks.matching",
+    # M5. No beat entry either, and for a different reason: every tailored match is a
+    # strong-model call, so an unattended tick is real money. M7 owns the schedule.
+    "workers.tasks.tailoring",
 ]
 
 # Imported for the beat schedule below, not for the tasks — one entry per feed, keyed by

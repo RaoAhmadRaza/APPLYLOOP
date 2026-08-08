@@ -156,6 +156,20 @@
     "skills": ["Python", "Kubernetes", "PostgreSQL", "Redis"],
     "why": "The happy path. If this does not survive whole, the skills rule is too strict and the résumé loses its most keyword-dense section.",
     "expect": "kept"
+   },
+   {
+    "id": "S-05",
+    "profile": "unsplit_skills",
+    "skills": ["Python", "Go", "Kubernetes", "Terraform"],
+    "why": "ADDED 2026-08-09 from M5's first live run, which blocked a real document by calling nine of the candidate's own skills fabrications. The vault it ran against stored two whole résumé lines — 'Languages: Python, Go, SQL, TypeScript' and 'Infrastructure: Kubernetes, Terraform, PostgreSQL, Redis, Kafka' — because M3's parse splits a skills line on some runs and not others, on the same fixture. A group line must therefore also answer for its members. This is the shape PROJECT_STATE warns anything reading parsed_json.skills has to handle.",
+    "expect": "kept"
+   },
+   {
+    "id": "S-06",
+    "profile": "unsplit_skills",
+    "skills": ["Postgres"],
+    "lie": "The half of S-05 that keeps it honest, and chosen so it actually discriminates: squashed, 'postgres' is a prefix of 'postgresql', so a substring fix for S-05 admits it while delimiter splitting refuses it. Blocking is also the right answer on the merits — the résumé says PostgreSQL, so the résumé should say PostgreSQL. If this case ever passes, S-05's fix has become containment and the skills rule no longer means anything.",
+    "expect": "blocks"
    }
   ],
   "faithful": [

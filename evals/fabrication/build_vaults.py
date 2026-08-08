@@ -22,6 +22,7 @@ which point the case *should* break rather than silently point somewhere else.
 import json
 from pathlib import Path
 
+from schemas.enums import EvidenceKind
 from schemas.resume import ParsedResume
 from workers.profiles import vault
 
@@ -57,6 +58,13 @@ def main() -> None:
             ],
         }
 
+    # The shape M5's first live run actually met, reproduced rather than imagined. M3
+    # splits a skills line into one claim per keyword on some runs and leaves it whole on
+    # others — same fixture, different sampling — and the whole-line shape called nine of
+    # the candidate's own skills fabrications. Derived from the same résumé so the two
+    # vaults differ in exactly one property.
+    vaults["unsplit_skills"] = _with_group_lines(profiles["senior_backend.pdf"])
+
     OUT.write_text(
         json.dumps(
             {
@@ -75,6 +83,45 @@ def main() -> None:
     )
     for name, blob in vaults.items():
         print(f"{name:24} {len(blob['claims']):3} claims")
+
+
+def _with_group_lines(blob: dict) -> dict:
+    """The same vault, with each skills group left as one whole-line claim.
+
+    `Languages: Python, Go, SQL, TypeScript` — the literal string M5's first live run
+    read out of `evidence`, not a guess at what an unsplit line looks like.
+    """
+    resume = ParsedResume.model_validate(blob["parsed_json"])
+    lines = [
+        f"{group.name}: {', '.join(group.keywords)}" if group.keywords else (group.name or "")
+        for group in resume.skills
+        if group.name
+    ]
+    bullets = [
+        claim
+        for claim in vault.claims(resume)
+        if claim.kind is not EvidenceKind.SKILL
+        and vault.is_supported(claim.text, blob["master_resume"])
+    ]
+
+    claims = [
+        {"id": f"E{index + 1}", "kind": "skill", "text": line, "source": f"skills[{index}]"}
+        for index, line in enumerate(lines)
+    ]
+    claims += [
+        {
+            "id": f"E{len(lines) + index + 1}",
+            "kind": claim.kind.value,
+            "text": claim.text,
+            "source": claim.source,
+        }
+        for index, claim in enumerate(bullets)
+    ]
+    return {
+        "companies": [entry.name for entry in resume.work],
+        "titles": [entry.position for entry in resume.work],
+        "claims": claims,
+    }
 
 
 if __name__ == "__main__":

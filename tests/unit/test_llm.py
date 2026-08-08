@@ -40,6 +40,12 @@ def _configured(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://u:p@localhost:5432/none")
     monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
     monkeypatch.setenv("LLM_API_KEY", "test-key-not-a-secret")
+    # The base URL is pinned beside the slug it belongs to. Pinning only the slug left
+    # the URL to come from wherever it could, and on a working machine that is the
+    # developer's `.env` — the same non-hermetic shape M3 found the day a real
+    # LLM_API_KEY was added, and it is still leaking here despite conftest's fixture.
+    # See docs/DECISIONS.md → M5.
+    monkeypatch.setenv("LLM_BASE_URL", "https://openrouter.ai/api/v1")
     monkeypatch.setenv("LLM_MODEL", "test/model")
     llm.get_settings.cache_clear()
 

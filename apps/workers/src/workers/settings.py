@@ -128,6 +128,32 @@ class Settings(BaseSettings):
     # run over an unchanged pool costs nothing.
     match_interval_minutes: int = 720
 
+    # --- M5: tailoring and the fabrication validator ---------------------------------
+    # §7.2: "Tailoring LLM — strong model, routed. This is the output the user's career
+    # depends on. This is the one place to spend." A separate slug rather than reusing
+    # `llm_model`, because scoring runs per job and tailoring runs per shortlisted match,
+    # and one key through OpenRouter routes both.
+    #
+    # Verified against OpenRouter's live model list rather than remembered: $2/Mtok in,
+    # $10/Mtok out, which is ~$0.03 per tailored application against §8.1's $0.50. This
+    # is the *third* member of the coupled model/base-url set — see `.env.example`.
+    tailor_model: str = "anthropic/claude-sonnet-5"
+
+    # Above this share of untraceable bullets the document is blocked rather than shipped
+    # short. 0.30 because a model that grounded two thirds of its output slipped, and one
+    # that grounded a third has stopped grounding — and a résumé missing most of its
+    # content is worse than none, because it looks finished.
+    tailor_strip_ceiling: float = 0.30
+
+    # A résumé with fewer than this many surviving bullets is not a document a user would
+    # send, however true every line of it is.
+    tailor_min_bullets: int = 6
+
+    # The cost dial. Every match tailored is a strong-model call, so an unattended fan-out
+    # over a full shortlist is real money per tick — deliberately small until M7 owns the
+    # schedule and the budget together.
+    tailor_max_per_run: int = 10
+
     # Object storage is configured by `packages/storage`, not here: the API writes the
     # upload and the worker reads it back, so neither app can own those settings.
 
@@ -145,3 +171,47 @@ class Settings(BaseSettings):
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     return Settings()  # type: ignore[call-arg]
+
+
+def model_slug_mismatch(settings: "Settings") -> str | None:
+    """Name any model slug that cannot exist at the configured base URL, or `None`.
+
+    Three model settings and one base URL are a coupled set: an OpenRouter slug carries a
+    vendor prefix (`openai/gpt-5`) and OpenAI's own API takes the bare name (`gpt-5`).
+    Cross them and the provider answers 400 naming a model it has never heard of, which
+    reads like an outage rather than a typo.
+
+    **A check rather than a comment, because the comment did not work.** The warning above
+    `EMBED_MODEL` in `.env.example` was written after this mismatch cost a live M4 gate
+    run. M5's first live run hit it again within the hour, on the variable whose warning
+    had just been extended to cover it.
+
+    A function the interlock calls rather than a validator on `Settings`, deliberately.
+    Refusing to construct `Settings` makes two independent settings inseparable — every
+    test that pins a fake model slug then has to pin a provider for it too — and this
+    repo's shape for "configured wrong" is a stage that records why and does nothing, not
+    a process that will not boot.
+
+    Only the two providers configured here are checked. A third OpenAI-compatible host
+    may use slashes or not, and guessing on its behalf turns a helpful check into a false
+    refusal, which is the worse failure.
+    """
+    slugs = {
+        "LLM_MODEL": settings.llm_model,
+        "EMBED_MODEL": settings.embed_model,
+        "TAILOR_MODEL": settings.tailor_model,
+    }
+    if "openrouter.ai" in settings.llm_base_url:
+        wrong = [name for name, slug in slugs.items() if "/" not in slug]
+        expectation = "OpenRouter slugs carry a vendor prefix, e.g. openai/gpt-5"
+    elif "api.openai.com" in settings.llm_base_url:
+        wrong = [name for name, slug in slugs.items() if "/" in slug]
+        expectation = "OpenAI's own API takes the bare model name, e.g. gpt-5"
+    else:
+        return None
+
+    if not wrong:
+        return None
+    return (
+        f"{', '.join(wrong)} cannot exist at LLM_BASE_URL={settings.llm_base_url} — {expectation}"
+    )

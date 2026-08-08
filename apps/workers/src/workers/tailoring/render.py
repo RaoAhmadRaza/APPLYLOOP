@@ -92,7 +92,7 @@ def resume_pdf(
         # One line, in the order the model selected. Reconstructing the résumé's own skill
         # groupings is possible and speculative: the group labels are themselves claims,
         # so a "group" is only recoverable by guessing which atoms belonged to it.
-        sections["skills"] = [{"label": "Skills", "details": ", ".join(skills)}]
+        sections["skills"] = [{"label": "Skills", "details": ", ".join(_members(skills))}]
 
     education = [
         _entry(
@@ -124,6 +124,28 @@ def resume_pdf(
         "design": {"theme": THEME},
     }
     return _render(document)
+
+
+def _members(skills: list[str]) -> list[str]:
+    """Drop a group label from a selected skill, keeping its members.
+
+    When M3's parse leaves a skills line whole, the vault's claim is
+    `Languages: Python, Go, SQL` and that is what the model can legally select. Printed
+    raw it renders as `Skills: Languages: Python, Go, SQL, Infrastructure: Kubernetes…`,
+    which is what M5's first real document actually said.
+
+    A display transform over already-validated text, deliberately: these strings passed
+    the skills rule by exact membership before they got here, so reformatting cannot
+    admit anything. Duplicates are dropped because two selected groups can share a tool.
+    """
+    seen: dict[str, None] = {}
+    for skill in skills:
+        _, _, tail = skill.rpartition(":")
+        for member in (tail or skill).split(","):
+            cleaned = member.strip()
+            if cleaned:
+                seen.setdefault(cleaned, None)
+    return list(seen)
 
 
 def group_by_owner(bullets: list[TailoredBullet], vault: Vault) -> dict[str, list[str]]:

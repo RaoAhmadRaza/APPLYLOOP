@@ -457,6 +457,98 @@
      "source": "education[0]"
     }
    ]
+  },
+  "unsplit_skills": {
+   "companies": [
+    "Halcyon Freight Systems",
+    "Verdigris Analytics",
+    "Tessellate Labs"
+   ],
+   "titles": [
+    "Staff Software Engineer",
+    "Senior Backend Engineer",
+    "Backend Engineer"
+   ],
+   "claims": [
+    {
+     "id": "E1",
+     "kind": "skill",
+     "text": "Languages: Python, Go, SQL, TypeScript",
+     "source": "skills[0]"
+    },
+    {
+     "id": "E2",
+     "kind": "skill",
+     "text": "Infrastructure: Kubernetes, Terraform, PostgreSQL, Redis, Kafka",
+     "source": "skills[1]"
+    },
+    {
+     "id": "E3",
+     "kind": "title",
+     "text": "Staff Software Engineer",
+     "source": "work[0].position"
+    },
+    {
+     "id": "E4",
+     "kind": "bullet",
+     "text": "Cut p95 checkout latency from 940ms to 205ms by introducing a read-through Redis cache in front of the\npricing service",
+     "source": "work[0].highlights[0]"
+    },
+    {
+     "id": "E5",
+     "kind": "bullet",
+     "text": "Led the migration of 41 services from Nomad to Kubernetes across two regions",
+     "source": "work[0].highlights[1]"
+    },
+    {
+     "id": "E6",
+     "kind": "bullet",
+     "text": "Designed the idempotency layer that eliminated duplicate carrier bookings",
+     "source": "work[0].highlights[2]"
+    },
+    {
+     "id": "E7",
+     "kind": "title",
+     "text": "Senior Backend Engineer",
+     "source": "work[1].position"
+    },
+    {
+     "id": "E8",
+     "kind": "bullet",
+     "text": "Built the billing reconciliation pipeline processing 2.4 million events per day",
+     "source": "work[1].highlights[0]"
+    },
+    {
+     "id": "E9",
+     "kind": "bullet",
+     "text": "Reduced Postgres storage cost 38% by partitioning the events table by month",
+     "source": "work[1].highlights[1]"
+    },
+    {
+     "id": "E10",
+     "kind": "title",
+     "text": "Backend Engineer",
+     "source": "work[2].position"
+    },
+    {
+     "id": "E11",
+     "kind": "bullet",
+     "text": "Shipped the public REST API used by 180 integration partners",
+     "source": "work[2].highlights[0]"
+    },
+    {
+     "id": "E12",
+     "kind": "credential",
+     "text": "Oregon State University",
+     "source": "education[0]"
+    },
+    {
+     "id": "E13",
+     "kind": "credential",
+     "text": "Certified Kubernetes Administrator",
+     "source": "certificates[0]"
+    }
+   ]
   }
  }
 }

@@ -94,7 +94,7 @@ def tailor_match(
         CoverLetterDraft,
         system=prompt.LETTER_SYSTEM,
         user=prompt.build_letter(
-            claims=claims,
+            claims=prompt.for_letter(claims),
             title=work.job.title,
             company=work.job.company,
             description=work.job.description,

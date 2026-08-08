@@ -41,6 +41,10 @@ from workers.text import squash
 _DIGITS = re.compile(r"\d+")
 _TOKENS = re.compile(r"[A-Za-z0-9]+")
 
+# The delimiters a résumé's skills line uses: `Languages: Python, Go · SQL / TypeScript`.
+# Splitting on these is what lets an unsplit group claim still answer "is Go in the vault".
+_SKILL_PARTS = re.compile(r"[:,;·|/]|\s{2,}")
+
 
 @dataclass(frozen=True)
 class Claim:
@@ -66,12 +70,30 @@ class Vault:
     titles: tuple[str, ...]
 
     def skill_texts(self) -> dict[str, str]:
-        """Squashed skill claim -> the stored spelling, which is what gets rendered."""
-        return {
-            squash(claim.text): claim.text
-            for claim in self.claims.values()
-            if claim.kind == EvidenceKind.SKILL.value
-        }
+        """Squashed skill -> the stored spelling, which is what gets rendered.
+
+        **A stored skill claim is sometimes a whole résumé line.** M3 usually splits
+        `Languages: Python, Go, SQL` into one claim per keyword and sometimes does not —
+        it is a sampling property of the parse, not of the résumé, and the same fixture
+        splits on one run and not the next. M5's first live run met the unsplit shape and
+        called every one of the candidate's real skills a fabrication, which blocked the
+        document outright.
+
+        So a group line is also read as its members, split on its own delimiters. This is
+        deliberately splitting and **not** substring containment: `Java` is not a member
+        of `Languages: JavaScript, Python`, where a substring check would say it is. Every
+        member has to be a whole delimited part of a claim the vault actually stores.
+        """
+        found: dict[str, str] = {}
+        for claim in self.claims.values():
+            if claim.kind != EvidenceKind.SKILL.value:
+                continue
+            found.setdefault(squash(claim.text), claim.text)
+            for part in _SKILL_PARTS.split(claim.text):
+                stripped = part.strip()
+                if stripped:
+                    found.setdefault(squash(stripped), stripped)
+        return found
 
 
 @dataclass(frozen=True)
