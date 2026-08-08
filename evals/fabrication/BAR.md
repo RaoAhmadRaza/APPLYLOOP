@@ -241,6 +241,39 @@ obvious moves, and a future session will otherwise propose them again confidentl
 The human read required by §1 is logged here too: one line per live run, with the reader's
 initials, the number of documents read, and what was found.
 
+### LOGGED — run 4: every automated clause passes, and one bar row still has nothing behind it (2026-08-09)
+
+```
+live seeded cases  20   escapes 0        bar 0          PASS   bound ~15%, printed
+pairs attempted    40   errors  0        ceiling 2      541s at concurrency 4
+block rate         0.05                  ceiling 0.20   PASS   résumé
+letters not written 0.50                 reported, not gated
+retention, live    0.99   spread 0.25    1 bullet stripped in the entire run
+cost/application   $0.0573               ceiling $0.50  PASS   $2.29 over 40
+```
+
+**Fourth query of the same twenty pairs.** Runs 1–3 are logged below; run 4 follows the
+letter/résumé split and no other change. Read every number here knowing that.
+
+**What this run does not establish, and §2 says so in its own row.** *Escapes found by human
+read: 0* has **no reading behind it**. §1 pins why that row exists: an automated audit of a
+rendered document against the vault uses the same containment rule that produced it and
+agrees by construction. The seeded cases are the other non-circular half and they are green,
+but "no seeded fabrication in twenty got through" is a narrower claim than "no fabrication
+got through". **M5's gate is not green until a human has read the documents**, and this
+entry is where that reading gets logged when it happens.
+
+**Half the letters are not being written, and that is not a fabrication result.** Ten of
+twenty honest pairs produced no letter. Eight were vocabulary — `includes`, `projects`,
+`would`, `outcomes`, `bring`, `Together` — and **two were the rule working exactly as
+designed**: `the number 13 is not in the cited evidence` and `the number 17`, on
+`senior_backend.pdf`, where the model put a figure into prose that the résumé never states.
+That is §4's F4 caught in the letter, by a run nobody seeded for it.
+
+So the letter's vocabulary problem and the letter's fabrication guard are now measurably
+different things, which is the argument for not widening `words.py` to make the rate look
+better: it would loosen the rule that caught the two real ones.
+
 ### AMENDED — the block rate is the résumé's; the letter is reported beside it (2026-08-09)
 
 **Approved by the project owner, on a structural argument rather than on a result.** §2's

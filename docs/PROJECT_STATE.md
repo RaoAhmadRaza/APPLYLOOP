@@ -30,7 +30,7 @@ proven, with what evidence, and what is known to be broken.
 | **M2** | Aggregators + dedupe | ✅ **proven** 2026-08-07, one clause pending | See below. |
 | **M3** | Profiles & résumé parsing | ✅ **proven** 2026-08-07 | Live gate **24/24 against a real model** (OpenAI, `gpt-5.4-nano` class). See below. |
 | **M4** | Matching | ✅ **proven 2026-08-08 — 12/12, with a stated caveat** | Set is 121 human-confirmed pairs (`human:MAR`, 0 borderline, 40 relevant). Threshold **20**, chosen on the pooled tuning split. **Pooled reporting precision 0.86, recall 0.89, n=69, 95% CI [0.75, 0.92].** All three runs individually cleared 0.80 (0.82 / 0.83 / 0.91), so the pass is not an artefact of pooling. Filter recall 1.00 (40/40), cost $0.304/1k against a $2.00 ceiling, grounding 0.98. **The bar lies inside the interval** — see the caveat below and BAR.md §8. |
-| **M5** | Documents | 🟡 **built, not proven** 2026-08-09 | Validator, renderer, stage and mirror all shipped; 694 offline tests green; two real documents generated end to end against a live model and read back correctly. **The gate has not run**: `evals/fabrication/cases.json` is `proposed`, and BAR.md §6 refuses to count a model-authored set. Two clauses are outstanding — see below. |
+| **M5** | Documents | 🟡 **automated gate green, two clauses outstanding** 2026-08-09 | Case set confirmed `human:MAR`. Live gate **7/7 on the fourth query**: 20 seeded live cases, **0 escapes**, 0 errors over 40 pairs, résumé block rate 0.05 against 0.20, retention 0.99, $0.0573 per application against $0.50. 696 offline tests green, `test_fabrication_guard` 17/17. **Not green yet**: BAR.md §2's *escapes found by human read* row has no reading behind it, and the Drive mirror has never uploaded. Half the letters are not written — reported, not gated. |
 | M6–M11 | — | ⬜ | Strict chain from M5. |
 
 ### M5 gate, item by item
@@ -38,9 +38,28 @@ proven, with what evidence, and what is known to be broken.
 | Clause | Status | Evidence |
 |---|---|---|
 | PDF opens and an ATS parser reads the fields back | ✅ **offline and live** | `test_tailoring_render.py` renders both engineering fixtures and reads **19/19** and **15/15** expected fields back out with `markitdown` — the same extractor M3 parses uploads with, so a field this repo cannot read out of its own PDF is one it would fail to read off a candidate's. Free, in CI, on every push. The real generated résumé was also read back by hand. **Presence is asserted, adjacency is not**: extraction returns the date ranges away from their roles, which is a property of PDF text extraction rather than of the document (BAR.md §3). |
-| **`test_fabrication_guard` passes** | 🟡 **offline yes, live never run** | The offline half is green and permanent: **16/16** seeded fabrications caught across all five classes, against retention **1.00** on rewrites (floor 0.70) and **2/2** verbatim. It runs in CI, is never skipped, and ran while the case set is `proposed` on purpose — an unconfirmed case that fails is still a finding. The **live** half exists (`make verify-live-tailor`, 20 seeded cases + 10 honest pairs) and **has not been run**, because BAR.md §6 refuses to count a set a model authored. |
-| Cover letter grounded only in vault evidence | 🟡 **grounded, and barely readable** | Every paragraph traces to cited evidence — the second real letter was 3/3 paragraphs, 0 rejected. It also opened all three with the same clause, because the validator's allowed universe leaves almost no connective vocabulary. A prompt line now forbids the repetition and **has not been re-measured**. See DECISIONS → M5 → *Still true, and not fixed*. |
+| **`test_fabrication_guard` passes** | 🟡 **both halves green; one bar row unmeasured** | Offline: **17/17** seeded fabrications caught across five classes, retention **1.00** on rewrites (floor 0.70), **2/2** verbatim — in CI, never skipped. Live, run 4: **20 seeded cases, 0 escapes**, over 40 pairs with 0 errors. **The count is the claim, never a rate** — zero in twenty bounds the true escape rate at ~15%, and the gate prints that beside the zero. **Outstanding:** §2's *escapes found by human read = 0* has no reading behind it, and §1 explains why an automated audit cannot substitute — it uses the same rule that produced the document and agrees by construction. |
+| Cover letter grounded only in vault evidence | 🟡 **grounded; half of them are not written** | Every paragraph that ships traces to cited evidence. But 10 of 20 honest pairs produced **no letter**: eight on connective vocabulary (`includes`, `would`, `Together`), and **two on a number the résumé never states** — `the number 13`, `the number 17` — which is §4's F4 class caught in prose by a run nobody seeded for it. A failing letter no longer discards the résumé (BAR §8, amended). The vocabulary half is deferred to M6/M7; widening `words.py` would loosen the rule that caught the two real ones. |
 | Docs stored, mirrored, logged | 🟡 **stored and logged; mirror unproven** | Stored: two PDFs in MinIO under `documents/<match_id>/`, `documents` rows written, match at `tailored`. Logged: `tailor.generated` carries bullet counts, strip counts, both documents' keys, token spend and elapsed. Mirrored: `storage/drive.py` is written and unit-tested, `make verify-live-drive` is written — **no Google credentials exist yet**, so `gdrive_url` is NULL on both real documents. |
+
+**The live gate, run 4 of 4, 2026-08-09** — `gpt-5`, 40 pairs, 9m20s at concurrency 4:
+
+```
+live seeded cases  20   escapes 0        bar 0          PASS   bound ~15%
+pairs attempted    40   errors  0        ceiling 2
+block rate         0.05                  ceiling 0.20   PASS   résumé
+letters not written 0.50                 reported, not gated
+retention, live    0.99   spread 0.25    1 bullet stripped in the entire run
+cost/application   $0.0573               ceiling $0.50  PASS   $2.29
+```
+
+**Runs 1–3 all failed, and each failure was worth more than the pass.** Run 1 died whole on
+a read timeout after 25 minutes and measured nothing — `LLM_TIMEOUT_SECONDS` was written for
+the cheap model, and the harness had none of M4's retry, concurrency or per-pair isolation.
+Run 2 blocked 19 of 20 honest pairs on a bullet floor of six against vaults holding four and
+three: *a floor the vault cannot reach is not a bar*. Run 3 blocked 9 of 20 because a letter
+failing on the word `offer` discarded a résumé that had validated. All three are logged in
+BAR.md §8 with what was rejected as well as what was applied.
 
 **The first real run, 2026-08-09** — senior backend profile, live model, live bucket:
 

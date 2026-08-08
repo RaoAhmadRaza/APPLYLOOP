@@ -1170,6 +1170,33 @@ beats asking the prompt to resist it.
 
 ### Still true, and not fixed
 
+**M5's gate went green on its fourth query, and three failures taught more than the pass.**
+Run 1 died whole on a read timeout after 25 minutes and measured nothing: `LLM_TIMEOUT_SECONDS`
+was 120, written for the cheap extraction model, and a reasoning-class model runs past it —
+and the harness carried none of M4's retry, concurrency or per-pair isolation, so one failure
+took everything. Run 2 blocked 19 of 20 honest pairs with retention at 0.98, because
+`TAILOR_MIN_BULLETS = 6` was unsatisfiable against vaults holding four and three claims;
+**a floor the vault cannot reach is not a bar, it is a guaranteed block**, and it fails in
+the flattering direction because the printed reason looks like model quality. Run 3 blocked
+9 of 20 because a letter failing on the word `offer` discarded a résumé that had validated
+cleanly — nothing false had shipped, so the good document was being punished for the other
+one's failure.
+
+**What was refused each time is the part worth keeping.** Raising the 0.20 block ceiling
+would have made run 2 green. Adding seven connective words to `words.py` would have made run
+3 green, and each word passes that file's own stated membership test. Both were refused as
+fitting-to-result on a set already queried three times — *"each change was individually
+defensible"* is precisely what adaptive analysis looks like from the inside. The changes
+actually made were forced by mechanism: a floor that arithmetic made unreachable, and a
+coupling that discarded a passing document.
+
+**Run 4's green does not mean what a green usually means, and §2 says so in its own row.**
+*Escapes found by human read: 0* has no reading behind it. An automated audit of a rendered
+document against the vault uses the same containment rule that produced it and agrees by
+construction, which §1 pinned at the time the bar was set rather than discovering later. The
+honest claim is **"no seeded fabrication in twenty got through"**, bounded at ~15% by the
+rule of three — not "the validator does not leak".
+
 **The cover letter is grounded and stilted.** Every paragraph of the second real letter
 opened with the same clause — "For the *role* at *company*, I …" — because the validator's
 allowed universe leaves almost no connective vocabulary to write with. It is exactly the
@@ -1232,6 +1259,7 @@ either way.
 | **`make verify-live-*` exiting 0 having run nothing** | A live target silently no-ops when its key is absent from the shell (the `skipif` reads `os.getenv`, and `.env` is not loaded into the process). Caught by reading the output, not by the exit code. Fix is to fail rather than skip when `APPLYLOOP_LIVE_*` is set explicitly but the key is missing — an opt-in run that finds no key is a mistake, not a supported state. | M4 |
 | `jobs.locations_norm` + GIN | Pool > ~50k, or the funnel query shows up in `match.scored.elapsed_ms`. | M4 |
 | A distinct below-threshold match status | M8's dashboard needs to tell "scored too low" from "the user skipped". Both mean excluded today. | M4 |
+| **The cover letter's legal vocabulary** | **TRIGGER FIRED, and half-refused, 2026-08-09.** Run 4 wrote no letter for 10 of 20 honest pairs. Eight were connective words (`includes`, `would`, `Together`, `outcomes`); **two were the rule working** — a number in prose the résumé never states. Widening `words.py` would loosen the rule that caught the real ones, so the two halves have to be separated before anything is widened. Revisit in M6 with a human reading letters, or when a letter block is shown to be a false positive on a case somebody wrote down. | M5 |
 | **Cover-letter readability** | **Deferred to M6/M7 by the project owner, 2026-08-09, on a scope argument worth recording: the gate's job is fabrication, not prose.** "Passes the gate but a person would not send it" is a real product gap and it is not a question M5 asks — M5 asks whether the system invented anything. A style pass belongs where a user is looking at the output: M6 puts the letter in front of a human for approval, M7 runs it unattended. Revisit there, or sooner if the live gate's block rate shows the letter rule is the binding constraint. Widening `words.py` for prose is the obvious move and the risky one: the words a letter needs are also the words a claim hides in. | M5 |
 | **`.env` leaking into unit tests past `_ignore_dotenv`** | Any second cross-field check on settings. Invisible while each field is validated alone; the settings validator exposed it in an hour and was removed for unrelated reasons. Evidence and reproduction in the M5 section above. | M5 |
 | **Résumé versioning / tailoring cache** | Unchanged from M3 **except that M5 did not need it**: the status transition supplies idempotency, so what remains is a cost optimisation. Revisit when re-tailoring becomes a real operation — M6's "regenerate this" button, or M7 re-running a match after a résumé edit. | M5 |
