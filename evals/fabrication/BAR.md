@@ -241,6 +241,42 @@ obvious moves, and a future session will otherwise propose them again confidentl
 The human read required by §1 is logged here too: one line per live run, with the reader's
 initials, the number of documents read, and what was found.
 
+### AMENDED — the block rate is the résumé's; the letter is reported beside it (2026-08-09)
+
+**Approved by the project owner, on a structural argument rather than on a result.** §2's
+ceiling is unchanged at 0.20. What changed is which document it counts.
+
+**Run 3 measured a block rate of 0.45, and 7 of the 9 blocks were a cover-letter paragraph
+using a single connective word** — `offer`, `background`, `Together`, `bring`, `training`,
+`results`, `addition`. Résumé-only block rate in the same run was **2/20 = 0.10**, and both
+of those were legitimate: a 50% strip rate, and two traceable bullets against a floor of
+three the vault could have met. Eight of the nine were `two_column.pdf`, whose vault is four
+short ML sentences — the narrower the vault, the smaller a letter's legal vocabulary, and
+the more the letter rule fires.
+
+The defect this exposed is not the rate. It is that a failing letter **discarded a résumé
+that had validated cleanly**, because the stage computed `blocked = résumé or letter`.
+Nothing false shipped in any of the seven — the validator did exactly its job — so throwing
+away the good document punished the wrong thing.
+
+**Applied:** the two documents are judged separately. The résumé's verdict decides whether
+anything ships; a letter that cannot be grounded is not written, the match still moves to
+`tailored` with its résumé, and the letter block is recorded on `tailor.generated` with
+`letter_bytes: 0`. §2's block rate now counts résumés. The letter's rate is **printed beside
+it and not gated**, because §3.7's alert-on-volume applies to something that raises no error.
+
+**Rejected, and it is the more instructive half.** Adding those seven words to `words.py`
+would have made run 3 green, and each word individually passes that file's own stated test —
+none of them can make a résumé line false. It was refused because it is adding exactly the
+words that just failed, immediately after watching them fail, on the third query of this
+set. That is the adaptive-analysis shape M4's §8 warns about, and *"each change was
+individually defensible"* is what it always looks like from the inside. The letter's
+vocabulary problem is now a deferred item with a trigger, owned by M6 where a human reads
+the output.
+
+**Query count: three, and this fix follows run 3.** Anyone reading run 4 should know it is
+the fourth look at the same twenty pairs.
+
 ### LOGGED — the first two live runs, and the defect the block-rate bar caught (2026-08-09)
 
 **No bar moved.** §2 is untouched. What moved was the system §2 measures, which is what a

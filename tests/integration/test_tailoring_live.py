@@ -291,10 +291,19 @@ def test_the_validator_does_not_block_its_way_to_a_clean_score(run: dict[str, An
     blocked = [row for row in honest if row["blocked"]]
     rate = len(blocked) / len(honest) if honest else 1.0
 
+    # Reported beside the gated number, never folded into it. A letter that cannot be
+    # grounded is not written; the résumé still ships, so it is not a blocked document.
+    # It is also not nothing — §3.7's alert-on-volume applies, and this is where a
+    # climbing letter-block rate becomes visible, since no error is ever raised.
+    letterless = [row for row in honest if row["letter_blocked"]]
+
     print(f"\n  honest pairs          {len(honest)}")
-    print(f"  block rate            {rate:.2f}   ceiling {BAR_BLOCK_RATE}")
+    print(f"  block rate            {rate:.2f}   ceiling {BAR_BLOCK_RATE}   (résumé)")
+    print(f"  letters not written   {len(letterless) / len(honest):.2f}   reported, not gated")
     for row in blocked:
         print(f"    blocked  {row['case']:12} {row['profile']:20} {row['reason']}")
+    for row in letterless:
+        print(f"    no letter {row['case']:12} {row['profile']:20} {row['letter_reason']}")
 
     assert len(honest) >= MIN_HONEST_CASES, "too few honest pairs to measure a block rate"
     assert rate <= BAR_BLOCK_RATE, (

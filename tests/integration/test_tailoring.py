@@ -253,11 +253,16 @@ def test_an_ungrounded_bullet_is_stripped_with_its_reason_recorded(
     assert _status(session, seeded.id) == MatchStatus.TAILORED.value
 
 
-def test_a_cover_letter_that_adds_a_claim_blocks_the_whole_match(
+def test_a_cover_letter_that_adds_a_claim_costs_the_letter_and_not_the_resume(
     session: Session, seeded: Match, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A résumé that validates does not rescue a letter that does not. Both documents are
-    the deliverable, and M6 sends them together."""
+    """The two documents are judged separately.
+
+    M5's third live gate discarded 7 validated résumés because a letter paragraph used a
+    word like `offer`. Nothing false shipped in any of them — the validator worked — so
+    throwing away the good document punished the wrong thing. The letter is simply not
+    written, and the match still moves on with its résumé.
+    """
     _model(
         monkeypatch,
         paragraphs=[(["E13"], "I hold an AWS Solutions Architect certification.")],
@@ -266,9 +271,18 @@ def test_a_cover_letter_that_adds_a_claim_blocks_the_whole_match(
 
     result = _run(session, seeded)
 
-    assert result is not None and result.blocked
-    assert not written
-    assert _status(session, seeded.id) == MatchStatus.DISCOVERED.value
+    assert result is not None
+    assert result.letter_blocked and not result.blocked
+    assert _status(session, seeded.id) == MatchStatus.TAILORED.value
+
+    documents = list(session.scalars(select(Document).where(Document.match_id == seeded.id)))
+    assert [document.type for document in documents] == [DocumentType.RESUME.value]
+    assert len(written) == 1, "a letter that did not validate was rendered anyway"
+
+    event = _latest_event(session, "tailor.generated")
+    assert event is not None
+    assert event.payload_json["letter_blocked"] is True
+    assert event.payload_json["letter_bytes"] == 0
 
 
 # ------------------------------------------------------------------- idempotency (§3.4)

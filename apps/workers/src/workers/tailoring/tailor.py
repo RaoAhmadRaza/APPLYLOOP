@@ -15,6 +15,14 @@ of anything.
 A block is not a failure. It writes no document, leaves the match `discovered`, and says
 why on the event — which means the next run tries again, which is right: the model is
 sampled, and the same match may ground perfectly on the next attempt.
+
+**The two documents are judged separately, and only the résumé decides whether anything
+ships.** M5's third live gate blocked 7 of 20 honest pairs because a cover-letter paragraph
+used a word like `offer` or `background`, and each of those discarded a résumé that had
+validated cleanly. Nothing false shipped in any of them — the validator worked — so
+throwing away the good document was punishing the wrong thing. A letter that cannot be
+grounded is simply not written; the match still moves to `tailored` with its résumé, and
+the letter block is recorded so M6 can ask for one again.
 """
 
 import time
@@ -45,8 +53,13 @@ PDF = "application/pdf"
 @dataclass(frozen=True)
 class TailorResult:
     match_id: str
+    # The résumé's verdict, and the one that decides whether anything ships.
     blocked: bool
     reason: str | None
+    # The letter's, kept separate. A letter that cannot be grounded is a letter that is
+    # not written; it is not a reason to discard a résumé that validated.
+    letter_blocked: bool
+    letter_reason: str | None
     bullets_returned: int
     bullets_kept: int
     bullets_stripped: int
@@ -122,8 +135,10 @@ def tailor_match(
 
     result = TailorResult(
         match_id=match_id,
-        blocked=call.blocked or letter_report.blocked,
-        reason=call.reason or _letter_reason(letter_report),
+        blocked=call.blocked,
+        reason=call.reason,
+        letter_blocked=letter_report.blocked,
+        letter_reason=_letter_reason(letter_report),
         bullets_returned=len(drafted.bullets),
         bullets_kept=len(report.kept),
         bullets_stripped=len(report.stripped),
@@ -156,18 +171,19 @@ def tailor_match(
     resume_pdf = render.resume_pdf(
         resume=work.resume, bullets=report.kept, skills=report.skills, vault=work.vault
     )
-    letter_pdf = render.cover_letter_pdf(
-        name=work.resume.basics.name or "Candidate",
-        company=work.job.company,
-        title=work.job.title,
-        paragraphs=[paragraph.text for paragraph in letter_report.paragraphs],
-        today=datetime.now(UTC).strftime("%d %B %Y"),
-    )
+    written = [_store(session, work.match, DocumentType.RESUME, resume_pdf)]
 
-    written = [
-        _store(session, work.match, DocumentType.RESUME, resume_pdf),
-        _store(session, work.match, DocumentType.COVER_LETTER, letter_pdf),
-    ]
+    letter_bytes = 0
+    if not result.letter_blocked:
+        letter_pdf = render.cover_letter_pdf(
+            name=work.resume.basics.name or "Candidate",
+            company=work.job.company,
+            title=work.job.title,
+            paragraphs=[paragraph.text for paragraph in letter_report.paragraphs],
+            today=datetime.now(UTC).strftime("%d %B %Y"),
+        )
+        letter_bytes = len(letter_pdf)
+        written.append(_store(session, work.match, DocumentType.COVER_LETTER, letter_pdf))
 
     moved = session.scalar(
         update(Match)
@@ -188,7 +204,9 @@ def tailor_match(
             "model": model,
             "documents": written,
             "resume_bytes": len(resume_pdf),
-            "letter_bytes": len(letter_pdf),
+            # Zero when the letter did not ship. §3.7's alert-on-volume: a letter block
+            # rate that climbs is invisible in an error rate, because nothing errored.
+            "letter_bytes": letter_bytes,
             "elapsed_ms": int((time.monotonic() - started) * 1000),
         },
         user_id=work.match.user_id,
