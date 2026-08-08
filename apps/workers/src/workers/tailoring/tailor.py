@@ -6,7 +6,8 @@ after rendering is auditing rather than preventing.
 
 Idempotency is the state machine, not a new column (§3.4). The stage acts on
 `status='discovered'` and moves the match to `tailored` in the same transaction as the
-document rows, with a conditional UPDATE checked by rowcount. A retry after commit finds
+document rows, with a conditional `UPDATE ... RETURNING` that yields no row if the status
+moved underneath it. A retry after commit finds
 `tailored` and does nothing; a worker killed mid-run rolls back whole, leaving a match
 that will simply be picked up again. Nothing to check-then-act, and no second application
 of anything.
@@ -29,6 +30,7 @@ from schemas.tailoring import CoverLetterDraft, TailoredResume
 from sqlalchemy import update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
+from storage import drive
 
 from workers import llm
 from workers.tailoring import prompt, render, select, validate
@@ -189,7 +191,7 @@ def tailor_match(
 
 
 def _store(session: Session, match: Match, kind: DocumentType, pdf: bytes) -> str:
-    """Put the PDF in the bucket, then write the row that points at it.
+    """Put the PDF in the bucket, mirror it, then write the row that points at both.
 
     Blob first: a row pointing at an object that does not exist is a broken link M6 will
     send to a human, while an object with no row is garbage a lifecycle rule reaps.
@@ -206,11 +208,42 @@ def _store(session: Session, match: Match, kind: DocumentType, pdf: bytes) -> st
             match_id=match.id,
             type=kind.value,
             storage_url=key,
+            gdrive_url=_mirror(session, match, kind, pdf),
             version=FIRST_VERSION,
         )
         .on_conflict_do_nothing(index_elements=[Document.match_id, Document.type, Document.version])
     )
     return key
+
+
+def _mirror(session: Session, match: Match, kind: DocumentType, pdf: bytes) -> str | None:
+    """Copy the PDF into the user's Drive folder. `None` when it did not happen.
+
+    **A mirror failure never fails the stage.** R2 holds the durable copy and the model
+    call — the expensive, non-repeatable part — has already succeeded. Raising here would
+    throw away a valid document because a third party had a bad afternoon, and the next
+    run would re-spend the tokens to produce the same bytes.
+
+    It is recorded rather than logged, because a mirror that has quietly stopped working
+    is exactly §3.7's shape: no exception, no error rate, just a column that is NULL more
+    often than it used to be.
+    """
+    if not drive.is_configured():
+        return None
+    try:
+        return drive.upload(
+            name=f"{match.id}-{kind.value}.pdf",
+            data=pdf,
+            content_type=PDF,
+        )
+    except drive.DriveError as error:
+        record(
+            session,
+            "tailor.mirror_failed",
+            {"match_id": str(match.id), "type": kind.value, "error": str(error)[:200]},
+            user_id=match.user_id,
+        )
+        return None
 
 
 def _letter_reason(report: validate.LetterReport) -> str | None:

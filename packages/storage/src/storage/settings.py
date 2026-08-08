@@ -37,6 +37,18 @@ class Settings(BaseSettings):
     # the API process's memory before anything has had a chance to reject it.
     max_resume_bytes: int = 10 * 1024 * 1024
 
+    # --- M5: the Google Drive mirror -------------------------------------------------
+    # Both optional and interlocked together, like the S3 settings above: unconfigured,
+    # `documents.gdrive_url` stays NULL and the document still ships.
+    #
+    # **The folder has to be in a Shared Drive.** A service account's own Drive has had a
+    # 0 GB quota since 2023, so an upload there fails `storageQuotaExceeded` on an empty
+    # account and there is no exception to request.
+    gdrive_folder_id: str | None = None
+    # The service-account JSON key, base64-encoded — one variable rather than a mounted
+    # file, and immune to what a raw key's embedded newlines do to a `.env`.
+    gdrive_service_account_json: SecretStr | None = None
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
