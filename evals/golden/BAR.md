@@ -41,6 +41,15 @@ matcher that needs tuning.
 | **per-filter cap** | **≤ 0.70 of pool**, against the **real pool** | No single filter may drop more than 70% of the pool. A filter that drops everything and a filter that drops nothing are the same class of defect and neither raises. Same harness as the floor above. |
 | **cost per 1,000 jobs scored** | **≤ $2.00** | Denominator pinned in §5. Generous on purpose — this is a ceiling that catches an accident, not a target to optimise toward. |
 
+**What precision and recall are computed over:** the pairs of every profile that
+contributes at least one `relevant` pair to the split. A profile with no positives has no
+recall to measure and an unbounded precision denominator, so including it makes precision a
+function of how many all-negative profiles the draw produced rather than of the matcher.
+Excluded profiles are **printed by the run**, never dropped silently, and the exclusion is a
+property of the draw rather than a list of names — redraw the profile against jobs it can
+match and it re-enters with no edit. Filter recall, grounding and cost are still computed
+over every pair. Added 2026-08-08; see §8.
+
 ## 3. How the threshold is chosen
 
 The **procedure** is fixed here; the number is not, and must not be.
@@ -131,7 +140,12 @@ Pinned decisions, so that two labellers agree:
 1. **Over-qualification is `relevant`** unless the role is more than one band below — a
    senior engineer seeing a mid role is fine, seeing an internship is not.
 2. **A remote-friendly role in a city the profile never named is `relevant`**, provided
-   the profile does not restrict to on-site.
+   the profile does not restrict to on-site — **but a remote role scoped to a country the
+   profile is not authorised to work in is `not_relevant`.** A city is a commute; a country
+   is a right to work. "Remote — Netherlands" is a Dutch employment contract, and remote
+   does not make it available to someone authorised only in the US. Where the profile's
+   authorisation is unknown, silence passes and the pair is judged on the rest. See §8's
+   amendment of 2026-08-08 for what forced the second sentence.
 3. **A profile needing sponsorship + a posting that refuses it is `not_relevant`**,
    regardless of how well the skills fit. This one is not a judgement call. §7.2 calls the
    work-auth filter the most-praised feature in the leading product and its entire value
@@ -206,6 +220,86 @@ and the second run reads its own output.
 Any change to §2, §3, §4 or §5 after the first scored run must be recorded here with the
 date, the evidence that forced it, and a matching entry in `docs/DECISIONS.md`. A silent
 edit to this file is the same defect as never having written it.
+
+### APPLIED — a profile with no positives measures the draw, not the matcher (2026-08-08)
+
+**Approved by the project owner. Raised by the gate run that followed the two amendments
+below, where it became the binding constraint.**
+
+`career_changer.docx` holds **23 pairs and zero labelled `relevant`** — it held exactly one
+until the §6 R2 reconciliation flipped its Canada pair, and the previous session had already
+recorded 1-in-23 as a fired trigger. It contributes 11 of the tuning split's 46 pairs. Every
+one of them can only subtract: there is no recall term it can win, and each pair the matcher
+scores above the cut is a false positive. Three of the four false positives at threshold 35
+were its.
+
+The tell that this is a sampling defect and not a matcher defect: **its largest false
+positive is a negative the code is structurally unable to reject.** That profile's résumé
+states only where the candidate *cannot* work — "Requires visa sponsorship to work in the
+United Kingdom" — so `work_auth_regions` is `None` by the rule `derive.py` records, so
+`bars._country_scope` is permanently inert for it. The pair was relabelled `not_relevant`
+under a rule that can never fire for this profile, and it scored 80.
+
+**Applied:** §2 gains a paragraph — precision and recall are computed over profiles that
+contribute at least one positive to the split. Filter recall, grounding and cost still count
+every pair. The run **prints** what it excluded.
+
+The rule is written about the property, not the profile. A hardcoded name is how "this
+profile is failing" becomes "this profile is exempt", and it would also have to be
+remembered and removed by whoever eventually redraws the pairs.
+
+**Rejected:** redrawing `career_changer` now, which is the real fix but is a labelling pass
+and would change the set mid-gate; reverting the fifth §6 R2 flip to restore its single
+positive, which re-labels against a rule approved the same day to make a number move; and
+leaving it in, which keeps 11 of 46 tuning pairs structurally unwinnable and measures the
+pool rather than the ranker.
+
+**Still true, and not fixed by this:** a real user whose pool holds nothing for them is a
+real case, and not spamming them is a genuine product property. This amendment says the
+*golden set* cannot measure it, not that it does not matter. It wants its own metric later.
+
+### APPLIED — §6 rule 2 was two rules, and the set was labelled under both (2026-08-08)
+
+**Approved by the project owner. Raised by a deterministic bar disagreeing with a human.**
+
+§6 R2 was written about *cities*: a remote role in a place the profile never named is
+`relevant`. Mid-session a refinement was approved for `bars.py` — a remote posting scoped
+to a *country* the candidate cannot work in is `not_relevant`. Nobody reconciled the two.
+The original 64 pairs were labelled before the refinement and the 57 added after it were
+labelled under it, so **one file carried labels from two versions of one rule** and the
+gate's recall was partly measuring that disagreement.
+
+It was invisible until code computed the same judgement a human had made. Running
+`bars.check` over all 121 pairs found exactly four contradictions and no others:
+
+```
+ 20  plain.txt        Thailand - Bangkok    profile authorised GB
+ 32  senior_backend   France                profile authorised US
+ 37  senior_backend   Netherlands           profile authorised US
+ 44  senior_backend   Turkey                profile authorised US
+```
+
+A fifth, `career_changer.docx` against a Canada-scoped remote role, is the same rule
+applied by hand: that profile's `work_auth_regions` is unknown, so no bar fired and the
+label was bent rather than computed.
+
+Note what does **not** contradict: `two_column.pdf` (authorised `EU`) keeps two
+Netherlands roles as `relevant`. The rule is about the right to work, not about the
+posting naming a foreign country.
+
+**Applied:** §6 R2 gains its second sentence. The five pairs are relabelled
+`not_relevant` / `hard`, each rationale recording which version of the rule it was first
+labelled under. The set goes 45 → **40 relevant**, and the reporting split 24 → **22
+positives**.
+
+**This reduces the positive class**, so it moves both terms of recall against the matcher
+rather than for it — which is the only reason a mid-gate relabel is admissible at all.
+Splits are unchanged; §7 freezes them once scored.
+
+**Rejected:** reverting `bars._country_scope` to keep the older labels, which would put
+jobs the candidate cannot legally take back in the results and contradict §6 R3 and
+CLAUDE.md §7.2; and re-labelling all 121 pairs under the amended rule, which §7's split
+freeze forbids and which the four-contradiction scan showed to be unnecessary.
 
 ### APPLIED — a single run is a sample, not a measurement (2026-08-08)
 
