@@ -23,10 +23,13 @@ be measured from inside the set of things that survived.
 import json
 import os
 import pathlib
+import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any
 
+import httpx
 import pytest
 from db.models import Job, Profile, User
 from schemas.match import MatchFacts
@@ -81,6 +84,16 @@ MIN_TUNE_POSITIVES = 5
 # consecutive runs. Default 1 so iterating on the prompt costs one pass; the gate itself
 # is run with 3, which is what `make verify-live-match` sets.
 MATCH_RUNS = int(os.getenv("APPLYLOOP_MATCH_RUNS", "1"))
+
+# How many model calls the gate has in flight, and what happens when the provider says
+# that is too many. Only the eval harness is concurrent — `match.py` is untouched, because
+# a Celery worker's parallelism is its own concurrency setting and this is not it.
+#
+# 8 returned 429s from OpenAI and lost a run three minutes in. 4 is the setting that
+# finishes; the retry below is what makes the difference between a slow run and a lost one,
+# because a single 429 anywhere in 363 calls otherwise discards the whole measurement.
+LIVE_CONCURRENCY = 4
+_RETRY_ATTEMPTS = 4
 
 
 @dataclass(frozen=True)
@@ -149,6 +162,38 @@ def run(runs: list[dict[str, Any]]) -> dict[str, Any]:
     return runs[0]
 
 
+def _ask(text: str) -> tuple[MatchFacts, list[llm.Usage]]:
+    """One model call, off the main thread. Returns its own usage sink.
+
+    A sink per call rather than one shared list: `llm.complete_json` appends per attempt
+    including the one that raises, and appending to a shared list from several threads
+    would be the one piece of state this parallelism has.
+
+    **Retries on 429 here rather than in `llm.py`.** `complete_json` re-asks on a schema
+    validation failure and lets every HTTP error propagate, which is correct for its only
+    production caller — a Celery task, where the retry and its backoff belong to the task.
+    This harness is not a Celery task, so one 429 anywhere in 363 calls loses the whole
+    run and the credit spent on it. Widening `llm.py` to cover a test's concurrency would
+    be the test dictating production behaviour.
+
+    Usage from an attempt that 429s is discarded with it, which is right: a rejected
+    request is not billed.
+    """
+    for attempt in range(_RETRY_ATTEMPTS):
+        usage: list[llm.Usage] = []
+        try:
+            facts = llm.complete_json(MatchFacts, system=prompt.SYSTEM, user=text, usage=usage)
+        except httpx.HTTPStatusError as error:
+            if error.response.status_code != 429 or attempt == _RETRY_ATTEMPTS - 1:
+                raise
+            # Honour the server's own number when it sends one; it knows the window.
+            wait = float(error.response.headers.get("retry-after") or 2**attempt)
+            time.sleep(wait)
+            continue
+        return facts, usage
+    raise AssertionError("unreachable")  # pragma: no cover
+
+
 def _score_once(engine: Engine) -> dict[str, Any]:
     """One full pass over the golden set, for real.
 
@@ -184,26 +229,56 @@ def _score_once(engine: Engine) -> dict[str, Any]:
             candidate_ids, funnel = filters.candidates(session, view, prefs)
             funnels[fixture] = funnel.as_payload()
 
+            reachable = set(candidate_ids)
+            resume = profile.master_resume or ""
+
+            # One embedding call for this profile's reached pairs, not one per pair.
+            # `ensure` already batches and already queries the missing set first, so this
+            # is the same spend in one round trip instead of dozens.
+            #
+            # **Intersected with `wanted`, not `candidate_ids` alone.** The seeded pool is
+            # cumulative — each profile's jobs stay in the transaction — so by the fourth
+            # fixture `candidate_ids` holds 67 jobs against roughly 30 pairs, and embedding
+            # the difference would spend on other profiles' postings and move the cost
+            # figure the gate reports.
+            mine = [uuid.UUID(pair["job_id"]) for pair in wanted]
+            written, spent = embed.ensure(session, [j for j in mine if j in reachable])
+            embedded_cold += written
+            tokens["embed"] += spent
+
+            # **Everything touching the Session stays on this thread.** A SQLAlchemy
+            # Session is not thread-safe, so the prompt is built here — `prompt.build`
+            # reads ORM attributes and can trigger a lazy load — and only the finished
+            # string crosses into the pool.
+            work: list[tuple[dict[str, Any], Job, str | None]] = []
             for pair in wanted:
                 job = session.get(Job, uuid.UUID(pair["job_id"]))
                 assert job is not None
-                reached = job.id in set(candidate_ids)
+                reached = job.id in reachable
+                text = prompt.build(job, view, prefs, resume) if reached else None
+                work.append((pair, job, text))
+
+            # The gate spent 22 minutes per invocation on 363 strictly independent HTTP
+            # calls made one at a time. They share no state and the endpoint is stateless;
+            # the only reason they were serial is that a `for` loop is what you write
+            # first. Concurrency is modest on purpose — this is a paid endpoint with rate
+            # limits, and the point is to stop waiting, not to find the ceiling.
+            with ThreadPoolExecutor(max_workers=LIVE_CONCURRENCY) as pool:
+                answers = list(
+                    pool.map(
+                        lambda text: _ask(text) if text is not None else None,
+                        [text for _, _, text in work],
+                    )
+                )
+
+            for (pair, job, text), answer in zip(work, answers, strict=True):
                 value: int | None = None
                 reasons: dict[str, Any] = {}
-                if reached:
-                    written, spent = embed.ensure(session, [job.id])
-                    embedded_cold += written
-                    tokens["embed"] += spent
-                    usage: list[llm.Usage] = []
-                    facts = llm.complete_json(
-                        MatchFacts,
-                        system=prompt.SYSTEM,
-                        user=prompt.build(job, view, prefs, profile.master_resume or ""),
-                        usage=usage,
-                    )
+                if answer is not None:
+                    facts, usage = answer
                     tokens["prompt"] += sum(entry.prompt_tokens for entry in usage)
                     tokens["completion"] += sum(entry.completion_tokens for entry in usage)
-                    blocked = bars.check(job, view, profile.master_resume or "")
+                    blocked = bars.check(job, view, resume)
                     value = score.score(facts, blocked)
                     reasons = score.reasons(
                         facts,
@@ -225,7 +300,7 @@ def _score_once(engine: Engine) -> dict[str, Any]:
                         expected_filter=pair["expected_filter"],
                         negative_type=pair["negative_type"],
                         split=pair["split"],
-                        reached_model=reached,
+                        reached_model=text is not None,
                         score=value,
                         reasons=reasons,
                     )
