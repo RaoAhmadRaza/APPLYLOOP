@@ -20,8 +20,6 @@ Rebuild deletes and re-inserts only `origin='parsed'` rows. A claim a user added
 hand is theirs, and a re-upload must not take it.
 """
 
-import re
-import unicodedata
 import uuid
 from dataclasses import dataclass
 
@@ -31,11 +29,11 @@ from schemas.resume import ParsedResume
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
+from workers.text import squash
+
 # A claim shorter than this carries no information a validator could act on: a one-word
 # bullet, a stray "C" that would match half the alphabet's worth of source text.
 MIN_CLAIM_LENGTH = 2
-
-_NON_ALNUM = re.compile(r"[^a-z0-9]+")
 
 
 @dataclass(frozen=True)
@@ -108,9 +106,13 @@ def is_supported(claim_text: str, source_text: str) -> bool:
     The whole §3.3 guarantee, in one line of containment. Both sides are squashed to
     letters and digits first, so a line break markitdown introduced mid-sentence, a
     non-breaking space, or an accent rendered two ways cannot reject a true claim.
+
+    `workers.text.squash` rather than a local copy: M5's validator runs the other half
+    of this comparison and the two have to be the same transform, or the chain breaks
+    at the join. See that module.
     """
-    squashed = _squash(claim_text)
-    return bool(squashed) and squashed in _squash(source_text)
+    squashed = squash(claim_text)
+    return bool(squashed) and squashed in squash(source_text)
 
 
 def rebuild(
@@ -166,16 +168,3 @@ def rebuild(
         rejected=len(proposed) - len(supported),
         kept_user_claims=kept_user_claims or 0,
     )
-
-
-def _squash(value: str) -> str:
-    """Lowercase, strip accents, drop everything that is not a letter or a digit.
-
-    Same normaliser `dedupe.py` uses on company names, for the same reason: it is the
-    dumbest transform that survives the formatting noise without admitting a paraphrase.
-    Duplicated rather than shared — §3.1 forbids importing it across stage packages, and
-    a four-line helper is not the thing to build a shared package for.
-    """
-    folded = unicodedata.normalize("NFKD", value.lower())
-    stripped = "".join(char for char in folded if not unicodedata.combining(char))
-    return _NON_ALNUM.sub("", stripped)
