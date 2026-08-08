@@ -19,6 +19,16 @@ dependencies = [
     # PyMuPDF is 8-12x faster and AGPL-3.0, whose network clause would force this
     # service open-source — see docs/DECISIONS.md.
     "markitdown[docx,pdf]>=0.1.6",
+    # M5's renderer, chosen in CLAUDE.md §7.2 and named "use as-is" in Part 12. MIT,
+    # Typst-based rather than LaTeX, and every theme is single-column — the one layout
+    # property that actually breaks ATS parsers. [full] is what brings `typst`, whose
+    # wheel bundles the compiler (manylinux aarch64 included, so the M1 box needs no
+    # system binary and no network at render time) and `rendercv-fonts`, so the image
+    # needs no fontconfig either.
+    #
+    # Driven through its CLI, never its Python API: its own docs say "RenderCV is a CLI
+    # application, not a library. Its internal API is not guaranteed to be stable."
+    "rendercv[full]>=2.8",
     "db",
     "schemas",
     "storage",

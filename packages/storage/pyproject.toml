@@ -1,11 +1,20 @@
 [project]
 name = "storage"
 version = "0.1.0"
-description = "S3-compatible object storage for raw résumé uploads — the one blob store."
+description = "Object storage for résumé uploads and M5's generated documents — the blob layer."
 requires-python = ">=3.13"
 # boto3, not a hand-rolled SigV4 signer. R2 speaks S3, and signing a request correctly
 # is the one part of this that is genuinely hard to get right.
-dependencies = ["boto3>=1.42.0", "pydantic-settings>=2.14.2"]
+#
+# google-auth[requests] is M5's Drive mirror, and it is deliberately *not* the full
+# google-api-python-client: the mirror is one multipart POST, which is not worth that
+# package's dependency tail. The [requests] extra is what carries the token refresh and
+# the authorised session, so this is one new client rather than google-auth + httpx.
+dependencies = [
+    "boto3>=1.42.0",
+    "pydantic-settings>=2.14.2",
+    "google-auth[requests]>=2.42.0",
+]
 
 [build-system]
 requires = ["hatchling"]
