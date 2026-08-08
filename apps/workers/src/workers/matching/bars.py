@@ -60,6 +60,38 @@ _ELIGIBILITY = re.compile(
 # eligibility window; a junior or a student does not.
 _SENIOR_BANDS = frozenset({"mid", "senior", "staff", "principal", "lead"})
 
+# Job families that are not engineering, however much engineering vocabulary the posting
+# carries. A sales engineer's posting really does ask for Python and AWS, which is exactly
+# why coverage scores it well and why this cannot be left to the ratio.
+#
+# **This is a family check, not a craft taxonomy, and the distinction is measured.** In the
+# golden set `CLI Engineer`, `Data Engineer` and `Senior DevOps Engineer` are each
+# `relevant` for one profile and `not_relevant` for another — identical titles, opposite
+# labels — because the labeller was judging skill depth against the posting body, not the
+# title's family. Any rule that tried to read backend-vs-data-vs-infra off a title would
+# have to get those three wrong in one direction or the other. BAR.md §6 R5 agrees: it puts
+# backend, platform, infrastructure and SRE on **one** chain.
+#
+# So this bars only what no engineering profile in the set is a candidate for, and the test
+# that matters is the negative one — it fires on none of the 40 pairs labelled relevant.
+_FAMILIES: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (
+    (
+        "sales engineering",
+        ("sales engineer", "solutions engineer", "solution engineer", "account executive"),
+        ("sales engineer", "solutions engineer", "account executive", "quota"),
+    ),
+    (
+        "customer-facing architecture",
+        ("solutions architect", "solution architect"),
+        ("solutions architect", "solution architect", "presales", "pre-sales"),
+    ),
+    (
+        "technical support",
+        ("support engineer", "technical support"),
+        ("support engineer", "technical support", "helpdesk", "service desk"),
+    ),
+)
+
 
 def check(job: Job, profile: ProfileRead, resume: str) -> list[str]:
     """Every deterministic bar this pair trips. Empty is the common case."""
@@ -67,6 +99,7 @@ def check(job: Job, profile: ProfileRead, resume: str) -> list[str]:
         _country_scope(job, profile),
         _language(job, resume),
         _eligibility(job, profile),
+        _family(job, resume),
     ]
     return [bar for bar in found if bar]
 
@@ -118,6 +151,25 @@ def _language(job: Job, resume: str) -> str | None:
     for name, demand, evidence in _LANGUAGE_DEMANDS:
         if re.search(demand, haystack, re.I) and not any(word in lowered for word in evidence):
             return f"posting requires {name}; the résumé does not mention it"
+    return None
+
+
+def _family(job: Job, resume: str) -> str | None:
+    """A job family the résumé shows no evidence of ever having worked in.
+
+    Pair-relative like every other bar here, and for a reason this file has been burnt by
+    once: a rule keyed on the posting alone is a keyword blocklist, and a real sales
+    engineer must still be shown sales-engineering roles. The résumé is the evidence, so
+    the check disappears for exactly the candidate it would be wrong for.
+
+    Read off the **title**, never the description — "works closely with our solutions
+    architects" appears in plenty of backend postings and says nothing about the role.
+    """
+    title = (job.title or "").lower()
+    lowered = resume.lower()
+    for name, titles, evidence in _FAMILIES:
+        if any(word in title for word in titles) and not any(word in lowered for word in evidence):
+            return f"role is {name}; the résumé shows no experience in it"
     return None
 
 

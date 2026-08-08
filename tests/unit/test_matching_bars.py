@@ -183,3 +183,66 @@ def test_a_posting_listing_continents_excludes_nobody() -> None:
     job = _job(locations=["Americas, Europe, Asia, Africa, Oceania"])
 
     assert bars.check(job, _profile(work_auth_regions=["US"]), "") == []
+
+
+# ---- job family: engineering vocabulary in a job that is not engineering ---------
+
+
+def test_a_sales_engineering_posting_is_barred_for_someone_who_has_never_sold() -> None:
+    """**The false positive that blocked M4's gate at precision 0.75.**
+
+    `Sales Engineer Enterprise`, remote in the candidate's own state, listing her exact
+    stack, scored 53. A sales-engineering posting genuinely asks for Python and AWS, so
+    coverage — a ratio over the requirements the posting states — rates it well and is
+    right to. The job is still not hers.
+    """
+    job = _job(
+        title="Sales Engineer Enterprise",
+        description="Partner with customers. Python, AWS and Kubernetes experience required.",
+    )
+
+    assert bars.check(job, _profile(), "Python, AWS, Kubernetes, Postgres") != []
+
+
+def test_a_real_sales_engineer_is_not_barred_from_sales_engineering() -> None:
+    """**The control, and the reason this reads the résumé at all.**
+
+    A rule keyed on the posting alone is a keyword blocklist. It would look like a
+    precision fix and would deny a sales engineer every job they are qualified for —
+    the same mistake `_language` and `_eligibility` are shaped to avoid.
+    """
+    job = _job(title="Sales Engineer Enterprise", description="Partner with customers.")
+
+    assert bars.check(job, _profile(), "Sales Engineer at Acme. Carried a quota.") == []
+
+
+def test_the_family_is_read_off_the_title_and_never_off_the_description() -> None:
+    """ "Works closely with our solutions architects" appears in plenty of backend
+    postings and says nothing about what the role is."""
+    job = _job(
+        title="Senior Backend Engineer",
+        description="You will work closely with our solutions architects and support engineers.",
+    )
+
+    assert bars.check(job, _profile(), "Python, Go") == []
+
+
+def test_the_engineering_titles_the_golden_set_calls_relevant_are_untouched() -> None:
+    """**The measurement that decided this is a family check and not a craft taxonomy.**
+
+    In the golden set `CLI Engineer`, `Data Engineer` and `Senior DevOps Engineer` are
+    each `relevant` for one profile and `not_relevant` for another — identical titles,
+    opposite labels — because the labeller judged skill depth against the posting body.
+    A rule reading backend-vs-data-vs-infra off a title would have to get those wrong in
+    one direction or the other, so this one does not try.
+    """
+    profile = _profile()
+    for title in (
+        "CLI Engineer",
+        "Data Engineer",
+        "Senior DevOps Engineer",
+        "Senior Machine Learning Engineer",
+        "Senior / Staff Product Engineer",
+        "Systems Engineer, Data Intelligence & Analytics Team",
+    ):
+        assert bars.check(_job(title=title), profile, "Python") == [], title
