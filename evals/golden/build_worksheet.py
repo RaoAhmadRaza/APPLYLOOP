@@ -65,6 +65,10 @@ STRATA = {"on_topic": 8, "filtered_out": 4, "candidate_random": 2, "pool_random"
 # separates a role in the craft from a role that merely mentions it.
 _MIN_SKILL_HITS = 2
 
+# At most this many on-craft pairs from one employer. The pool is thick with
+# aggregator reposts, and without a cap a single employer fills the stratum.
+_MAX_PER_COMPANY = 2
+
 
 def main() -> int:
     if OUTPUT.exists():
@@ -252,29 +256,64 @@ def _on_craft(
         r"\b(" + "|".join(re.escape(term) for term in terms) + r")\b", re.IGNORECASE
     )
     rows = session.execute(
-        select(Job.id, Job.title, func.left(func.coalesce(Job.description, ""), 4000)).where(
-            Job.id.in_(candidates)
-        )
+        select(
+            Job.id,
+            Job.title,
+            Job.company,
+            func.left(func.coalesce(Job.description, ""), 4000),
+        ).where(Job.id.in_(candidates))
     ).all()
 
-    scored: list[tuple[int, str, uuid.UUID]] = []
-    for job_id, title, description in rows:
+    scored: list[tuple[int, str, uuid.UUID, tuple[str, str]]] = []
+    for job_id, title, company, description in rows:
         # Distinct skills, not total mentions: a posting that says "Python" twelve times
         # is not more on-craft than one naming Python, Kafka and Terraform once each.
         found = {match.group(1).lower() for match in pattern.finditer(f"{title} {description}")}
         if len(found) >= _MIN_SKILL_HITS:
-            scored.append((len(found), str(job_id), job_id))
+            scored.append((len(found), str(job_id), job_id, (company, title.strip().lower())))
 
-    # Most overlap first; the id breaks ties so the draw stays reproducible.
-    return [job_id for _, _, job_id in sorted(scored, key=lambda row: (-row[0], row[1]))]
+    # **One posting per role, and at most two per employer.** Ranking by overlap alone
+    # put eight copies of one requisition into a stratum of eight: the open pool holds
+    # 101 rows of `Bluelight Consulting / senior software engineer (flask/react)` and 42
+    # of one Jobgether posting, all with distinct `external_id`s, so `dedupe_key` never
+    # collapsed them. Eight identical pairs measure one judgement eight times.
+    #
+    # That duplication is a finding about the pool rather than about this script — see
+    # DECISIONS.md, where fuzzy dedupe was deferred with exactly this trigger.
+    seen_roles: set[tuple[str, str]] = set()
+    per_company: dict[str, int] = {}
+    ordered: list[uuid.UUID] = []
+    for _hits, _tiebreak, job_id, role in sorted(scored, key=lambda row: (-row[0], row[1])):
+        company = role[0]
+        if role in seen_roles or per_company.get(company, 0) >= _MAX_PER_COMPANY:
+            continue
+        seen_roles.add(role)
+        per_company[company] = per_company.get(company, 0) + 1
+        ordered.append(job_id)
+    return ordered
 
 
 def _skills(profile: ProfileRead) -> list[str]:
-    """The résumé's own skill words, deduplicated and long enough to mean something."""
+    """The résumé's own skill words, deduplicated and long enough to mean something.
+
+    **The unpacking is not defensive padding — one of the four fixtures needs it.** M3's
+    parse of `two_column.pdf` returns three skills whose `name` is the entire résumé
+    line, `"ML: PyTorch, scikit-learn, MLflow"`, with `keywords` empty. Matched literally
+    those three strings appear in no posting on earth, which is why that profile drew
+    **zero** on-craft candidates out of 5,488 while looking like a pool problem.
+
+    So: prefer `keywords`; otherwise take the part after any `"Category:"` label and
+    split on commas. Dropping the label matters — "Data" and "Languages" as search terms
+    would match most of the pool and drown the real technologies.
+    """
     parsed = ParsedResume.model_validate(profile.parsed_json)
     terms: list[str] = []
     for skill in parsed.skills:
-        terms += skill.keywords or ([skill.name] if skill.name else [])
+        if skill.keywords:
+            terms += skill.keywords
+        elif skill.name:
+            _, _, tail = skill.name.partition(":")
+            terms += (tail or skill.name).split(",")
     # Two characters would match "R" and "C" against half the pool; the profiles that
     # matter here name real technologies.
     return sorted({term.strip() for term in terms if len(term.strip()) > 2})

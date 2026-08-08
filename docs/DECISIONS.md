@@ -579,6 +579,44 @@ away. The result looked entirely plausible — 15 location drops, 8 seniority �
 leading product. Work-auth-only failures do exist in the pool (22 and 43 for the two
 sponsorship profiles); they were simply never reached.
 
+### The golden set's own construction, and what building it found
+
+Three iterations, each caught by looking at the draw rather than at the code.
+
+**Generic title words do not identify a craft.** The first `on_topic` stratum matched
+("engineer", "developer", "data", …) against the title and produced RF engineers,
+mechanical engineers, equipment-qualification engineers and mobile QA. Labelled honestly
+against BAR.md's rubric the whole 56-pair set yielded **7 `relevant` against a bar of 10**
+and 35% hard negatives against a floor of 60%, and one profile drew fourteen pairs
+without a single positive. A set like that cannot measure precision at all. `on_topic`
+now requires a posting to name at least two of the profile's *own* skills.
+
+**One requisition can fill an entire stratum.** Ranking candidates by skill overlap put
+eight copies of the same posting into a stratum of eight. The cause is in the pool, not
+the sampler: the open pool holds **101 rows of `Bluelight Consulting / senior software
+engineer (flask/react)`** and 42 of one Jobgether posting, each with a distinct
+`external_id`, so `dedupe_key` never collapsed them. **This fires the trigger recorded
+against fuzzy/trigram dedupe at M2** — "M4's golden set shows duplicate pairs surviving
+the exact key" — and it is now a measured fact rather than a hypothetical. The sampler
+takes one pair per `(company, title)` and at most two per employer; the pool-level fix is
+still deferred, but its trigger has been met.
+
+**M3's parse does not always split a skills line.** `two_column.pdf` — the two-column
+fixture, the one carrying the layout trap — returns three skills whose `name` is the
+whole résumé line, `"ML: PyTorch, scikit-learn, MLflow"`, with `keywords` empty. Matched
+literally, those strings appear in no posting, so that profile drew **zero** on-craft
+candidates out of 5,488 while looking exactly like a thin-pool problem. Anything reading
+`parsed_json.skills` has to handle both shapes; M4's sampler splits on the category
+label. Worth knowing before M5 reads the same field to ground a résumé.
+
+**A model may propose labels; only a human may confirm them.** Pre-labelling and
+correcting is far faster than judging fifty pairs cold, and refusing it outright was too
+strict to be useful. What must never happen is a proposed set being counted, because then
+the gate measures whether two models agree. `_meta.status` is `proposed` or `confirmed`;
+the live gate skips on anything but `confirmed`, and the unit suite refuses model labels
+only once confirmed. The invariant is not "no model ever labels" but "a set containing a
+model label cannot satisfy the gate".
+
 ### Decisions
 
 **No cross-encoder in v1 — an explicit override of §7.2, with a trigger.** §7 asks that
@@ -662,7 +700,7 @@ matcher that matches nothing passes the gate.
 | A `scrape_runs` table, `jobs.last_seen_at` | `events` stops answering §8.2's per-run counts. | M2 |
 | The Muse API key | The keyless 500 req/hr limit actually bites. | M2 |
 | `defusedxml` | A second XML source appears, or WWR's feed stops being first-party. | M2 |
-| Fuzzy / trigram dedupe | M4's golden set shows duplicate pairs surviving the exact key. | M2 |
+| Fuzzy / trigram dedupe | **TRIGGER FIRED, 2026-08-08.** The open pool holds 101 rows of one posting and 42 of another, distinct `external_id`s and uncollapsed by `dedupe_key`. Still deferred — M4 works around it with a per-`(company, title)` cap — but this is no longer hypothetical. | M2 |
 | A city+region map for `normalize_location` | A real board produces the `Portland, OR` / `Portland, ME` collision. | M2 |
 | `apps/jobspy` sidecar | Only if a future JobSpy bump breaks the in-worker install on both arches. | M2 |
 | Portal-risk field on `jobs` | M9. `source` + `ats_type` already answer it at read time; a column with no consumer is speculative. | M2 |
