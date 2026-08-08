@@ -6,8 +6,10 @@ ending one.
 CLAUDE.md §9 says what "in scope" means. This file says what is *true* — what has been
 proven, with what evidence, and what is known to be broken.
 
-> Last updated: **2026-08-08**, mid-M4. The code is complete and green offline; the
-> gate is **not** met yet because the golden set is unlabelled — see *Next*.
+> Last updated: **2026-08-08**, mid-M4. The golden set is now human-confirmed and the
+> live gate has **run for real against a real model**. It **fails**, for a known and
+> located reason: `score()` weighs a disqualifying requirement the same as a
+> nice-to-have. See *M4 gate, item by item* and *Next*.
 
 ---
 
@@ -19,7 +21,7 @@ proven, with what evidence, and what is known to be broken.
 | **M1** | ATS ingestion + registry | ✅ **proven** 2026-08-06 | Six adapters green against live boards (gate asked for three). Second run writes only diffs — live PostHog board: `fetched: 12, inserted: 0, updated: 0, closed: 0`. `detect()` resolves a real careers URL. CI log reads `beat ingested 13 jobs unattended`. |
 | **M2** | Aggregators + dedupe | ✅ **proven** 2026-08-07, one clause pending | See below. |
 | **M3** | Profiles & résumé parsing | ✅ **proven** 2026-08-07 | Live gate **24/24 against a real model** (OpenAI, `gpt-5.4-nano` class). See below. |
-| **M4** | Matching | 🟡 **built, gate not yet met** | Stage, filters, scoring and the live gate all ship and are green offline (567 tests). The gate is a quality bar and needs ~50 **hand-labelled** pairs; the worksheet is drawn and waiting on a human. See below. |
+| **M4** | Matching | 🔴 **gate RUN and FAILED** | The set is human-confirmed (64 pairs, `human:MAR`, 0 borderline) and the gate ran live: 7 of 10 clauses pass, the headline clause does not. **Precision 0.50–0.62 against a bar of 0.80** at any threshold where recall holds. Cause located: `score()` is a flat coverage ratio, so a fatal requirement costs the same as a missed nice-to-have. Not a bar problem — see DECISIONS.md → M4 → *The first live gate run*. |
 | M5–M11 | — | ⬜ | Strict chain from M4. **M5 is not in scope until the golden-set bar is met.** |
 
 ### M3 gate, item by item
@@ -36,12 +38,30 @@ promoted column the user set.
 
 ### M4 gate, item by item
 
+**Gate run 2026-08-08, real model + real embeddings, 190s, 45 pairs scored:**
+
+```
+filter recall          1.00 (16/16)       bar ≥0.90    PASS
+cost / 1k scored       $0.261 cold        bar ≤$2.00   PASS
+requirement grounding  0.97 (864/887)                  PASS
+threshold sweep        best p=0.62 @ r=0.62            FAIL   ← the milestone
+pool floor             career_changer 10 vs 200        FAIL   ← unmeasurable here
+```
+
+The pool-floor failure is a **harness/bar mismatch, not a matcher defect**: §7 requires
+golden runs to seed only stored payloads, so the per-profile pool is 16 jobs by
+construction and a ≥200 floor can never pass. Left unamended for a human.
+
+The run is also **not deterministic** — two consecutive runs gave p=0.62/r=0.62 and
+p=0.50/r=0.50 at the same threshold, because `met`/`missing` come from a model. Do not pin
+a threshold from a single run.
+
 | Clause | Status | Evidence |
 |---|---|---|
-| Golden-set precision meets the bar set **in advance** | 🟡 **bar set, 64 pairs model-PROPOSED, awaiting human review** | `evals/golden/BAR.md` was committed **alone and first**, before any scored output existed — `git log --diff-filter=A` on it is what makes "in advance" auditable. It pins precision ≥ 0.80, a recall floor, filter recall ≥ 0.90, a minimum positive count below which a run is *inconclusive*, a pool floor, a per-filter cap and a cost ceiling. `evals/golden/pairs.json` holds **64 stratified pairs, all labelled by a model and marked `_meta.status: proposed`** — 23 relevant, 32 not_relevant, 9 borderline, each with a one-line rationale. **The live gate refuses to run on a `proposed` set**; a human must review, correct, set `labelled_by` to `human:<initials>` and flip the status. Building the set took four draws and found more than it measured — see DECISIONS.md → M4 → "The golden set's own construction". |
-| Hard filters demonstrably drop mismatches **before** embedding | ✅ **offline; live half waits on labels** | Proven structurally rather than by a call-order spy: `test_matching.py` asserts **no `job_embeddings` row exists** for a filtered job — an embedding row is the physical receipt that a job reached a paid stage. Plus the counter chain is asserted non-increasing, and `set(ids_sent_to_llm) ⊆ set(filtered_ids)`. 34 filter tests cover all five polarity laws. |
-| Cost per 1,000 jobs scored is measured | ✅ **mechanism ships** | `llm.complete_json` takes a caller-owned `usage` sink, appended **per attempt including the one that raises**; `match.scored` carries `embed_tokens`/`prompt_tokens`/`completion_tokens`. The live gate asserts `prompt_tokens > 0` **and** `embed_tokens > 0`, which is also the anti-stub proof — a fake reports zero. |
-| Every score carries a human-readable reason | ✅ | `MatchReasons` is the `reasons_json` contract; `test_matching.py` asserts every written match has a non-empty summary and a non-empty partition. The live gate additionally asserts every requirement span is **findable in the posting** — M5's fabrication problem caught a milestone early. |
+| Golden-set precision meets the bar set **in advance** | 🔴 **bar set, set confirmed, precision 0.50–0.62 vs 0.80** | `evals/golden/BAR.md` was committed **alone and first**, before any scored output existed — `git log --diff-filter=A` on it is what makes "in advance" auditable. It pins precision ≥ 0.80, a recall floor, filter recall ≥ 0.90, a minimum positive count below which a run is *inconclusive*, a pool floor, a per-filter cap and a cost ceiling. `evals/golden/pairs.json` holds **64 stratified pairs, human-confirmed 2026-08-08 by `human:MAR`** — 16 relevant, 48 not_relevant, **0 borderline**, hard negatives 28/48 overall and 21/24 among the strata the matcher judges. A model proposed the labels and a human corrected **19 of 64**, almost all of them postings whose craft matched but which stated a disqualifier the model skipped — ITAR, "Mandarin required", right-to-work, CET±3. **The split is now an explicit per-pair field**, stratified over (profile, label); it used to be `scored[:20]` over a profile-grouped file, which put 80% of one résumé in the tuning half. BAR.md §3 and §7 both amended with approval, logged in its §8. Building and reviewing the set found more than it measured — see DECISIONS.md → M4. |
+| Hard filters demonstrably drop mismatches **before** embedding | ✅ **offline and live** — filter recall **1.00 (16/16)** measured against the confirmed set, clearing the ≥0.90 bar. | Proven structurally rather than by a call-order spy: `test_matching.py` asserts **no `job_embeddings` row exists** for a filtered job — an embedding row is the physical receipt that a job reached a paid stage. Plus the counter chain is asserted non-increasing, and `set(ids_sent_to_llm) ⊆ set(filtered_ids)`. 34 filter tests cover all five polarity laws. |
+| Cost per 1,000 jobs scored is measured | ✅ **measured: $0.261 / 1k scored, cold**, against a $2.00 ceiling. | `llm.complete_json` takes a caller-owned `usage` sink, appended **per attempt including the one that raises**; `match.scored` carries `embed_tokens`/`prompt_tokens`/`completion_tokens`. The live gate asserts `prompt_tokens > 0` **and** `embed_tokens > 0`, which is also the anti-stub proof — a fake reports zero. |
+| Every score carries a human-readable reason | ✅ **0.97 grounded (864/887)** — but two ungrounded spans quote the *résumé* as if the posting had stated it. Passing on the ratio, and a fabrication-shaped defect one milestone before M5's validator. | `MatchReasons` is the `reasons_json` contract; `test_matching.py` asserts every written match has a non-empty summary and a non-empty partition. The live gate additionally asserts every requirement span is **findable in the posting** — M5's fabrication problem caught a milestone early. |
 
 **What runs today, and what it costs:** nothing, until someone sets `MATCH_THRESHOLD`.
 That is deliberate. Part 14 defers the threshold to the golden set, so there is no default
@@ -112,18 +132,18 @@ this first.
 ## Test surface
 
 ```
-577 pass, no network            make test
+580 pass, no network            make test
  12 live, all 8 real feeds      make verify-live-feeds       APPLYLOOP_LIVE_FEEDS=1
   9 live, all 6 real ATS boards make verify-live             APPLYLOOP_LIVE_ATS=1
   3 live, aggregator            make verify-live-aggregator  ← SKIPPED, needs a proxy
  24 live, résumé parsing        make verify-live-parse       ← GREEN 2026-08-07 (4 model
                                                              calls/run, well under a cent)
   3 live, object storage        make verify-live-storage     ← SKIPPED, needs a bucket
- 13 live, the M4 gate           make verify-live-match       ← SKIPPED, needs the golden
-                                                             set labelled
+ 10 live, the M4 gate           make verify-live-match       ← RAN 2026-08-08: 7 pass,
+                                                             3 FAIL. Gate not met.
 ```
 
-ruff + format + mypy clean on 133 files. Live suites are deliberately **not** in CI — a
+ruff + format + mypy clean on 149 files. Live suites are deliberately **not** in CI — a
 build must not go red because a third party had a bad afternoon, layer 3 spends a metered
 budget, and the parse suite spends real money.
 
@@ -147,11 +167,19 @@ budget, and the parse suite spends real money.
   column-major, so pdfminer recovers the reading order. A real two-column résumé from a
   word processor may not. The fixture still earns its place by proving neither column is
   *dropped*; the reading-order risk stays unmeasured until a real one arrives.
-- **The golden set's hard-negative quota contradicts its own sampling plan.** BAR.md §7
-  wants ≥60% of negatives `hard`, but two of its four strata exist to produce structurally
-  easy ones. Measured: 38% overall, 63% among pairs that reached the model. Recorded as an
-  **open, unapplied amendment** in BAR.md §8 — editing a bar to match a result is what §3
-  forbids, and it being a correct edit is not a reason to make it quietly.
+- **`score()` weighs a disqualifier like a nice-to-have.** This is why M4's gate fails.
+  Coverage is a flat ratio, so "ITAR: must be a U.S. person" costs one bullet out of
+  fifteen and a legally impossible role scores 94. 7 of 8 false positives are `hard`
+  negatives. The fix is a `disqualifiers` partition — deferred with a fired trigger.
+- **The live gate is not deterministic.** Two consecutive runs, identical set and code:
+  p=0.62/r=0.62 and p=0.50/r=0.50 at the same threshold. `met`/`missing` come from a model,
+  so the "deterministic score" claim covers only the arithmetic half of the path.
+- **`EMBED_MODEL` and `LLM_BASE_URL` are coupled and can drift apart.** A local `.env`
+  pointing at OpenAI direct with the default OpenRouter slug 400s. M4 is the first code in
+  the repo to call `/embeddings`, so it sat undetected. Documented in `.env.example`.
+- **`make verify-live-*` can exit 0 having run nothing** when its key is absent from the
+  shell — `skipif` reads `os.getenv` and `.env` is not loaded. An opt-in live run that
+  finds no key should fail, not skip.
 - **The pool contains 101 copies of one posting.** `Bluelight Consulting / senior software
   engineer (flask/react)`, plus Jobgether ×42, distinct `external_id`s and uncollapsed by
   `dedupe_key`. This fires M2's deferred fuzzy-dedupe trigger. The sampler works around it
@@ -194,10 +222,31 @@ budget, and the parse suite spends real money.
 
 ## Next
 
-**M4 (matching)** — the first milestone in the strict chain, and what all of this was
-for. It reads the three queries in *What M4 gets* above. Note §14 is still open on the
-match-score threshold: it needs the golden set, so **do not hardcode a number before
-then**.
+**Close M4's gate.** The set is confirmed, the bar is set, the gate runs, and it fails at
+one located place. In order:
+
+1. **Give the score a notion of a disqualifier.** `MatchFacts` gains a third partition of
+   verbatim spans — stated requirements whose absence is fatal (legal work status,
+   language, an explicit location or timezone exclusion, a licence) — and `score()` gates
+   on it instead of averaging it into coverage. Today a role a UK citizen legally cannot
+   hold scores 94. **The prompt change is the risky half**: extracting disqualifiers is
+   the same instruction the labelling model failed to follow on ITAR, "Mandarin required"
+   and CET±3, so it needs an offline test with this session's 11 hard negatives as
+   fixtures before any paid run.
+2. **Re-run the gate. Expect variance** — two consecutive runs moved precision 0.62 → 0.50
+   at a fixed threshold, because `met`/`missing` come from a model. A threshold worth
+   pinning should hold across more than one run.
+3. Only then set `MATCH_THRESHOLD`. §14 is still open on it; **do not hardcode a number**,
+   and do not take one from a single run.
+
+**Three bar-vs-reality contradictions are open and need a human**, none of them fixable by
+editing a result:
+
+- §2's pool floor (≥200/profile) is **unmeasurable** in a harness §7 requires to seed only
+  stored payloads. It belongs against the real pool.
+- Requirement spans can quote the résumé rather than the posting (0.97, passing on ratio).
+- `career_changer` holds 1 positive in 16 pairs — the sampler is blind to which countries a
+  profile may legally work in. Fixing it by relabelling would be inventing positives.
 
 Two smaller items, both blocked on credentials rather than on code:
 

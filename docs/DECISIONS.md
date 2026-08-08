@@ -617,6 +617,127 @@ the live gate skips on anything but `confirmed`, and the unit suite refuses mode
 only once confirmed. The invariant is not "no model ever labels" but "a set containing a
 model label cannot satisfy the gate".
 
+### Human review of the golden set, and the two defects it exposed (2026-08-08)
+
+A human (`human:MAR`) reviewed all 64 pairs and **corrected 19**. The set is now
+`confirmed`: 16 `relevant`, 48 `not_relevant`, **0 `borderline`**. Both corrections and
+both amendments below were approved pair by pair, not applied in bulk.
+
+**The model labelled on craft similarity and skipped the one line that disqualified the
+pair.** This is the finding worth carrying into M5, because it is not a labelling quirk —
+it is the failure mode the *matcher* will have, from the same cause. Every miss was a
+single sentence in an otherwise well-matched posting:
+
+| Missed clause | Pairs | Model said |
+|---|---|---|
+| ITAR — US person required (SpaceX ×2) | 2 | `relevant`, reasoning only about location |
+| "Bilingual English/Mandarin is **required**" (Binance ×2) | 2 | `relevant` / `borderline` |
+| "right to work in Bulgaria … cannot support visa applications" | 1 | `relevant` |
+| "Time zone: CET (+/- 3 hours) … unable to consider" vs Portland | 2 | `borderline` |
+| Country-scoped remote vs a candidate needing sponsorship there | 6 | `relevant` |
+
+Eleven of those became **hard** negatives — right craft, right band, failing on exactly
+one dimension — which is why the judged-stratum hard ratio moved 63% → 88%. A set whose
+negatives are warehouse jobs measures nothing; these are the negatives that make precision
+mean something.
+
+The rule the review settled, now in BAR.md §6's spirit if not yet its letter: **a remote
+posting scoped to a country the candidate cannot work in is `not_relevant`**, even when it
+never mentions sponsorship. §6 rule 3 covers postings that *refuse* sponsorship; its stated
+purpose — "not showing someone jobs they cannot legally take" — does not stop there.
+
+**The split was positional, and therefore a profile split.** `scored[:20]` over a
+profile-grouped `pairs.json` put 80% of one résumé in the tuning half. At the moment of
+confirmation the tuning split held **2** reachable positives against the reporting split's
+14 — so the threshold would have been chosen on two pairs belonging to a junior UK analyst
+and applied unchanged to a staff US backend engineer. BAR.md §3 forbids maximising
+precision on the tuning split; it never anticipated the split itself being degenerate, so
+"lowest, not best" gave no protection.
+
+Latent since file creation. It became visible only when review dropped `career_changer`
+from six positives to one — **the defect was always there and the labels were hiding it**,
+which is the more useful half. Fixed with an explicit per-pair `split` stratified over
+(profile, label), a ≥5 tuning-split positive floor, and an offline invariant so a bad
+split fails in the free suite rather than after a paid run. Applied while **no scored run
+existed anywhere in the repo**, which is the only thing that distinguishes it from the
+result-fitting §3 forbids; with one scored run on record the honest move would have been to
+extend the set instead. Recorded in BAR.md §8.
+
+**BAR.md §7's hard-negative floor was amended, from a draft written before the result.**
+The floor now scopes to `on_topic` + `candidate_random` (≥60%, measured 88%) plus an
+absolute ≥10 overall (measured 28). `filtered_out` and `pool_random` are drawn *to* produce
+easy negatives; holding them to the quota penalised those strata for working. The overall
+ratio is 58% and the amendment was applied anyway — deliberately, because the original
+number was measuring the sampler rather than the matcher.
+
+**One profile now contributes a single positive.** `career_changer` (junior, Manchester,
+needs UK sponsorship) drew 16 pairs and holds one `relevant`. The draw handed a
+UK-sponsorship-bound junior a set of US- and Mexico-scoped roles, so honest labelling
+empties it. Not corrected — inventing positives to balance a profile is the exact
+fabrication the set exists to detect. The sampler has no notion of which countries a
+profile can legally work in; adding one is the fix, and it is deferred with a trigger
+below.
+
+### The first live gate run: it fails, and why (2026-08-08)
+
+**M4's gate is NOT met.** 7 of 10 clauses pass; the headline clause does not. Recorded in
+full because the failure is more informative than a pass would have been.
+
+```
+filter recall          1.00 (16/16)          bar ≥0.90   PASS
+cost / 1k scored       $0.261 cold           bar ≤$2.00  PASS
+requirement grounding  0.97 (864/887)        —           PASS
+threshold sweep        no cut clears both bars           FAIL
+pool floor             career_changer 10 vs 200          FAIL — see below, harness
+```
+
+**Precision never reaches 0.80 at any threshold where recall holds.** Best observed is
+0.62 at threshold 50 with recall 0.62; precision only reaches 1.00 at threshold 70, where
+recall collapses to 0.25. The `MIN_TUNE_POSITIVES` floor added the same day is *not* the
+cause — at every threshold clearing recall, precision fails independently.
+
+**The cause is structural and it is one line.** `score()` is
+`100 * len(met) / (len(met) + len(missing))` — a flat ratio in which every stated
+requirement weighs the same. A posting that adds "ITAR: must be a U.S. person" to fifteen
+matched bullets scores **94**, and it is a role a UK citizen cannot legally hold. The score
+has no notion of a **disqualifier**: a requirement whose absence is fatal rather than
+fractional. Confirmed empirically — **7 of 8 false positives at the reported cut are
+`hard` negatives**, scoring 44–67, interleaved with the true positives.
+
+**The same blind spot appeared twice, from one root cause.** The model that pre-labelled
+the golden set missed ITAR, "Mandarin required", "right to work in Bulgaria" and CET±3,
+and a human had to flip 19 labels. The scoring model reads the same postings and averages
+the same clauses away. The set reproduced the matcher's defect during its own construction
+before it ever measured it.
+
+**The gate is also not deterministic.** Two consecutive runs over an identical set and
+unchanged code gave precision 0.62 / recall 0.62 and precision 0.50 / recall 0.50 at
+threshold 50. `score.py`'s docstring — "a re-run over an unchanged pair produces an
+unchanged score" — is true of the arithmetic and false of the pipeline, because `met` and
+`missing` come from a model. The determinism argument that justified moving the number out
+of the model covers only the second half of the path. This bounds how finely any threshold
+can be trusted and it is why a cut chosen from one run should not be pinned.
+
+**§2's pool floor cannot be measured in this harness.** It failed at
+`career_changer: pool 16, candidates 10` against a floor of 200 — but §7 requires golden
+runs to seed only stored payloads so pairs cannot rot, which makes the per-profile pool 16
+jobs *by construction*. The floor was measured against the real 19,707-row pool and belongs
+there. **Not amended** — a third bar-vs-reality contradiction, left for a human on the same
+reasoning as the other two.
+
+**A requirement span can quote the résumé instead of the posting.** Grounding is 0.97 and
+passes, but two ungrounded examples are `"Secondary School Mathematics Teacher, Ashfield
+Academy"` and `"University of Manchester — BSc Mathematics, 2016"` — the candidate's own CV
+text emitted as a requirement the *posting* stated. A ratio-based assertion hides this; it
+is M5's fabrication problem visible one milestone early, on text a user reads and acts on.
+
+**`EMBED_MODEL` and `LLM_BASE_URL` are a coupled pair.** The first real gate run 400'd on
+`api.openai.com/v1/embeddings`: a local `.env` had pointed `LLM_BASE_URL` at OpenAI direct
+and left `EMBED_MODEL` on its OpenRouter-slugged default, `openai/text-embedding-3-small`.
+Undetected until now because M3's parse gate only calls completions — **M4 is the first code
+in the repo to POST `/embeddings` at all**. Both combinations are now documented in
+`.env.example`. A default is only correct next to the default it was written for.
+
 ### Decisions
 
 **No cross-encoder in v1 — an explicit override of §7.2, with a trigger.** §7 asks that
@@ -714,6 +835,9 @@ matcher that matches nothing passes the gate.
 | HNSW on `job_embeddings` | Already on the model: >100k rows or p95 match query >500 ms, now measurable from `match.scored.elapsed_ms`. Deliberately not added at M4 — HNSW is approximate, and adding it now folds ANN recall loss into the very baseline the milestone exists to establish. | M4 |
 | A stored profile embedding | Profile embeds exceed ~1% of a run's `embed_tokens`. Today it is one call per user per run, against a staleness rule keyed on two independently-mutating inputs. | M4 |
 | A salary hard filter | A `jobs.salary_min` column exists. Today both sides are missing on 99% of the pool. | M4 |
+| **A `disqualifiers` partition on `MatchFacts`, gated in `score()`** | **TRIGGER FIRED, 2026-08-08** — it is the reason M4's gate fails. Coverage is a flat ratio, so a fatal requirement ("ITAR: must be a U.S. person", "Bilingual Mandarin required") costs the same as one missed nice-to-have and a legally impossible role scores 94. Needs: a third partition of verbatim spans, a `score()` that gates rather than averages, and an offline test using this session's 11 hard negatives as fixtures — the prompt change is the risky half, since it is the same instruction the labelling model failed to follow. | M4 |
+| **Country-scope awareness in the golden sampler** | Any profile drawing < 5 `relevant` pairs. Fired once already: `career_changer` (needs UK sponsorship) drew 16 pairs and holds **1** positive, because the draw is blind to which countries a profile can legally work in and handed it US- and Mexico-scoped roles. Not fixed by relabelling — that would be inventing positives. The sampler needs the same `work_auth` × posting-scope reasoning the filter layer already has. | M4 |
+| **`make verify-live-*` exiting 0 having run nothing** | A live target silently no-ops when its key is absent from the shell (the `skipif` reads `os.getenv`, and `.env` is not loaded into the process). Caught by reading the output, not by the exit code. Fix is to fail rather than skip when `APPLYLOOP_LIVE_*` is set explicitly but the key is missing — an opt-in run that finds no key is a mistake, not a supported state. | M4 |
 | `jobs.locations_norm` + GIN | Pool > ~50k, or the funnel query shows up in `match.scored.elapsed_ms`. | M4 |
 | A distinct below-threshold match status | M8's dashboard needs to tell "scored too low" from "the user skipped". Both mean excluded today. | M4 |
 | Batching several jobs per explain call | Measured cost exceeds BAR.md's ceiling. 3–4x available, at the cost of per-job attribution and retry granularity. | M4 |
