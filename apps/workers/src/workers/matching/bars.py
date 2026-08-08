@@ -122,6 +122,37 @@ _ZONE_OFFSETS: dict[str, float] = {
 }
 
 
+# A programming language the posting states as mandatory. **Deliberately only languages,
+# and deliberately not "any stated must-have".**
+#
+# The golden set refutes the general rule outright. `Senior AI Engineer` is labelled
+# `relevant` for two different profiles and declares eight mandatory requirements — vector
+# databases, LangChain, RAG, multi-agent orchestration — and its own labelling rationale
+# reads "vector DBs are missing, not fatal". A rule that barred any unmet must-have would
+# delete that true positive twice over.
+#
+# A primary language is different in kind from a library. The whole role is written in it,
+# and a backend engineer with no PHP cannot take a PHP job however well the rest fits;
+# LangChain is a fortnight. SQL is excluded for the same reason — it is a skill every
+# posting here assumes rather than a language a role is built in.
+_MANDATORY_LANGUAGES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    ("PHP", r"php", ("php", "laravel", "symfony")),
+    ("Ruby", r"ruby(?: on rails)?", ("ruby", "rails")),
+    ("Go", r"go(?:lang)?", ("golang", " go ", " go,", "go.")),
+    ("Java", r"java", ("java",)),
+    ("C#", r"c#|\.net", ("c#", ".net", "asp.net")),
+    ("Rust", r"rust", ("rust",)),
+    ("Scala", r"scala", ("scala",)),
+    ("Elixir", r"elixir(?:/phoenix)?", ("elixir", "phoenix")),
+    ("Kotlin", r"kotlin", ("kotlin",)),
+)
+
+# The phrasings that make a requirement mandatory rather than desirable. "Nice to have"
+# and "is a plus" are deliberately absent — the same posting often carries both, and the
+# distinction is the entire point.
+_MANDATORY = r"(?:is a must|is required|is mandatory|must have|are required|is essential)"
+
+
 def check(job: Job, profile: ProfileRead, resume: str) -> list[str]:
     """Every deterministic bar this pair trips. Empty is the common case."""
     found = [
@@ -130,6 +161,7 @@ def check(job: Job, profile: ProfileRead, resume: str) -> list[str]:
         _eligibility(job, profile),
         _family(job, resume),
         _timezone(job, profile),
+        _mandatory_language(job, resume),
     ]
     return [bar for bar in found if bar]
 
@@ -246,6 +278,29 @@ def _timezone(job: Job, profile: ProfileRead) -> str | None:
         f"posting requires {match.group(1).upper()} +/- {match.group(2)} hours "
         f"(UTC{low:+g} to UTC{high:+g}); the profile is in {', '.join(profile.locations)}"
     )
+
+
+def _mandatory_language(job: Job, resume: str) -> str | None:
+    """A programming language the posting states as mandatory and the résumé never names.
+
+    `_language`'s shape, one domain over, and the reason it is separate is that the golden
+    set already proved the general version wrong — see `_MANDATORY_LANGUAGES`.
+
+    The mandatory phrasing is required, not merely the language: "Senior Backend Engineer
+    (Ruby)" is labelled `relevant` for a candidate with no Ruby, because that posting asks
+    for Ruby and does not demand it. The same posting family usually carries "is a plus"
+    somewhere too, and telling the two apart is the whole job.
+    """
+    haystack = f"{job.title} {job.description or ''}"
+    lowered = resume.lower()
+    for name, pattern, evidence in _MANDATORY_LANGUAGES:
+        # A dot is allowed only inside a version number. The posting that motivated this
+        # says "PHP 8.0+ is a must", so excluding dots outright matched nothing; allowing
+        # them freely would let "We use Python. Java is a must" bar a Python candidate.
+        demand = rf"\b(?:{pattern})\b(?:[^.\n]|\.\d){{0,40}}?{_MANDATORY}"
+        if re.search(demand, haystack, re.I) and not any(word in lowered for word in evidence):
+            return f"posting states {name} as mandatory; the résumé does not mention it"
+    return None
 
 
 def _eligibility(job: Job, profile: ProfileRead) -> str | None:

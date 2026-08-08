@@ -304,3 +304,68 @@ def test_a_profile_with_no_location_is_never_barred_on_time_zones() -> None:
     job = _job(locations=["CET (+/- 3 hours)"], description=_PROXIFY)
 
     assert bars.check(job, _profile(locations=[]), "") == []
+
+
+# ---- a mandatory language, and the general rule the golden set refutes -----------
+
+
+def test_a_mandatory_language_the_resume_never_names_is_barred() -> None:
+    """The two false positives that stood between M4 and its bar, one posting family.
+
+    "PHP 8.0+ is a must" against a Python and Java backend engineer. The craft is right,
+    which is why coverage scores it 33-36 and why it needs to be a gate.
+    """
+    job = _job(title="Senior PHP Engineer", description="PHP 8.0+ is a must. Laravel a plus.")
+
+    assert bars.check(job, _profile(), "Python, Java, Postgres, Kafka") != []
+
+
+def test_a_mandatory_language_the_resume_does_name_is_not_barred() -> None:
+    """The control. Pair-relative, like everything else here."""
+    job = _job(title="Senior PHP Engineer", description="PHP 8.0+ is a must.")
+
+    assert bars.check(job, _profile(), "Senior PHP developer. Laravel, Symfony.") == []
+
+
+def test_a_language_asked_for_but_not_demanded_is_not_barred() -> None:
+    """ "Senior Backend Engineer (Ruby)" is labelled `relevant` for a candidate with no
+    Ruby, because the posting asks for Ruby and does not demand it. The mandatory
+    phrasing is the rule, not the language."""
+    job = _job(
+        title="Senior Backend Engineer (Ruby)",
+        description="You will work on our Ruby monolith. Ruby experience is a plus.",
+    )
+
+    assert bars.check(job, _profile(), "Python, Go") == []
+
+
+def test_an_unmet_mandatory_library_is_not_a_bar() -> None:
+    """**The general rule, refuted by the set rather than by taste.**
+
+    `Senior AI Engineer` is labelled `relevant` for two different profiles and declares
+    eight mandatory requirements — vector databases, LangChain, RAG, multi-agent
+    orchestration. Its labelling rationale reads "vector DBs are missing, not fatal". A
+    bar on any unmet must-have would delete that true positive twice.
+
+    A primary language is different in kind: the role is written in it. LangChain is a
+    fortnight.
+    """
+    job = _job(
+        title="Senior AI Engineer",
+        description=(
+            "A solid understanding of Python is a must. "
+            "Experience with Vector Databases, Pinecone or Weaviate is required. "
+            "2+ years of experience with LangChain is mandatory."
+        ),
+    )
+
+    assert bars.check(job, _profile(), "Python, FastAPI, Postgres") == []
+
+
+def test_a_mandatory_language_does_not_reach_across_a_sentence() -> None:
+    """The dot in "PHP 8.0+" forced the gap to allow dots, and allowing them freely would
+    let a full stop carry the demand back onto the previous sentence's language."""
+    job = _job(title="Backend Engineer", description="We use Python. Java is a must.")
+
+    assert bars.check(job, _profile(), "Python, FastAPI") != []
+    assert "Java" in bars.check(job, _profile(), "Python, FastAPI")[0]
