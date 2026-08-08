@@ -231,7 +231,11 @@ def test_every_pair_declares_its_split() -> None:
     distribution. Nothing caught it because the shape was only visible once the labels
     changed. A declared field cannot drift when rows are appended or reordered.
     """
-    for pair in _pairs():
+    # Only labelled pairs. The assignment is a function of (profile, label, job_id), so a
+    # freshly drawn pair cannot have one yet — it gets its split once it has a label, and
+    # §3 then freezes it. Asserting on unlabelled pairs would force the extension flow to
+    # invent a split before the input it is computed from exists.
+    for pair in _labelled():
         assert pair["split"] in {"tune", "report"}
 
 

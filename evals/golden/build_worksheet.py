@@ -24,6 +24,7 @@ hand-written: a hand-written `parsed_json` would mean the filters under test are
 by the labeller rather than by the stage that will feed them in production.
 """
 
+import argparse
 import hashlib
 import json
 import os
@@ -40,7 +41,7 @@ from schemas.profile import ProfileRead
 from schemas.resume import ParsedResume
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
-from workers import llm
+from workers import llm, regions
 from workers.matching import filters
 from workers.profiles import derive, extract
 from workers.profiles import prompt as parse_prompt
@@ -51,6 +52,10 @@ OUTPUT = HERE / "pairs.json"
 
 # Committed in the output so the draw is reproducible and cannot be re-rolled.
 SEED = "applyloop-m4-golden-2026-08"
+
+# A different salt for extension draws, so the second pass cannot re-walk the first
+# one's ordering and hand back the pairs already in the set.
+EXTEND_SEED = "applyloop-m4-golden-2026-08-x2"
 
 # BAR.md §7. Per profile, so four profiles produce roughly 50 pairs after the per-stratum
 # caps are hit — the sizes are targets, not guarantees, because a stratum can be short on
@@ -71,6 +76,21 @@ _MAX_PER_COMPANY = 2
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--extend",
+        type=int,
+        metavar="N",
+        help=(
+            "add N on-topic pairs per profile to an existing set instead of drawing a "
+            "fresh one. Existing pairs are never touched; the set drops back to "
+            "'proposed' until every new pair is labelled."
+        ),
+    )
+    args = parser.parse_args()
+    if args.extend:
+        return _extend(args.extend)
+
     if OUTPUT.exists():
         print(f"{OUTPUT} already exists — refusing to overwrite a labelled set.")
         return 1
@@ -101,6 +121,9 @@ def main() -> int:
                 "locations": profile.locations,
                 "seniority": profile.seniority,
                 "work_auth": profile.work_auth,
+                # The live gate seeds this onto the Profile row. Without it
+                # `bars._country_scope` sees None and never fires.
+                "work_auth_regions": profile.work_auth_regions,
             }
             entries.extend(_sample(session, path.name, profile))
 
@@ -132,6 +155,65 @@ def main() -> int:
     return 0
 
 
+def _extend(per_profile: int) -> int:
+    """Draw more pairs for an already-labelled set, touching nothing that exists.
+
+    Profiles are rebuilt from the stored blob rather than re-parsed. That is not only
+    faster — no model call, seconds instead of minutes — it is *more correct*: a re-parse
+    could return slightly different skills or seniority, and the new pairs would then be
+    drawn against a profile the existing labels were never judged against.
+
+    The set drops to `proposed`, because a `confirmed` set may not contain unlabelled
+    pairs — every consumer filters those out, so a half-labelled extension would shrink
+    the denominator instead of failing.
+    """
+    if not OUTPUT.exists():
+        print(f"{OUTPUT} does not exist — run without --extend first.")
+        return 1
+
+    data = json.loads(OUTPUT.read_text())
+    existing = {(pair["profile"], pair["job_id"]) for pair in data["pairs"]}
+    engine = make_sync_engine(os.environ["DATABASE_URL"])
+    sessions = make_sync_sessionmaker(engine)
+
+    added: list[dict[str, Any]] = []
+    with sessions() as session:
+        for fixture, blob in data["profiles"].items():
+            profile = _stored_profile(blob)
+            drawn = _sample(session, fixture, profile, strata={"on_topic": per_profile})
+            fresh = [pair for pair in drawn if (fixture, pair["job_id"]) not in existing]
+            print(f"{fixture}: drew {len(fresh)} new pairs", flush=True)
+            added.extend(fresh)
+
+    data["pairs"].extend(added)
+    data["_meta"]["status"] = "proposed"
+    data["_meta"]["status_note"] = (
+        f"Extended with {len(added)} unlabelled pairs. Every one needs a human label "
+        "before this can return to 'confirmed'; the existing labels are untouched."
+    )
+    OUTPUT.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+    print(f"added {len(added)} pairs; set is now 'proposed' pending labels")
+    return 0
+
+
+def _stored_profile(blob: dict[str, Any]) -> ProfileRead:
+    """The profile the existing labels were judged against, rebuilt without a model."""
+    return ProfileRead(
+        id=uuid.uuid4(),
+        user_id=uuid.uuid4(),
+        master_resume=blob["master_resume"],
+        parsed_json=blob["parsed_json"],
+        prefs_json={},
+        locations=blob["locations"],
+        seniority=blob["seniority"],
+        work_auth=blob["work_auth"],
+        work_auth_regions=blob.get("work_auth_regions"),
+        salary_floor=None,
+        created_at="2026-01-01T00:00:00Z",  # type: ignore[arg-type]
+        updated_at="2026-01-01T00:00:00Z",  # type: ignore[arg-type]
+    )
+
+
 def _parse(path: pathlib.Path) -> tuple[ProfileRead, str]:
     """One résumé through M3's real stage, minus the database write."""
     resume_text = extract.to_markdown(path.read_bytes(), path.suffix)
@@ -149,6 +231,7 @@ def _parse(path: pathlib.Path) -> tuple[ProfileRead, str]:
             locations=derive.locations(parsed),
             seniority=derive.seniority(parsed, years),
             work_auth=derive.work_auth(parsed),
+            work_auth_regions=derive.work_auth_regions(parsed),
             salary_floor=None,
             created_at="2026-01-01T00:00:00Z",  # type: ignore[arg-type]
             updated_at="2026-01-01T00:00:00Z",  # type: ignore[arg-type]
@@ -157,8 +240,18 @@ def _parse(path: pathlib.Path) -> tuple[ProfileRead, str]:
     )
 
 
-def _sample(session: Session, fixture: str, profile: ProfileRead) -> list[dict[str, Any]]:
-    """Four strata for one profile, drawn from the open pool by a seeded shuffle."""
+def _sample(
+    session: Session,
+    fixture: str,
+    profile: ProfileRead,
+    strata: dict[str, int] | None = None,
+) -> list[dict[str, Any]]:
+    """Four strata for one profile, drawn from the open pool by a seeded shuffle.
+
+    `strata` overrides the sizes — an extension draw asks for `on_topic` only, because
+    that is where positives live and a set short of positives is what it exists to fix.
+    """
+    sizes = strata or STRATA
     rows = session.execute(filters._query(profile, Prefs())).all()
     verdicts = {
         row.id: [
@@ -177,7 +270,14 @@ def _sample(session: Session, fixture: str, profile: ProfileRead) -> list[dict[s
     candidates = [job_id for job_id, failed in verdicts.items() if not failed]
     single_failure = {job_id: failed[0] for job_id, failed in verdicts.items() if len(failed) == 1}
 
-    on_topic = _on_craft(session, candidates, profile)
+    # Country scope, before the strata are drawn. `on_topic` and `candidate_random`
+    # exist to produce pairs a human might plausibly call relevant, and a role in a
+    # country the profile cannot work in is never that — the first draw spent most of
+    # `on_topic` on geographically impossible roles, which is why one profile ended
+    # with a single positive out of sixteen pairs. `pool_random` is NOT filtered: it
+    # is the calibration stratum and narrowing it would hide exactly what it watches.
+    reachable = _reachable(session, candidates, profile)
+    on_topic = _on_craft(session, reachable, profile)
 
     chosen: list[tuple[str, uuid.UUID]] = []
     taken: set[uuid.UUID] = set()
@@ -191,11 +291,15 @@ def _sample(session: Session, fixture: str, profile: ProfileRead) -> list[dict[s
         # the only thing that made it worth drawing.
         ("on_topic", on_topic, True),
         ("filtered_out", _across_filters(single_failure, fixture), True),
-        ("candidate_random", candidates, False),
+        ("candidate_random", reachable, False),
         ("pool_random", list(verdicts), False),
     ):
-        wanted = STRATA[stratum]
-        for job_id in source if preordered else _shuffled(source, fixture + stratum):
+        wanted = sizes.get(stratum, 0)
+        for job_id in (
+            source
+            if preordered
+            else _shuffled(source, fixture + stratum + (SEED if strata is None else EXTEND_SEED))
+        ):
             if wanted == 0:
                 break
             if job_id in taken:
@@ -219,6 +323,53 @@ def _sample(session: Session, fixture: str, profile: ProfileRead) -> list[dict[s
         }
         for stratum, job_id in chosen
     ]
+
+
+def _reachable(
+    session: Session, candidates: list[uuid.UUID], profile: ProfileRead
+) -> list[uuid.UUID]:
+    """Candidates in a country this profile could actually work in.
+
+    The same rule `matching/bars.py` applies at scoring time, applied here so the strata
+    that are supposed to produce plausible pairs stop spending themselves on impossible
+    ones. Measured on the first draw: `career_changer` — a junior in Manchester needing
+    UK sponsorship — drew sixteen pairs and exactly one was labelled relevant, because
+    the draw handed her US- and Mexico-scoped roles. A stratum that cannot produce a
+    positive measures nothing.
+
+    **Strict here, permissive in `bars.py`, and the asymmetry is deliberate.** A bar that
+    fires wrongly removes a job the user could have had, so `bars` keeps anything it
+    cannot map. A draw that skips a job costs nothing but a different sample, so this
+    keeps only jobs it can *confirm* are reachable. The first version borrowed the
+    permissive rule and barely filtered at all: a GB-authorised profile drew San Francisco
+    and New York, because the region table names countries and those are cities.
+
+    An unstated authorisation still passes everything — with nothing to compare against
+    there is no such thing as a confirmed match.
+    """
+    # Falling back to where they live when authorisation is unstated. Silence means we
+    # do not know where they may work, not that anywhere is equally plausible: the
+    # career-changer fixture needs UK sponsorship and lives in Manchester, and an
+    # unfiltered draw handed her Buenos Aires. Her positives, if she has any, are UK or
+    # global. This is a sampling heuristic and deliberately not a rule `bars.py` shares.
+    authorised = set(profile.work_auth_regions or regions.named_in(" ".join(profile.locations)))
+    if not authorised:
+        return candidates
+    rows = session.execute(
+        select(Job.id, Job.locations, Job.location).where(Job.id.in_(candidates))
+    ).all()
+    keep = []
+    for job_id, locations, location in rows:
+        places = list(locations or []) + ([location] if location else [])
+        joined = " ".join(places)
+        wanted = regions.named_in(joined)
+        if regions.is_open_to_the_world(joined, wanted):
+            keep.append(job_id)
+            continue
+        # No `not wanted` escape: an unmappable place is not a confirmed match.
+        if wanted and regions.covers(authorised, wanted):
+            keep.append(job_id)
+    return keep
 
 
 def _on_craft(

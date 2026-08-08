@@ -162,3 +162,24 @@ def test_an_ordinary_posting_trips_nothing() -> None:
     profile = _profile(work_auth_regions=["EU"], seniority="senior")
 
     assert bars.check(job, profile, "Python, Go") == []
+
+
+def test_a_remote_posting_scoped_to_one_country_is_still_scoped() -> None:
+    """**"Remote, United States" is the most common location string in the pool.**
+
+    The globality check used to run first and match on the word "remote", which read
+    every US remote posting as open to the world and disabled this bar entirely. Named
+    regions win.
+    """
+    job = _job(locations=["Remote, United States"])
+
+    assert bars.check(job, _profile(work_auth_regions=["GB"]), "") != []
+
+
+def test_a_posting_listing_continents_excludes_nobody() -> None:
+    """The opposite direction. "Americas, Europe, Asia, Africa, Oceania" names regions —
+    including EU — but it is a breadth statement, not a scope, and barring a US candidate
+    from it because it says Europe would be exactly backwards."""
+    job = _job(locations=["Americas, Europe, Asia, Africa, Oceania"])
+
+    assert bars.check(job, _profile(work_auth_regions=["US"]), "") == []

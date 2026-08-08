@@ -241,6 +241,11 @@ def _seed_profile(session: Session, blob: dict[str, Any]) -> Profile:
         locations=blob["locations"],
         seniority=blob["seniority"],
         work_auth=blob["work_auth"],
+        # Without this, `bars._country_scope` sees None on every profile and never fires
+        # — the largest of the three deterministic bars, silently inert. It was, for one
+        # whole gate run: the measured 0.42 -> 0.57 came from language and eligibility
+        # alone. A seeded fixture that omits a column tests the code around it.
+        work_auth_regions=blob.get("work_auth_regions"),
     )
     session.add(profile)
     session.flush()

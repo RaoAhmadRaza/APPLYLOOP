@@ -211,9 +211,16 @@ def work_auth_regions(resume: ParsedResume) -> list[str] | None:
         "EU citizen. Requires H-1B sponsorship for roles based in the United States."
          └─ authorised: EU                └─ excluded: US
 
-    Returns `[]` when authorisation was stated and resolves nowhere — someone needing
-    sponsorship everywhere they named. That is a real answer and it is not None: `None`
-    means silence and never drops anything, `[]` means stated-and-nowhere.
+    **The column holds where the candidate IS authorised, and a résumé that states only
+    where they are not gives no positive knowledge.** "Requires visa sponsorship to work
+    in the United Kingdom" excludes the UK and says nothing about Canada, so it resolves
+    to None rather than `[]`. An earlier version returned `[]` here and it would have
+    barred every located job for that profile — including the one role in the golden set
+    they were labelled a good fit for. `[]` is reserved for a résumé that authorises
+    nowhere explicitly, which is close to hypothetical; the caller still distinguishes it.
+
+    Where they are *not* authorised is already handled: `work_auth` is
+    NEEDS_SPONSORSHIP, and `filters._work_auth` drops postings that refuse to sponsor.
     """
     stated = (resume.work_authorization or "").strip().lower()
     if not stated:
@@ -233,7 +240,13 @@ def work_auth_regions(resume: ParsedResume) -> list[str] | None:
         else:
             allowed |= found
 
-    return sorted(allowed - blocked)
+    reached = allowed - blocked
+    if not reached:
+        # Nothing positive was stated. See the docstring: a résumé naming only where the
+        # candidate cannot work tells us nothing about anywhere else, and returning `[]`
+        # here would bar every located job for them.
+        return None
+    return sorted(reached)
 
 
 def _span(role: ResumeWork, today: date | None) -> tuple[int, int] | None:

@@ -295,19 +295,33 @@ def test_an_unrecognised_phrase_is_none_rather_than_the_nearest_match() -> None:
             "EU citizen. Requires H-1B sponsorship for roles\nbased in the United States.",
             ["EU"],
         ),
-        ("Requires visa sponsorship to work in the United Kingdom.", []),
+        # Only a negative is stated. That is not knowledge of where they CAN work —
+        # see the note in test_a_negative_only_statement_is_silence_not_nowhere.
+        ("Requires visa sponsorship to work in the United Kingdom.", None),
     ],
 )
 def test_the_fixtures_resolve_to_the_regions_they_name(stated: str, expected: list[str]) -> None:
     assert derive.work_auth_regions(ParsedResume(work_authorization=stated)) == expected
 
 
-def test_silence_is_none_and_never_an_empty_list() -> None:
-    """The distinction the column is built on. `None` means the résumé did not say, and
-    never drops anything; `[]` means it said, and the answer is nowhere."""
+def test_silence_is_none() -> None:
+    """`None` means the résumé did not say, and never bars anything."""
     assert derive.work_auth_regions(ParsedResume()) is None
     assert derive.work_auth_regions(ParsedResume(work_authorization="")) is None
-    assert derive.work_auth_regions(ParsedResume(work_authorization="Requires sponsorship")) == []
+
+
+def test_a_negative_only_statement_is_silence_not_nowhere() -> None:
+    """**The column holds where the candidate IS authorised.**
+
+    "Requires visa sponsorship to work in the United Kingdom" excludes the UK and says
+    nothing about Canada. An earlier version returned `[]` for this — read downstream as
+    "authorised nowhere" — which barred every located job for that profile, including the
+    single role the golden set labels them a good fit for. Caught by tracing the
+    consequence onto a real pair before running it.
+    """
+    resume = ParsedResume(work_authorization="Requires visa sponsorship to work in the UK.")
+
+    assert derive.work_auth_regions(resume) is None
 
 
 def test_polarity_is_decided_per_clause_not_per_document() -> None:
@@ -335,4 +349,4 @@ def test_a_short_token_inside_a_longer_word_is_not_a_region(stated: str) -> None
     """`us` is in "status" and "because", `uk` in "Ukraine", `eu` in "Euro". A substring
     match would authorise a country the résumé never named, which is the failure
     direction that costs a user real applications."""
-    assert derive.work_auth_regions(ParsedResume(work_authorization=stated)) == []
+    assert derive.work_auth_regions(ParsedResume(work_authorization=stated)) is None

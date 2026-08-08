@@ -82,11 +82,16 @@ def _country_scope(job: Job, profile: ProfileRead) -> str | None:
     if profile.work_auth_regions is None:
         return None
     places = list(job.locations or []) + ([job.location] if job.location else [])
-    if not places or any(regions.is_global(place) for place in places):
+    if not places:
         return None
 
-    wanted = regions.named_in(" ".join(places))
-    if not wanted:
+    # **Named regions win over the global phrases.** "Remote, United States" contains the
+    # word remote and is still scoped to one country; checking globality first would read
+    # every US remote posting as open to the world, which is the single most common
+    # location string in the pool.
+    joined = " ".join(places)
+    wanted = regions.named_in(joined)
+    if not wanted or regions.is_open_to_the_world(joined, wanted):
         return None
     authorised = set(profile.work_auth_regions)
     if regions.covers(authorised, wanted):
