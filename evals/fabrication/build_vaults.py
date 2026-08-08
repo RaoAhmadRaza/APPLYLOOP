@@ -23,7 +23,6 @@ import json
 from pathlib import Path
 
 from schemas.resume import ParsedResume
-
 from workers.profiles import vault
 
 HERE = Path(__file__).resolve().parent
