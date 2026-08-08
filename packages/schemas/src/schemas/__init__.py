@@ -22,6 +22,12 @@ from schemas.match import MatchCreate, MatchFacts, MatchRead, MatchReasons, Matc
 from schemas.prefs import Prefs
 from schemas.profile import ProfileCreate, ProfileRead, ProfileUpdate
 from schemas.resume import ParsedResume
+from schemas.tailoring import (
+    CoverLetterDraft,
+    CoverLetterParagraph,
+    TailoredBullet,
+    TailoredResume,
+)
 from schemas.user import UserCreate, UserRead, UserUpdate
 
 __all__ = [
@@ -35,6 +41,8 @@ __all__ = [
     "CompanyCreate",
     "CompanyRead",
     "CompanyUpdate",
+    "CoverLetterDraft",
+    "CoverLetterParagraph",
     "DocumentCreate",
     "DocumentRead",
     "DocumentUpdate",
@@ -62,6 +70,8 @@ __all__ = [
     "ProfileRead",
     "ProfileUpdate",
     "Schema",
+    "TailoredBullet",
+    "TailoredResume",
     "UserCreate",
     "UserRead",
     "UserUpdate",

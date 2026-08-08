@@ -13,6 +13,7 @@ import pytest
 from pydantic import Field
 from schemas.common import Schema
 from schemas.resume import ParsedResume
+from schemas.tailoring import CoverLetterDraft, TailoredResume
 from workers import llm
 
 
@@ -111,6 +112,26 @@ def test_the_real_resume_schema_survives_the_rewrite() -> None:
     assert strict["additionalProperties"] is False
     assert strict["$defs"]["ResumeWork"]["additionalProperties"] is False
     assert "work" in strict["required"]
+
+
+def test_the_tailoring_schemas_survive_the_rewrite() -> None:
+    """M5's two, for the same reason — and one property in particular.
+
+    `evidence_id` is a plain string rather than a UUID, and this is the test that says
+    why out loud: a `format: uuid` keyword is not part of the strict subset every
+    provider agrees on, and the citation is a handle we minted anyway.
+    """
+    resume = llm._strict(TailoredResume.model_json_schema())
+    letter = llm._strict(CoverLetterDraft.model_json_schema())
+
+    assert resume["additionalProperties"] is False
+    assert resume["$defs"]["TailoredBullet"]["additionalProperties"] is False
+    assert resume["required"] == ["bullets", "skills"]
+    cited = resume["$defs"]["TailoredBullet"]["properties"]["evidence_id"]
+    assert cited["type"] == "string"
+    assert "format" not in cited
+
+    assert letter["$defs"]["CoverLetterParagraph"]["required"] == ["evidence_ids", "text"]
 
 
 # ------------------------------------------------------------------------ the request
