@@ -7,7 +7,11 @@ CLAUDE.md §9 says what "in scope" means. This file says what is *true* — what
 proven, with what evidence, and what is known to be broken.
 
 > Last updated: **2026-08-09**. `MATCH_THRESHOLD=20` is set and the matcher has written
-> its first 40 `matches` rows against the live pool — see *What runs today*.
+> its first 40 `matches` rows against the live pool. **M5 is built and partly proven**:
+> the fabrication validator, the renderer and the stage are green offline (694 tests),
+> and two real tailored documents exist in object storage. Its gate is **not** green —
+> the live gate has never been run and its case set is unconfirmed. See *M5* below.
+>
 > **M4's gate is green** — 12/12, pooled
 > precision **0.86** against a bar of 0.80, recall 0.89, `MATCH_THRESHOLD=20`. Read it with
 > the caveat that ships beside it: the 95% interval is **[0.75, 0.92]**, so the bar lies
@@ -26,8 +30,34 @@ proven, with what evidence, and what is known to be broken.
 | **M2** | Aggregators + dedupe | ✅ **proven** 2026-08-07, one clause pending | See below. |
 | **M3** | Profiles & résumé parsing | ✅ **proven** 2026-08-07 | Live gate **24/24 against a real model** (OpenAI, `gpt-5.4-nano` class). See below. |
 | **M4** | Matching | ✅ **proven 2026-08-08 — 12/12, with a stated caveat** | Set is 121 human-confirmed pairs (`human:MAR`, 0 borderline, 40 relevant). Threshold **20**, chosen on the pooled tuning split. **Pooled reporting precision 0.86, recall 0.89, n=69, 95% CI [0.75, 0.92].** All three runs individually cleared 0.80 (0.82 / 0.83 / 0.91), so the pass is not an artefact of pooling. Filter recall 1.00 (40/40), cost $0.304/1k against a $2.00 ceiling, grounding 0.98. **The bar lies inside the interval** — see the caveat below and BAR.md §8. |
-| **M5** | Documents | ⬜ **now in scope** — M4's gate is green | Strict chain from here. `test_fabrication_guard` is the clause that matters. |
+| **M5** | Documents | 🟡 **built, not proven** 2026-08-09 | Validator, renderer, stage and mirror all shipped; 694 offline tests green; two real documents generated end to end against a live model and read back correctly. **The gate has not run**: `evals/fabrication/cases.json` is `proposed`, and BAR.md §6 refuses to count a model-authored set. Two clauses are outstanding — see below. |
 | M6–M11 | — | ⬜ | Strict chain from M5. |
+
+### M5 gate, item by item
+
+| Clause | Status | Evidence |
+|---|---|---|
+| PDF opens and an ATS parser reads the fields back | ✅ **offline and live** | `test_tailoring_render.py` renders both engineering fixtures and reads **19/19** and **15/15** expected fields back out with `markitdown` — the same extractor M3 parses uploads with, so a field this repo cannot read out of its own PDF is one it would fail to read off a candidate's. Free, in CI, on every push. The real generated résumé was also read back by hand. **Presence is asserted, adjacency is not**: extraction returns the date ranges away from their roles, which is a property of PDF text extraction rather than of the document (BAR.md §3). |
+| **`test_fabrication_guard` passes** | 🟡 **offline yes, live never run** | The offline half is green and permanent: **16/16** seeded fabrications caught across all five classes, against retention **1.00** on rewrites (floor 0.70) and **2/2** verbatim. It runs in CI, is never skipped, and ran while the case set is `proposed` on purpose — an unconfirmed case that fails is still a finding. The **live** half exists (`make verify-live-tailor`, 20 seeded cases + 10 honest pairs) and **has not been run**, because BAR.md §6 refuses to count a set a model authored. |
+| Cover letter grounded only in vault evidence | 🟡 **grounded, and barely readable** | Every paragraph traces to cited evidence — the second real letter was 3/3 paragraphs, 0 rejected. It also opened all three with the same clause, because the validator's allowed universe leaves almost no connective vocabulary. A prompt line now forbids the repetition and **has not been re-measured**. See DECISIONS → M5 → *Still true, and not fixed*. |
+| Docs stored, mirrored, logged | 🟡 **stored and logged; mirror unproven** | Stored: two PDFs in MinIO under `documents/<match_id>/`, `documents` rows written, match at `tailored`. Logged: `tailor.generated` carries bullet counts, strip counts, both documents' keys, token spend and elapsed. Mirrored: `storage/drive.py` is written and unit-tested, `make verify-live-drive` is written — **no Google credentials exist yet**, so `gdrive_url` is NULL on both real documents. |
+
+**The first real run, 2026-08-09** — senior backend profile, live model, live bucket:
+
+```
+bullets returned  6      kept 6     stripped 0
+skills            2 selected       fabricated 0
+letter            3 paragraphs     rejected 0
+tokens            2,541 prompt / 4,265 completion    ~$0.03
+elapsed           51 s             résumé 28.9 KB
+```
+
+**The run before it blocked**, and that is the more useful half — see DECISIONS → M5 →
+*Defects the first live run caught that 694 green tests did not*. Three defects in one
+command: the coupled model-slug trap firing on the variable whose warning had just been
+extended to cover it; the skills rule calling nine of the candidate's own skills
+fabrications because M3 had stored a whole résumé line as one claim; and a first document
+that was true and ugly.
 
 ### M3 gate, item by item
 
@@ -146,6 +176,16 @@ dedupe_jobs                         every 6h    cross-source collapse
 match_all       → match_profile     every 12h   M4 — LIVE as of 2026-08-09
 ```
 
+Plus two event-driven stages, deliberately **not** on the clock:
+
+```
+parse_profile   on résumé upload            M3 — NO-OPS without an LLM API key
+tailor_match    on demand (`make tailor`)   M5 — NO-OPS without a key or a bucket
+```
+
+`tailor_all` exists and has no beat entry: every tailored match is a strong-model call, so
+an unattended tick is real money. M7 owns the schedule with the budget in hand.
+
 Plus one event-driven stage, deliberately **not** on the clock:
 
 ```
@@ -187,13 +227,19 @@ this first.
 ## Test surface
 
 ```
-630 pass, no network            make test
+694 pass, no network            make test  (M5 added 64, incl. test_fabrication_guard)
  12 live, all 8 real feeds      make verify-live-feeds       APPLYLOOP_LIVE_FEEDS=1
   9 live, all 6 real ATS boards make verify-live             APPLYLOOP_LIVE_ATS=1
   3 live, aggregator            make verify-live-aggregator  ← SKIPPED, needs a proxy
  24 live, résumé parsing        make verify-live-parse       ← GREEN 2026-08-07 (4 model
                                                              calls/run, well under a cent)
-  3 live, object storage        make verify-live-storage     ← SKIPPED, needs a bucket
+  3 live, object storage        make verify-live-storage     ← GREEN 2026-08-09 against
+                                                             the local MinIO. First time a
+                                                             blob has been through the real
+                                                             client rather than a mock.
+  2 live, the Drive mirror      make verify-live-drive       ← SKIPPED, needs Google creds
+  6 live, the M5 gate           make verify-live-tailor      ← NEVER RUN. Refuses a
+                                                             `proposed` case set (BAR.md §6)
  12 live, the M4 gate           make verify-live-match       ← GREEN 2026-08-08 (3 runs
                                                              pooled, ~6 min, ~$0.04):
                                                              12 pass. Gate met.
@@ -215,10 +261,11 @@ budget, and the parse suite spends real money.
   state, not a broken one.
 - **CLAUDE.md §8.1's proxy budget is contradicted by measurement** — see
   `docs/DECISIONS.md` → *Open, deferred deliberately*. Left alone until end of project.
-- **No résumé has ever been through a real bucket.** Unconfigured storage
-  makes the upload endpoint 503, verified live. `test_storage_live.py` is written and
-  skipped. The parse stage works without it — `master_resume` can be set directly — so
-  this blocks the upload path, not the milestone.
+- ~~No résumé has ever been through a real bucket.~~ **Closed 2026-08-09**: `make up` now
+  runs a MinIO service and `make verify-live-storage` passes 3/3 against it, and M5 has
+  written four real PDFs through the same client. **R2 itself is still unproven** — the
+  only difference is `STORAGE_ENDPOINT_URL`, but "the only difference" is exactly the
+  sentence that precedes a surprise.
 - **The two-column PDF fixture is easier than a real one.** reportlab emits its frames
   column-major, so pdfminer recovers the reading order. A real two-column résumé from a
   word processor may not. The fixture still earns its place by proving neither column is
@@ -259,9 +306,29 @@ budget, and the parse suite spends real money.
   `dedupe_key`. This fires M2's deferred fuzzy-dedupe trigger. The sampler works around it
   with a per-`(company, title)` cap, which still misses the same role reposted under
   punctuation variants — two Cloudflare pairs in the set are one role.
-- **M3 does not always split a skills line.** `two_column.pdf` parses to three skills whose
-  `name` is the whole résumé line with `keywords` empty. Anything reading `parsed_json.skills`
-  must handle both shapes — **M5 will read that field to ground résumé text**.
+- **M3 does not always split a skills line, and it is a property of the *run*, not the
+  fixture.** The golden set's stored parse of `senior_backend.pdf` splits its keywords; the
+  live parse of the same résumé stored `Languages: Python, Go, SQL, TypeScript` as one
+  claim. That blocked M5's first real document by calling nine of the candidate's own
+  skills fabrications. **M5's validator now handles both shapes** (delimiter splitting,
+  never substring), so this is no longer blocking — but anything else reading
+  `parsed_json.skills` still has to.
+- **The cover letter is grounded and stilted.** Every paragraph of the second real letter
+  opened with the same clause, because the validator's allowed vocabulary leaves almost
+  nothing connective to write with. A prompt line now forbids it and **has not been
+  re-measured against a live model**. This is the gap between "passes the gate" and "a
+  person would send this", and it is the first thing the next live run should look at.
+- **`.env` reaches unit tests despite `conftest`'s `_ignore_dotenv`.** Found while a
+  settings validator was briefly in place: a unit test's failure quoted `tailor_model` and
+  `environment` values that exist only in the local `.env`. Harmless while every field is
+  validated alone, which is why it has stayed invisible. `test_llm.py` pins its own base
+  URL now; the hole itself is untouched.
+- **The M5 case set is `proposed`, so the live gate cannot run.** A model authored
+  `evals/fabrication/cases.json`. BAR.md §6 refuses to count it until a human reads the
+  cases against the vault and sets `confirmed_by`.
+- **The Drive mirror has never uploaded anything.** Code and live suite are written;
+  `gdrive_url` is NULL on every document. Needs a Google Cloud project and a **Shared
+  Drive** — a service account's own Drive has a 0 GB quota and fails `storageQuotaExceeded`.
 - **`POST /profiles/{id}/resume` is unauthenticated**, like every other route here. It
   accepts an upload for any profile id. M8's problem, stated so it is not discovered.
 
@@ -296,10 +363,23 @@ budget, and the parse suite spends real money.
 
 ## Next
 
-**M4 is green. M5 is in scope.** Its gate clause that matters is `test_fabrication_guard`,
-and CLAUDE.md §3.3 is explicit that the validator is the guardrail and the prompt is not.
-M3 already built the half M5 depends on: every claim in `evidence` appears verbatim in that
-profile's `master_resume`, asserted in `test_profile_parse.py`.
+**M5 is built and its gate has not run. Two things block it, and both need a human.**
+
+1. **Confirm `evals/fabrication/cases.json`.** A model authored the cases; BAR.md §6 says a
+   model may propose one and only a human may confirm one, and the live gate enforces it.
+   Read each case against `evals/fabrication/vaults.json` — for a fabrication, that the
+   `lie` really is absent from the cited claim; for a faithful rewrite, that it truly adds
+   nothing to the claim named in `of` — then set `status` to `confirmed` and `confirmed_by`
+   to `human:<initials>`. Then `make verify-live-tailor` (~$2–4, 60 model calls).
+2. **Provision Google Cloud + a Shared Drive** for the mirror clause. `GDRIVE_FOLDER_ID`
+   and a base64 service-account key close it; `make verify-live-drive` proves it. The
+   folder **must** be in a Shared Drive — a service account's own Drive has a 0 GB quota.
+
+**Read the letter before signing anything off.** The résumés are good. The letters are
+grounded and read like restated bullets, and no bar in BAR.md catches that. It is the one
+part of M5 where "the gate passes" and "this is shippable" genuinely differ.
+
+**M6 is not in scope until M5's gate is green.**
 
 ~~Set `MATCH_THRESHOLD=20`~~ — **done 2026-08-09**, and a real run wrote 40 `matches` rows
 against the live pool. See *What runs today* above for the funnel it produced.

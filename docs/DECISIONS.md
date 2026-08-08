@@ -1058,6 +1058,149 @@ matcher that matches nothing passes the gate.
 
 ---
 
+## M5 — Documents: tailoring, the validator, the render (2026-08-09)
+
+### The decision the rest of M5 hangs off
+
+**A generated bullet is diffed against the claim it cites, not against the vault** —
+against the whole vault — three of the five fabrication classes in `evals/fabrication/BAR.md`
+§4 are *true* facts about the candidate placed somewhere they were never true: a number
+that is real in another role, a skill that is real in another job, a technology that is
+real but postdates the role it is attached to. The vault contains every one of them, so a
+whole-vault check declares all three traceable. Asking the model to cite the claim it is
+rewriting turns the check from "is this anywhere in the résumé" into "is this in *that*
+sentence", which is the only version that can fail.
+
+The citation is asked for **at generation time** rather than reconstructed afterwards, and
+it is a short handle (`E7`) rather than the row's UUID: a UUID is ~20 tokens, dozens are
+sent, one is echoed per bullet, and a mistyped handle resolves to nothing where a mistyped
+UUID resolves to a neighbouring row.
+
+### Decisions
+
+**Structure is assembled by code, so most of §3.3 has nothing to enforce.** Name, contact,
+employers, titles, dates and education come from `parsed_json`; the model's entire output
+surface is bullets and a skills selection. There is no field in which a company or a date
+could be invented, which is cheaper than validating one. The same choice removes the
+highest-risk section outright: **no professional summary**, because it is the one part of a
+résumé with no source row to point at, and the gate does not ask for one.
+
+**A bullet's position on the page is decided by its evidence's `source` pointer.** Not by
+the model, not by a heading it emits. That makes skill-role misalignment structurally
+impossible at render time rather than merely detected at validation time.
+
+**`verdict()` decides; `resume()` only reports** — the same split M4 uses between `score()`
+and the threshold, so the ceilings live in settings and the rules stay testable without one.
+
+**A fabricated skill blocks the whole document; an ungrounded bullet is stripped.** The
+asymmetry is deliberate. A model reaching for a skill the candidate does not have is not a
+rounding error, and the skills block is the densest keyword surface on the page. A strip
+rate over the ceiling also blocks, because shipping the surviving third of a résumé is
+worse than shipping nothing — it looks finished.
+
+**A cover-letter paragraph that fails takes the whole letter.** Unlike the résumé, where a
+missing bullet leaves a shorter true document, a letter is continuous prose the candidate
+signs; a hole in the middle leaves an argument referring to something that is gone.
+
+**Idempotency is the state machine, not a new column.** The stage acts on
+`status='discovered'` and moves the match to `tailored` in the same transaction as the
+documents, with a conditional `UPDATE ... RETURNING`. This is why the deferred
+résumé-versioning item **stays deferred** even though its trigger says "M5 needs it": what
+M5 actually needed was idempotency, and the status transition already provides it. Caching
+per `(resume-version, JD)` is a cost optimisation with no consumer yet.
+
+**No beat entry, and no `autoretry_for`.** Every tailored match is a strong-model call, so
+an unattended tick is real money — M7 owns the schedule with the budget in hand. And the
+expensive, non-repeatable part happens *before* anything that fails transiently, so a
+retry re-spends it; a failure leaves the match `discovered`, which is exactly the state
+the next run selects on.
+
+**RenderCV through its CLI, never its Python API.** Its own documentation says the internal
+API is not stable. The YAML input and the CLI are the contract it supports. The input is
+written as JSON — valid YAML 1.2 — which removes a YAML-writer dependency and a class of
+quoting bug: a bullet starting with `-` or containing `: ` is a YAML landmine and an
+unremarkable JSON string.
+
+**The word list is a list, not a stemmer.** A suffix-stripper gets `processing`/`processed`
+right and then fails on `cut`/`cutting`, and a half-working stemmer is harder to review
+than a list a person can read. The membership test is written in the file: *could this word
+alone make a résumé line false?* Verb inflections cannot; `team`, `senior`, `certified` and
+`million` can, and are absent on purpose.
+
+**`google-auth` alone for the Drive mirror**, not `google-api-python-client` — one
+documented multipart POST is not worth that dependency tail. And a mirror failure never
+fails the stage: R2 holds the durable copy, the model call has already succeeded, and
+raising would discard a valid document over a third party's outage.
+
+### Defects the first live run caught that 694 green tests did not
+
+The offline suite was green in every direction before a single real document existed. Then
+one `make tailor` against one real match found three things, which is the M3 lesson
+repeating one milestone later: **a stubbed model tests the plumbing, not the judgement.**
+
+**The coupled-slug trap fired on the variable whose warning had just been extended to cover
+it.** `TAILOR_MODEL` defaulted to an OpenRouter slug; the local `.env` points at OpenAI
+direct; the provider answered `400` naming a model it has never heard of. The identical
+mismatch cost a live M4 gate run on `EMBED_MODEL`, and the fix that time was a comment in
+`.env.example` — a comment that had been extended to cover the third variable within the
+hour, and did not prevent it. It is now `model_slug_mismatch()`, called by the interlock
+before the first request. **Deliberately a function, not a validator on `Settings`:** the
+first attempt was a validator, and refusing to construct `Settings` made two independent
+settings inseparable — every test pinning a fake model slug then had to pin a provider for
+it too, and 17 tests went red. This repo's shape for "configured wrong" is a stage that
+records why and does nothing, not a process that will not boot.
+
+**The skills rule called nine of the candidate's own skills fabrications and blocked a real
+document.** `evidence` held `Languages: Python, Go, SQL, TypeScript` as a single claim,
+because M3 splits a skills line on some runs and leaves it whole on others — *the same
+fixture*, different sampling. The golden set's stored parse of `senior_backend.pdf` splits
+them; the live parse of the same résumé did not. So a group line now also answers for its
+members, split on its own delimiters and **never by substring**: `Postgres` is a prefix of
+`PostgreSQL` and is still refused, which is what case S-06 exists to keep true. This also
+means PROJECT_STATE's note about `two_column.pdf` was describing a run, not a fixture.
+
+**The first two real documents were true, and one of them was ugly.** The résumé printed
+`Skills: Languages: Python, Go, SQL, Infrastructure: Kubernetes…` because the model
+correctly selected the only skill claims it had. A group label is now dropped at render
+time — a display transform over already-validated text, which cannot admit anything. The
+cover letter quoted a skills list *as a sentence* for the same reason: it had skill claims
+available and the validator requires it to quote what it cites, so a cited skill becomes a
+list mid-paragraph. The letter call now receives bullets only. Withholding the temptation
+beats asking the prompt to resist it.
+
+### Still true, and not fixed
+
+**The cover letter is grounded and stilted.** Every paragraph of the second real letter
+opened with the same clause — "For the *role* at *company*, I …" — because the validator's
+allowed universe leaves almost no connective vocabulary to write with. It is exactly the
+tension BAR.md §2's block-rate row anticipated, arriving as prose quality rather than as a
+block. A prompt line now forbids the repetition and **that change has not been measured
+against a live model.** The gap between "passes the gate" and "a person would send this"
+is real and is the first thing the next live run should look at.
+
+**`.env` is reaching unit tests despite `conftest`'s `_ignore_dotenv`.** Exposed by the
+settings validator before it was removed: the failure quoted `tailor_model: 'gpt-5'` and
+`environment: 'local'`, values that exist only in the local `.env`, during a unit test.
+Harmless while nothing cross-checks fields, which is why it has been invisible; not
+harmless the moment something does. `test_llm.py` now pins `LLM_BASE_URL` beside the slug
+it belongs to, which papers over it for that file. The hole itself is pre-existing
+infrastructure and is not M5's to chase.
+
+**The retention floor is measured against rewrites a model authored, judged by a word list
+the same model wrote.** BAR.md §6 exists to prevent exactly that, and the offline number
+(1.00 against a floor of 0.70) should be read as a floor on the mechanism, not a
+measurement of the product. The live gate's retention comes from real tailoring output and
+is the honest one — it is reported with its spread rather than gated, because there is no
+prior number to gate it against.
+
+**`evals/fabrication/cases.json` is `proposed`.** A model authored it. The live gate
+refuses to count it until a human reads the cases against the vault and signs; the offline
+guard runs against it regardless, because an unconfirmed case that fails is a finding
+either way.
+
+
+---
+
 ## Open, deferred deliberately
 
 | Item | Trigger to revisit | Recorded |
@@ -1089,5 +1232,9 @@ matcher that matches nothing passes the gate.
 | **`make verify-live-*` exiting 0 having run nothing** | A live target silently no-ops when its key is absent from the shell (the `skipif` reads `os.getenv`, and `.env` is not loaded into the process). Caught by reading the output, not by the exit code. Fix is to fail rather than skip when `APPLYLOOP_LIVE_*` is set explicitly but the key is missing — an opt-in run that finds no key is a mistake, not a supported state. | M4 |
 | `jobs.locations_norm` + GIN | Pool > ~50k, or the funnel query shows up in `match.scored.elapsed_ms`. | M4 |
 | A distinct below-threshold match status | M8's dashboard needs to tell "scored too low" from "the user skipped". Both mean excluded today. | M4 |
+| **Cover-letter readability** | The letters are grounded and read like restated bullets, because the validator leaves little connective vocabulary. Revisit when a human reads one and will not send it — or if the live gate's block rate shows the letter rule is the binding constraint. Widening `words.py` for prose is the obvious move and the risky one: the words a letter needs are also the words a claim hides in. | M5 |
+| **`.env` leaking into unit tests past `_ignore_dotenv`** | Any second cross-field check on settings. Invisible while each field is validated alone; the settings validator exposed it in an hour and was removed for unrelated reasons. Evidence and reproduction in the M5 section above. | M5 |
+| **Résumé versioning / tailoring cache** | Unchanged from M3 **except that M5 did not need it**: the status transition supplies idempotency, so what remains is a cost optimisation. Revisit when re-tailoring becomes a real operation — M6's "regenerate this" button, or M7 re-running a match after a résumé edit. | M5 |
+| **An M3 parse that leaves a skills line whole** | The validator now handles both shapes, so this is no longer blocking. Fix it in the parser when a *third* consumer has to handle both, or when a skills line splits into something neither shape covers. | M5 |
 | Batching several jobs per explain call | Measured cost exceeds BAR.md's ceiling. 3–4x available, at the cost of per-job attribution and retry granularity. | M4 |
 | PII retention policy for `master_resume` and `evidence` | Before the first paying customer — the same deadline Part 14 already sets for multi-tenancy isolation. These are the first genuinely private per-user rows in the schema; ICO/EDPS guidance for candidate data is 6–12 months. | M3 |

@@ -781,10 +781,15 @@ down is a strict chain.** Do not start a milestone before the one it depends on 
 *proven* — not written, proven, by its E2E test.
 
 > **CURRENT MILESTONE: M5** — documents (tailoring, the fabrication validator, PDF render).
-> M0/M1 landed 2026-08-06; M2 and M3 landed 2026-08-07; **M4 landed 2026-08-08**, gate 12/12,
-> pooled precision 0.86 against a bar of 0.80, `MATCH_THRESHOLD=20`. Read M4's number with
-> the interval BAR.md §8 attaches to it — [0.75, 0.92] — before quoting it anywhere.
-> M6 is not in scope until M5's gate is green, and `test_fabrication_guard` is that gate.
+> M0/M1 landed 2026-08-06; M2 and M3 landed 2026-08-07; M4 landed 2026-08-08 (gate 12/12,
+> pooled precision 0.86 against a bar of 0.80, `MATCH_THRESHOLD=20` — read that number with
+> the interval BAR.md §8 attaches to it, [0.75, 0.92], before quoting it anywhere).
+> **M5 is built but NOT proven, as of 2026-08-09.** The validator, renderer, stage and
+> mirror are written and 694 offline tests are green, including `test_fabrication_guard` at
+> 16/16 with a retention floor beside it; two real tailored documents exist. The live gate
+> has never run, because `evals/fabrication/cases.json` is still `proposed` and a
+> model-authored set cannot satisfy a bar. **M6 is not in scope until it is green**, and
+> `test_fabrication_guard` is that gate.
 > *(update this line as milestones land; it tells Claude what "in scope" means today)*
 
 ```
