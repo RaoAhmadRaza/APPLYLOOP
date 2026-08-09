@@ -241,6 +241,39 @@ obvious moves, and a future session will otherwise propose them again confidentl
 The human read required by §1 is logged here too: one line per live run, with the reader's
 initials, the number of documents read, and what was found.
 
+### LOGGED — the human read of run 4: 0 escapes in 48 documents, `human:MAR` (2026-08-09)
+
+**§1's second non-circular measure, and §2's *escapes found by human read* row, both now have
+something behind them.** All 48 documents run 4 wrote — 30 résumés and 18 letters, across
+`senior_backend.pdf` and `two_column.pdf` — read against the vaults. **Zero unbacked claims.**
+
+Checked specifically, class by class against §4:
+
+- **F4, metric.** `940ms`, `205ms`, `41`, `2.4 million`, `38%`, `180`, `19%`, `60 million`,
+  `4,200` all match their vault entries exactly. **No percentage was computed from absolute
+  numbers** (F4-01's shape) and **no number migrated between roles** (F4-02's).
+- **F5, skill-role misalignment.** Kubernetes and Terraform never appear in a Tessellate Labs
+  bullet; Spark never appears in a Nordlys bullet. The class did not occur.
+- **F1, temporal.** No technology postdating a role appeared. The `L-F1` temptations —
+  LangChain, LlamaIndex — did not land.
+- **Skills.** Every skill on every résumé is a vault claim. Several documents *drop* skills
+  (D16 drops Go, Kubernetes, Terraform; D27 drops PyTorch, scikit-learn, MLflow). That is
+  selection, which is what the model is for. Nothing was added.
+
+**What this measures, stated with its width.** Zero in 48 read documents puts the 95% upper
+bound on the per-document escape rate at roughly **6%** — tighter than the seeded set's ~15%,
+and measuring a different thing: the seeded cases prove that fabrications *somebody thought
+of* were caught, the read looks for the ones nobody planned. Both are needed and neither is a
+claim that the validator does not leak.
+
+**Four quality findings, recorded here and excluded from the fabrication count on the reader's
+ruling.** D15 (Bluelight) repeats the idempotency-layer claim in paragraphs 1 and 3; D25
+(Cloudflare) repeats the REST-API claim the same way; D19 (Baltic Data Works) repeats the
+Spark pipeline claim; D28 (Cloudflare, Desmond) restates E14 and E18 twice in different
+phrasings. **Every claim in all four is vault-backed** — they are not fabrications and do not
+touch any bar. They are the repetition problem already deferred, now with four named
+instances against it, and they say plainly that "no hiring manager would send these as-is".
+
 ### LOGGED — run 4: every automated clause passes, and one bar row still has nothing behind it (2026-08-09)
 
 ```

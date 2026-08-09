@@ -30,7 +30,7 @@ proven, with what evidence, and what is known to be broken.
 | **M2** | Aggregators + dedupe | ✅ **proven** 2026-08-07, one clause pending | See below. |
 | **M3** | Profiles & résumé parsing | ✅ **proven** 2026-08-07 | Live gate **24/24 against a real model** (OpenAI, `gpt-5.4-nano` class). See below. |
 | **M4** | Matching | ✅ **proven 2026-08-08 — 12/12, with a stated caveat** | Set is 121 human-confirmed pairs (`human:MAR`, 0 borderline, 40 relevant). Threshold **20**, chosen on the pooled tuning split. **Pooled reporting precision 0.86, recall 0.89, n=69, 95% CI [0.75, 0.92].** All three runs individually cleared 0.80 (0.82 / 0.83 / 0.91), so the pass is not an artefact of pooling. Filter recall 1.00 (40/40), cost $0.304/1k against a $2.00 ceiling, grounding 0.98. **The bar lies inside the interval** — see the caveat below and BAR.md §8. |
-| **M5** | Documents | 🟡 **automated gate green, two clauses outstanding** 2026-08-09 | Case set confirmed `human:MAR`. Live gate **7/7 on the fourth query**: 20 seeded live cases, **0 escapes**, 0 errors over 40 pairs, résumé block rate 0.05 against 0.20, retention 0.99, $0.0573 per application against $0.50. 696 offline tests green, `test_fabrication_guard` 17/17. **Not green yet**: BAR.md §2's *escapes found by human read* row has no reading behind it, and the Drive mirror has never uploaded. Half the letters are not written — reported, not gated. |
+| **M5** | Documents | 🟡 **three clauses of four proven; blocked only on Google credentials** 2026-08-09 | Live gate **7/7**: 20 seeded cases, **0 escapes**, 0 errors over 40 pairs, résumé block rate 0.05 vs 0.20, retention 0.99, $0.0573/application vs $0.50. **Human read of all 48 documents: 0 unbacked claims, `human:MAR`** — the non-circular measure §1 requires. 696 offline tests, `test_fabrication_guard` 17/17. **Outstanding: the mirror has never uploaded**, and needs a Shared Drive folder plus a service-account key. Nothing else blocks it. |
 | M6–M11 | — | ⬜ | Strict chain from M5. |
 
 ### M5 gate, item by item
@@ -38,9 +38,9 @@ proven, with what evidence, and what is known to be broken.
 | Clause | Status | Evidence |
 |---|---|---|
 | PDF opens and an ATS parser reads the fields back | ✅ **offline and live** | `test_tailoring_render.py` renders both engineering fixtures and reads **19/19** and **15/15** expected fields back out with `markitdown` — the same extractor M3 parses uploads with, so a field this repo cannot read out of its own PDF is one it would fail to read off a candidate's. Free, in CI, on every push. The real generated résumé was also read back by hand. **Presence is asserted, adjacency is not**: extraction returns the date ranges away from their roles, which is a property of PDF text extraction rather than of the document (BAR.md §3). |
-| **`test_fabrication_guard` passes** | 🟡 **both halves green; one bar row unmeasured** | Offline: **17/17** seeded fabrications caught across five classes, retention **1.00** on rewrites (floor 0.70), **2/2** verbatim — in CI, never skipped. Live, run 4: **20 seeded cases, 0 escapes**, over 40 pairs with 0 errors. **The count is the claim, never a rate** — zero in twenty bounds the true escape rate at ~15%, and the gate prints that beside the zero. **Outstanding:** §2's *escapes found by human read = 0* has no reading behind it, and §1 explains why an automated audit cannot substitute — it uses the same rule that produced the document and agrees by construction. |
-| Cover letter grounded only in vault evidence | 🟡 **grounded; half of them are not written** | Every paragraph that ships traces to cited evidence. But 10 of 20 honest pairs produced **no letter**: eight on connective vocabulary (`includes`, `would`, `Together`), and **two on a number the résumé never states** — `the number 13`, `the number 17` — which is §4's F4 class caught in prose by a run nobody seeded for it. A failing letter no longer discards the résumé (BAR §8, amended). The vocabulary half is deferred to M6/M7; widening `words.py` would loosen the rule that caught the two real ones. |
-| Docs stored, mirrored, logged | 🟡 **stored and logged; mirror unproven** | Stored: two PDFs in MinIO under `documents/<match_id>/`, `documents` rows written, match at `tailored`. Logged: `tailor.generated` carries bullet counts, strip counts, both documents' keys, token spend and elapsed. Mirrored: `storage/drive.py` is written and unit-tested, `make verify-live-drive` is written — **no Google credentials exist yet**, so `gdrive_url` is NULL on both real documents. |
+| **`test_fabrication_guard` passes** | ✅ **offline, live, and read by a human** | Offline: **17/17** seeded fabrications caught across five classes, retention **1.00** on rewrites (floor 0.70), **2/2** verbatim — in CI, never skipped. Live, run 4: **20 seeded cases, 0 escapes**, over 40 pairs with 0 errors. **The count is the claim, never a rate** — zero in twenty bounds the true escape rate at ~15%, and the gate prints that beside the zero. **Human read, `human:MAR`, 2026-08-09: all 48 documents run 4 wrote, 0 unbacked claims**, with F1, F4 and F5 checked by name — no percentage computed from absolutes, no number moved between roles, no skill attached to a role that never used it. Zero in 48 bounds the per-document escape rate at ~6%. §1 required this because an automated audit uses the same rule that produced the document and agrees by construction. |
+| Cover letter grounded only in vault evidence | ✅ **grounded**, 🟡 half are not written | Every paragraph that ships traces to cited evidence. But 10 of 20 honest pairs produced **no letter**: eight on connective vocabulary (`includes`, `would`, `Together`), and **two on a number the résumé never states** — `the number 13`, `the number 17` — which is §4's F4 class caught in prose by a run nobody seeded for it. A failing letter no longer discards the résumé (BAR §8, amended). The vocabulary half is deferred to M6/M7; widening `words.py` would loosen the rule that caught the two real ones. |
+| Docs stored, mirrored, logged | 🟡 **stored ✅ logged ✅ mirrored ✗ — the only thing left in M5** | Stored: two PDFs in MinIO under `documents/<match_id>/`, `documents` rows written, match at `tailored`. Logged: `tailor.generated` carries bullet counts, strip counts, both documents' keys, token spend and elapsed. Mirrored: `storage/drive.py` is written and unit-tested, `make verify-live-drive` is written — **no Google credentials exist yet**, so `gdrive_url` is NULL on both real documents. |
 
 **The live gate, run 4 of 4, 2026-08-09** — `gpt-5`, 40 pairs, 9m20s at concurrency 4:
 
@@ -383,17 +383,17 @@ budget, and the parse suite spends real money.
 
 ## Next
 
-**M5 is built and its gate has not run. Two things block it, and both need a human.**
+**One thing is left in M5, and it is a credential rather than code.**
 
-1. **Confirm `evals/fabrication/cases.json`.** A model authored the cases; BAR.md §6 says a
-   model may propose one and only a human may confirm one, and the live gate enforces it.
-   Read each case against `evals/fabrication/vaults.json` — for a fabrication, that the
-   `lie` really is absent from the cited claim; for a faithful rewrite, that it truly adds
-   nothing to the claim named in `of` — then set `status` to `confirmed` and `confirmed_by`
-   to `human:<initials>`. Then `make verify-live-tailor` (~$2–4, 60 model calls).
-2. **Provision Google Cloud + a Shared Drive** for the mirror clause. `GDRIVE_FOLDER_ID`
-   and a base64 service-account key close it; `make verify-live-drive` proves it. The
-   folder **must** be in a Shared Drive — a service account's own Drive has a 0 GB quota.
+**Provision Google Cloud + a Shared Drive.** `GDRIVE_FOLDER_ID` and a base64 service-account
+key in `.env`, the folder shared with the service account's address, then
+`make verify-live-drive`. The folder **must** be in a Shared Drive — a service account's own
+Drive has had a 0 GB quota since 2023 and fails `storageQuotaExceeded` on an empty account.
+`storage/drive.py` and its live suite are written and unit-tested; nothing else waits on it.
+
+Everything else on M5's card is proven: the gate is 7/7, the case set is confirmed
+`human:MAR`, and all 48 documents run 4 wrote have been read against the vaults with zero
+unbacked claims.
 
 **The Drive mirror does not block the gate.** Same shape as R2 for M3: the clause is
 proven last, when credentials exist, and nothing else waits on it.
