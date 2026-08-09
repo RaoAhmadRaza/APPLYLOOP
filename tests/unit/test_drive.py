@@ -11,7 +11,22 @@ import json
 import pytest
 from pydantic import SecretStr
 from storage import drive
+from storage import settings as storage_settings
 from storage.settings import Settings
+
+
+@pytest.fixture(autouse=True)
+def _fresh_settings() -> None:
+    """Rebuild `Settings` for every test in this file.
+
+    `get_settings` is `lru_cache`d, so whichever test calls it *first* in the process bakes
+    in whatever `env_file` state was live at that moment — and conftest's `_ignore_dotenv`
+    is function-scoped while the container fixtures that run before it are session-scoped.
+    The result is a cached `Settings` holding the developer's real `.env`, which made
+    `is_configured()` true here and passed the same file in isolation. Same reason
+    `test_llm.py` clears its own copy.
+    """
+    storage_settings.get_settings.cache_clear()
 
 
 def test_the_body_is_multipart_related_not_form_data() -> None:

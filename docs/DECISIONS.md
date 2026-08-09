@@ -1246,13 +1246,31 @@ block. A prompt line now forbids the repetition and **that change has not been m
 against a live model.** The gap between "passes the gate" and "a person would send this"
 is real and is the first thing the next live run should look at.
 
-**`.env` is reaching unit tests despite `conftest`'s `_ignore_dotenv`.** Exposed by the
-settings validator before it was removed: the failure quoted `tailor_model: 'gpt-5'` and
-`environment: 'local'`, values that exist only in the local `.env`, during a unit test.
-Harmless while nothing cross-checks fields, which is why it has been invisible; not
-harmless the moment something does. `test_llm.py` now pins `LLM_BASE_URL` beside the slug
-it belongs to, which papers over it for that file. The hole itself is pre-existing
-infrastructure and is not M5's to chase.
+**A dependency loads the developer's `.env` into `os.environ` at import, and that is the
+mechanism behind three separate failures.** `markitdown` imports `magika`, and
+`magika/__init__.py` line 45 runs `dotenv.load_dotenv(dotenv.find_dotenv())` **at import
+time**: it walks up from the working directory, finds this repo's `.env`, and copies every
+value into the process environment.
+
+`conftest`'s `_ignore_dotenv` cannot help. It nulls `Settings.model_config["env_file"]`,
+but pydantic-settings reads `os.environ` *first* — the file is the fallback, not the
+source. So the fixture that exists to make interlock tests hermetic was being defeated by
+an import, and it looked like a mystery because nothing leaks until some test imports
+`markitdown`: `test_drive.py` passed alone and failed in the suite, `test_llm.py` did the
+same the day a cross-field settings check was briefly added, and the first diagnosis
+recorded here — "`.env` is reaching unit tests" — had the symptom right and no mechanism.
+
+**Fixed in `tests/unit/conftest.py`**, which removes `.env`'s declared keys from
+`os.environ` around every unit test and restores them after. Scoped to `tests/unit`
+deliberately: the live suites are *given* that environment on purpose by
+`make verify-live-*` and must keep it. Names are read from the file; no value is.
+
+**Worth knowing outside the tests.** This is a transitive dependency reading a secrets
+file and exporting it into the process, uninvited, in production as well as in CI. It is
+benign here — the container's `.env` holds the same values the app would load anyway — but
+it is the kind of thing to remember before putting a `.env` next to any code that imports
+markitdown for an unrelated reason. DECISIONS already records magika as markitdown's
+costliest transitive dependency for pulling in onnxruntime; this is the second reason.
 
 **The retention floor is measured against rewrites a model authored, judged by a word list
 the same model wrote.** BAR.md §6 exists to prevent exactly that, and the offline number
