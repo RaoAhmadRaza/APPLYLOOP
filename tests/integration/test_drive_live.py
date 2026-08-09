@@ -1,4 +1,4 @@
-"""M5's mirror clause, against a real Shared Drive. `make verify-live-drive`.
+"""M5's mirror clause, against the real Google Drive. `make verify-live-drive`.
 
 Not in CI: it needs credentials and it writes a file into somebody's Drive.
 
@@ -39,13 +39,13 @@ def test_the_opt_in_is_honoured_or_the_run_fails() -> None:
     other live target here.
     """
     assert drive.is_configured(), (
-        "APPLYLOOP_LIVE_DRIVE is set but GDRIVE_FOLDER_ID / GDRIVE_SERVICE_ACCOUNT_JSON "
-        "are not in this process. Run `set -a; . ./.env; set +a` first — pytest does not "
-        "load .env."
+        "APPLYLOOP_LIVE_DRIVE is set but the GDRIVE_* settings are not in this process. "
+        "Run `set -a; . ./.env; set +a` first — pytest does not load .env. If they are "
+        "not in .env at all, run `make gdrive-token id=... secret=...`."
     )
 
 
-def test_a_pdf_lands_in_the_shared_drive_and_comes_back_with_a_link() -> None:
+def test_a_pdf_lands_in_the_drive_and_comes_back_with_a_link() -> None:
     """The gate's fourth clause, the half a bucket cannot prove."""
     name = f"applyloop-verify-{uuid.uuid4().hex}.pdf"
 
@@ -56,12 +56,14 @@ def test_a_pdf_lands_in_the_shared_drive_and_comes_back_with_a_link() -> None:
     assert "drive.google.com" in link
 
 
-def test_the_folder_is_a_shared_drive() -> None:
-    """The single most likely misconfiguration, and it presents as a quota error.
+def test_the_scope_reaches_the_configured_folder() -> None:
+    """The most likely misconfiguration now that the mirror runs as the user.
 
-    A service account's own Drive has had a 0 GB quota since 2023, so uploading to a
-    folder that is not in a Shared Drive fails `storageQuotaExceeded` on a completely
-    empty account. If this passes, the folder is set up correctly.
+    The scope is `drive.file`, which covers files **this application created** and nothing
+    else. A folder made by hand in the Drive web UI was not created by this application,
+    so writing into it fails on permissions — which is why `scripts/gdrive_token.py`
+    creates the folder during authorisation. If this passes, the folder came from the
+    script and the narrow scope reaches it.
     """
     link = drive.upload(
         name=f"applyloop-quota-{uuid.uuid4().hex}.pdf",

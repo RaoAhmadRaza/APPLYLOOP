@@ -1,4 +1,4 @@
-.PHONY: up down logs ps migrate revision shell seed ingest feeds grow dedupe test lint typecheck fmt verify verify-live verify-live-feeds verify-live-aggregator verify-live-parse verify-live-match verify-live-pool verify-live-storage verify-live-drive verify-live-tailor parse match tailor clean
+.PHONY: up down logs ps migrate revision shell seed ingest feeds grow dedupe test lint typecheck fmt verify verify-live verify-live-feeds verify-live-aggregator verify-live-parse verify-live-match verify-live-pool verify-live-storage verify-live-drive verify-live-tailor parse match tailor gdrive-token clean
 
 # `make up` is the one command that boots the stack (M0 gate item 1).
 up:
@@ -160,7 +160,12 @@ verify-live-pool:
 verify-live-storage:
 	APPLYLOOP_LIVE_STORAGE=1 uv run pytest tests/integration/test_storage_live.py -q
 
-# M5's mirror clause, against a real Shared Drive. Writes two small files into it.
+# One-time: authorise the Drive mirror against your own account and print the four
+# settings it needs. Opens a browser. make gdrive-token id=<client-id> secret=<secret>
+gdrive-token:
+	uv run python scripts/gdrive_token.py --client-id "$(id)" --client-secret "$(secret)"
+
+# M5's mirror clause, against the real Drive. Writes two small files into it.
 # Unlike the targets above, this one FAILS rather than skips when the variable is set and
 # the credentials are not — an opt-in run that finds no key is a mistake, not a state.
 verify-live-drive:

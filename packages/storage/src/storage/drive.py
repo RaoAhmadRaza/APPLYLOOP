@@ -6,28 +6,35 @@ error policy: a mirror failure is recorded and the document still ships, because
 blob is already safe and a user with a working PDF and no Drive link has lost nothing
 they will notice today.
 
-**The folder must live in a Shared Drive.** Service accounts have had a 0 GB My Drive
-quota since 2023: uploading to a service account's own Drive fails `storageQuotaExceeded`
-even on a completely empty account, and no exception is available. Create a Shared Drive,
-share the folder with the service account's address, and put its id in `GDRIVE_FOLDER_ID`.
+**This uploads as the user, not as a service account, and that is forced rather than
+chosen.** A service account has had a 0 GB Drive quota since 2023, so it cannot own a file:
+Google's guidance is that it must write into a *Shared Drive* or act on behalf of a human
+over OAuth. Shared Drives are a Google Workspace feature and do not exist on a personal
+account, which is what this project runs on — so the documents land in the user's own Drive,
+against their own storage, owned by them.
+
+The scope is `drive.file`, the narrowest one that can upload: it grants access to files
+**this application created** and to nothing else in the Drive. A folder made by hand in the
+web UI was not created by this application, so `scripts/gdrive_token.py` creates the
+destination folder during authorisation. That is why the folder id comes from the script
+rather than from a URL.
 
 `google-auth` and nothing else. The full `google-api-python-client` is a large dependency
 tail for one multipart POST, and the upload protocol here is a documented HTTP call rather
 than something worth a client library.
 """
 
-import base64
-import binascii
 import json
 import uuid
 from typing import Any
 
 from google.auth.transport.requests import AuthorizedSession
-from google.oauth2 import service_account
+from google.oauth2.credentials import Credentials
 
 from storage.settings import get_settings
 
 UPLOAD_URL = "https://www.googleapis.com/upload/drive/v3/files"
+TOKEN_URL = "https://oauth2.googleapis.com/token"
 
 # `drive.file` rather than `drive`: it grants access to files this application created,
 # and nothing else in the Drive. The narrowest scope that can do the job.
@@ -46,34 +53,39 @@ class DriveError(RuntimeError):
 
 
 def is_configured() -> bool:
-    """The interlock, same shape as the S3 client's."""
+    """The interlock, same shape as the S3 client's. All four or nothing."""
     settings = get_settings()
-    return bool(settings.gdrive_folder_id and settings.gdrive_service_account_json)
+    return all(
+        (
+            settings.gdrive_folder_id,
+            settings.gdrive_client_id,
+            settings.gdrive_client_secret,
+            settings.gdrive_refresh_token,
+        )
+    )
 
 
 def upload(*, name: str, data: bytes, content_type: str) -> str:
-    """Upload one file into the configured Shared Drive folder. Returns its view link."""
+    """Upload one file into the configured folder. Returns its view link."""
     settings = get_settings()
     if not is_configured():
         raise DriveError("google drive is not configured")
 
-    assert settings.gdrive_service_account_json is not None  # noqa: S101 - is_configured
     body, boundary = _related(
         metadata={"name": name, "parents": [settings.gdrive_folder_id]},
         data=data,
         content_type=content_type,
     )
 
-    session = AuthorizedSession(
-        _credentials(settings.gdrive_service_account_json.get_secret_value())
-    )
+    session = AuthorizedSession(_credentials(settings))
     try:
         response = session.post(
             UPLOAD_URL,
             params={
                 "uploadType": "multipart",
-                # Both are required for a Shared Drive, and omitting either produces a
-                # 404 on the parent folder rather than a permission error.
+                # Harmless on a personal Drive and required the day this points at a
+                # Shared Drive instead; omitting it there 404s on the parent folder
+                # rather than reporting a permission problem.
                 "supportsAllDrives": "true",
                 "fields": "id,webViewLink",
             },
@@ -98,18 +110,23 @@ def upload(*, name: str, data: bytes, content_type: str) -> str:
     return str(link)
 
 
-def _credentials(encoded: str) -> service_account.Credentials:
-    """Decode the base64 service-account key.
+def _credentials(settings: Any) -> Credentials:
+    """User credentials from a stored refresh token.
 
-    Base64 rather than a mounted file: it is one environment variable, it survives
-    docker-compose and a secret manager identically, and a JSON key with embedded
-    newlines pasted into a `.env` is a well-known way to spend an afternoon.
+    No access token is held: `AuthorizedSession` mints one from the refresh token on first
+    use and again whenever it expires, so nothing short-lived is ever persisted. The
+    refresh token itself is the only secret, and it lives in `.env` (Part 13 rule 9).
     """
-    try:
-        info = json.loads(base64.b64decode(encoded, validate=True))
-    except (binascii.Error, ValueError) as error:
-        raise DriveError("GDRIVE_SERVICE_ACCOUNT_JSON is not base64-encoded JSON") from error
-    return service_account.Credentials.from_service_account_info(info, scopes=list(SCOPES))
+    assert settings.gdrive_client_secret is not None  # noqa: S101 - is_configured checked
+    assert settings.gdrive_refresh_token is not None  # noqa: S101 - is_configured checked
+    return Credentials(
+        token=None,
+        refresh_token=settings.gdrive_refresh_token.get_secret_value(),
+        client_id=settings.gdrive_client_id,
+        client_secret=settings.gdrive_client_secret.get_secret_value(),
+        token_uri=TOKEN_URL,
+        scopes=list(SCOPES),
+    )
 
 
 def _related(*, metadata: dict[str, Any], data: bytes, content_type: str) -> tuple[bytes, str]:

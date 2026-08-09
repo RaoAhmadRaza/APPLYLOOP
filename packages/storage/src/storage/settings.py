@@ -38,16 +38,20 @@ class Settings(BaseSettings):
     max_resume_bytes: int = 10 * 1024 * 1024
 
     # --- M5: the Google Drive mirror -------------------------------------------------
-    # Both optional and interlocked together, like the S3 settings above: unconfigured,
-    # `documents.gdrive_url` stays NULL and the document still ships.
+    # All four optional and interlocked together, like the S3 settings above:
+    # unconfigured, `documents.gdrive_url` stays NULL and the document still ships.
     #
-    # **The folder has to be in a Shared Drive.** A service account's own Drive has had a
-    # 0 GB quota since 2023, so an upload there fails `storageQuotaExceeded` on an empty
-    # account and there is no exception to request.
+    # **The mirror uploads as the user, not as a service account.** A service account has
+    # had a 0 GB Drive quota since 2023 and cannot own a file — it must write into a
+    # Shared Drive, which is a Google Workspace feature that a personal account does not
+    # have. So these are OAuth user credentials, and the documents are owned by the user.
+    #
+    # `scripts/gdrive_token.py` produces all four in one run.
     gdrive_folder_id: str | None = None
-    # The service-account JSON key, base64-encoded — one variable rather than a mounted
-    # file, and immune to what a raw key's embedded newlines do to a `.env`.
-    gdrive_service_account_json: SecretStr | None = None
+    gdrive_client_id: str | None = None
+    gdrive_client_secret: SecretStr | None = None
+    # Long-lived. The access token is minted from it per session and never stored.
+    gdrive_refresh_token: SecretStr | None = None
 
 
 @lru_cache(maxsize=1)

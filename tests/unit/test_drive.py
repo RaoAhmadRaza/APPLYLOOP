@@ -1,15 +1,17 @@
-"""The Drive mirror's two pieces of real logic, offline.
+"""The Drive mirror's real logic, offline.
 
-The upload itself needs a Shared Drive and is proved by `make verify-live-drive`. What is
+The upload itself needs live credentials and is proved by `make verify-live-drive`. What is
 checkable for free is the body it builds — `multipart/related`, which is *not* what
-`requests` produces from `files=` and looks identical in a debugger — and the interlock.
+`requests` produces from `files=` and looks identical in a debugger — the interlock, and
+the shape of the credentials.
 """
 
-import base64
 import json
 
 import pytest
+from pydantic import SecretStr
 from storage import drive
+from storage.settings import Settings
 
 
 def test_the_body_is_multipart_related_not_form_data() -> None:
@@ -56,14 +58,22 @@ def test_an_unconfigured_mirror_refuses_rather_than_guesses() -> None:
         drive.upload(name="a.pdf", data=b"x", content_type="application/pdf")
 
 
-def test_a_key_that_is_not_base64_json_fails_with_a_sentence_a_human_can_act_on() -> None:
-    """The most likely misconfiguration by a wide margin: pasting the raw JSON key.
+def test_the_credentials_hold_no_access_token() -> None:
+    """The mirror runs as the user, over OAuth, because a service account has a 0 GB Drive
+    quota and Shared Drives are a Workspace feature this project does not have.
 
-    It fails on the variable's name and format, and says neither the key nor its contents
-    — Part 13 rule 9 applies to error strings too.
+    Only the refresh token is stored. The access token is minted per session and never
+    persisted, so there is one long-lived secret rather than two.
     """
-    with pytest.raises(drive.DriveError, match="GDRIVE_SERVICE_ACCOUNT_JSON"):
-        drive._credentials(base64.b64encode(b"not json at all").decode())
+    settings = Settings(
+        gdrive_folder_id="folder",
+        gdrive_client_id="client",
+        gdrive_client_secret=SecretStr("secret-not-real"),
+        gdrive_refresh_token=SecretStr("refresh-not-real"),
+    )
 
-    with pytest.raises(drive.DriveError, match="GDRIVE_SERVICE_ACCOUNT_JSON"):
-        drive._credentials('{"type": "service_account"}')
+    credentials = drive._credentials(settings)
+
+    assert credentials.token is None, "an access token was stored; it should be minted"
+    assert credentials.refresh_token == "refresh-not-real"
+    assert list(credentials.scopes) == ["https://www.googleapis.com/auth/drive.file"]
