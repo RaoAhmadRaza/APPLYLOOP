@@ -285,6 +285,60 @@ def test_a_cover_letter_that_adds_a_claim_costs_the_letter_and_not_the_resume(
     assert event.payload_json["letter_bytes"] == 0
 
 
+def test_the_mirror_link_lands_on_the_document_row(
+    session: Session, seeded: Match, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The stage half of the gate's mirror clause.
+
+    `make verify-live-drive` proves the upload against the real Drive; this proves the
+    wiring — that what the mirror returns reaches `documents.gdrive_url`, which is the
+    column M6 reads to put a link in a message.
+    """
+    _model(monkeypatch)
+    _stored(monkeypatch)
+    monkeypatch.setattr(tailor.drive, "is_configured", lambda: True)
+    monkeypatch.setattr(
+        tailor.drive,
+        "upload",
+        lambda **kwargs: f"https://drive.google.com/file/d/{kwargs['name']}/view",
+    )
+
+    _run(session, seeded)
+
+    documents = list(session.scalars(select(Document).where(Document.match_id == seeded.id)))
+    assert documents
+    for document in documents:
+        assert document.gdrive_url is not None
+        assert document.type in document.gdrive_url, "the wrong document's link was stored"
+
+
+def test_a_mirror_that_fails_costs_the_link_and_not_the_document(
+    session: Session, seeded: Match, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """R2 holds the durable copy and the model call has already been paid for, so a Drive
+    outage must not discard a document. It is recorded rather than raised, because a
+    mirror that has quietly stopped working raises no error and shows in no error rate."""
+    _model(monkeypatch)
+    _stored(monkeypatch)
+    monkeypatch.setattr(tailor.drive, "is_configured", lambda: True)
+
+    def explode(**_: object) -> str:
+        raise tailor.drive.DriveError("drive refused the upload: HTTP 503")
+
+    monkeypatch.setattr(tailor.drive, "upload", explode)
+
+    result = _run(session, seeded)
+
+    assert result is not None and not result.blocked
+    documents = list(session.scalars(select(Document).where(Document.match_id == seeded.id)))
+    assert documents and all(document.gdrive_url is None for document in documents)
+    assert _status(session, seeded.id) == MatchStatus.TAILORED.value
+
+    event = _latest_event(session, "tailor.mirror_failed")
+    assert event is not None
+    assert "503" in event.payload_json["error"]
+
+
 # ------------------------------------------------------------------- idempotency (§3.4)
 
 
