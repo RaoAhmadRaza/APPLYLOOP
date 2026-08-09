@@ -1,5 +1,21 @@
 .PHONY: up down logs ps migrate revision shell seed ingest feeds grow dedupe test lint typecheck fmt verify verify-live verify-live-feeds verify-live-aggregator verify-live-parse verify-live-match verify-live-pool verify-live-storage verify-live-drive verify-live-tailor parse match tailor gdrive-token clean
 
+# Every live suite reads its credentials from the environment, and pytest does NOT load
+# `.env` — that is deliberate (tests/conftest.py nulls `env_file` so an interlock test can
+# assert on a genuinely absent setting). So the targets load it themselves.
+#
+# Without this the recorded failure mode is a live target that exits 0 having run nothing,
+# because `skipif` reads `os.getenv` and finds nothing. M5's targets fail instead of
+# skipping, which turned the same defect into a red run with a message telling the operator
+# to type `set -a; . ./.env; set +a` — better, and still asking a person to remember
+# something the Makefile can do.
+LOAD_ENV = set -a; if [ -f .env ]; then . ./.env; fi; set +a;
+
+# Live suites that touch object storage run on the HOST, where the bucket is published on
+# localhost — inside compose it is `minio`. `.env` leaves the endpoint empty on purpose so
+# compose can supply the in-network name, so the host default belongs here.
+HOST_STORAGE = STORAGE_ENDPOINT_URL=$${STORAGE_ENDPOINT_URL:-http://localhost:9000}
+
 # `make up` is the one command that boots the stack (M0 gate item 1).
 up:
 	docker compose up -d --wait
@@ -117,26 +133,26 @@ verify: lint typecheck test
 # M1 gate item 1, against the six real boards. Not in CI — a build must not go red
 # because a third party had a bad afternoon.
 verify-live:
-	APPLYLOOP_LIVE_ATS=1 uv run pytest tests/integration/test_ats_live.py -q
+	$(LOAD_ENV) APPLYLOOP_LIVE_ATS=1 uv run pytest tests/integration/test_ats_live.py -q
 
 # Layer 3, against the real feeds. Separate from verify-live on purpose: layer 1 is
 # unmetered and can be run freely while touching an adapter, while these endpoints are
 # rate-limited and Remotive asks for at most four requests a day. One variable for both
 # would mean every adapter edit spends feed quota.
 verify-live-feeds:
-	APPLYLOOP_LIVE_FEEDS=1 uv run pytest tests/integration/test_feeds_live.py -q
+	$(LOAD_ENV) APPLYLOOP_LIVE_FEEDS=1 uv run pytest tests/integration/test_feeds_live.py -q
 
 # Layer 2, through the real proxy. Requires JOBSPY_PROXIES to be set — without it the
 # aggregator no-ops by design and the suite skips. Spends metered residential
 # bandwidth, so this is never in CI and never in a loop.
 verify-live-aggregator:
-	APPLYLOOP_LIVE_AGGREGATOR=1 uv run pytest tests/integration/test_aggregator_live.py -q
+	$(LOAD_ENV) APPLYLOOP_LIVE_AGGREGATOR=1 uv run pytest tests/integration/test_aggregator_live.py -q
 
 # M3's gate: four fixture résumés through the real model. Its own variable because this
 # is the first suite that spends money rather than someone else's goodwill — one run is
 # a few cents, but it should never be something a `make test` does by accident.
 verify-live-parse:
-	APPLYLOOP_LIVE_LLM=1 uv run pytest tests/integration/test_resume_parse_live.py -q
+	$(LOAD_ENV) APPLYLOOP_LIVE_LLM=1 uv run pytest tests/integration/test_resume_parse_live.py -q
 
 # M4's gate: the golden set through the real model and the real embedding endpoint,
 # with nothing stubbed. Its own variable rather than sharing APPLYLOOP_LIVE_LLM because
@@ -147,18 +163,18 @@ verify-live-parse:
 # over an identical set gave precision 0.62 and 0.50 at the same threshold. The chosen
 # threshold must clear on all three. Override to 1 while iterating on the prompt.
 verify-live-match:
-	APPLYLOOP_LIVE_MATCH=1 APPLYLOOP_MATCH_RUNS=3 uv run pytest tests/integration/test_matching_live.py -q -s
+	$(LOAD_ENV) APPLYLOOP_LIVE_MATCH=1 APPLYLOOP_MATCH_RUNS=3 uv run pytest tests/integration/test_matching_live.py -q -s
 
 # BAR.md §2's pool floor and per-filter cap, which are properties of the filters against
 # the REAL pool and cannot be measured in the golden harness — §7 pins that to stored
 # payloads, so its pool is 16 rows per profile. Read-only: no model, no writes, no cost.
 verify-live-pool:
-	APPLYLOOP_LIVE_POOL=1 uv run pytest tests/integration/test_filters_live.py -q -s
+	$(LOAD_ENV) APPLYLOOP_LIVE_POOL=1 uv run pytest tests/integration/test_filters_live.py -q -s
 
 # Object storage against a real bucket. Needs STORAGE_* set; skips otherwise, because
 # unconfigured storage is a supported state.
 verify-live-storage:
-	APPLYLOOP_LIVE_STORAGE=1 uv run pytest tests/integration/test_storage_live.py -q
+	$(LOAD_ENV) $(HOST_STORAGE) APPLYLOOP_LIVE_STORAGE=1 uv run pytest tests/integration/test_storage_live.py -q
 
 # One-time: authorise the Drive mirror against your own account and print the four
 # settings it needs. Opens a browser. make gdrive-token id=<client-id> secret=<secret>
@@ -169,11 +185,11 @@ gdrive-token:
 # Unlike the targets above, this one FAILS rather than skips when the variable is set and
 # the credentials are not — an opt-in run that finds no key is a mistake, not a state.
 verify-live-drive:
-	APPLYLOOP_LIVE_DRIVE=1 uv run pytest tests/integration/test_drive_live.py -q -s
+	$(LOAD_ENV) APPLYLOOP_LIVE_DRIVE=1 uv run pytest tests/integration/test_drive_live.py -q -s
 
 # M5's gate: the fabrication cases through the real strong model, with nothing stubbed.
 # Its own variable because this is the most expensive suite in the repo — a strong model,
 # two calls per case — and because the whole point is that a fake cannot make it green.
 # Roughly $2-4 a run. Read evals/fabrication/BAR.md §2 before quoting any number it prints.
 verify-live-tailor:
-	APPLYLOOP_LIVE_TAILOR=1 uv run pytest tests/integration/test_tailoring_live.py -q -s
+	$(LOAD_ENV) $(HOST_STORAGE) APPLYLOOP_LIVE_TAILOR=1 uv run pytest tests/integration/test_tailoring_live.py -q -s
