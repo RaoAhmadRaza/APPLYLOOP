@@ -40,7 +40,7 @@ proven, with what evidence, and what is known to be broken.
 | PDF opens and an ATS parser reads the fields back | ✅ **offline and live** | `test_tailoring_render.py` renders both engineering fixtures and reads **19/19** and **15/15** expected fields back out with `markitdown` — the same extractor M3 parses uploads with, so a field this repo cannot read out of its own PDF is one it would fail to read off a candidate's. Free, in CI, on every push. The real generated résumé was also read back by hand. **Presence is asserted, adjacency is not**: extraction returns the date ranges away from their roles, which is a property of PDF text extraction rather than of the document (BAR.md §3). |
 | **`test_fabrication_guard` passes** | ✅ **offline, live, and read by a human** | Offline: **17/17** seeded fabrications caught across five classes, retention **1.00** on rewrites (floor 0.70), **2/2** verbatim — in CI, never skipped. Live, run 4: **20 seeded cases, 0 escapes**, over 40 pairs with 0 errors. **The count is the claim, never a rate** — zero in twenty bounds the true escape rate at ~15%, and the gate prints that beside the zero. **Human read, `human:MAR`, 2026-08-09: all 48 documents run 4 wrote, 0 unbacked claims**, with F1, F4 and F5 checked by name — no percentage computed from absolutes, no number moved between roles, no skill attached to a role that never used it. Zero in 48 bounds the per-document escape rate at ~6%. §1 required this because an automated audit uses the same rule that produced the document and agrees by construction. |
 | Cover letter grounded only in vault evidence | ✅ **grounded**, 🟡 half are not written | Every paragraph that ships traces to cited evidence. But 10 of 20 honest pairs produced **no letter**: eight on connective vocabulary (`includes`, `would`, `Together`), and **two on a number the résumé never states** — `the number 13`, `the number 17` — which is §4's F4 class caught in prose by a run nobody seeded for it. A failing letter no longer discards the résumé (BAR §8, amended). The vocabulary half is deferred to M6/M7; widening `words.py` would loosen the rule that caught the two real ones. |
-| Docs stored, mirrored, logged | 🟡 **stored ✅ logged ✅ mirrored ✗ — the only thing left in M5** | Stored: two PDFs in MinIO under `documents/<match_id>/`, `documents` rows written, match at `tailored`. Logged: `tailor.generated` carries bullet counts, strip counts, both documents' keys, token spend and elapsed. Mirrored: `storage/drive.py` is written and unit-tested, `make verify-live-drive` is written — **no Google credentials exist yet**, so `gdrive_url` is NULL on both real documents. |
+| Docs stored, mirrored, logged | 🟡 **stored ✅ logged ✅ mirrored: proven in parts, not yet end to end** | Stored: PDFs in MinIO under `documents/<match_id>/`, `documents` rows written, match at `tailored`. Logged: `tailor.generated` carries bullet counts, strip counts, document keys, token spend and elapsed. **Mirrored, 2026-08-10:** `make verify-live-drive` passes **3/3 against the real Google Drive** — a file uploaded and came back with a working link — and two integration tests prove the wiring either side of it (the returned link reaches `documents.gdrive_url`; a `DriveError` leaves the document intact with a NULL link and a `tailor.mirror_failed` event). **What is missing is one real `make tailor` producing a row with `gdrive_url` non-NULL**, which is blocked on an OpenAI 429: the org's quota was exhausted by four gate runs the same day, and the 429 persists across both the strong and the cheap model. Code-complete, waiting on quota. |
 
 **The live gate, run 4 of 4, 2026-08-09** — `gpt-5`, 40 pairs, 9m20s at concurrency 4:
 
@@ -383,17 +383,28 @@ budget, and the parse suite spends real money.
 
 ## Next
 
-**One thing is left in M5, and it is a credential rather than code.**
+**One thing is left in M5, and it is one command when the LLM quota resets.**
 
-**Provision Google Cloud + a Shared Drive.** `GDRIVE_FOLDER_ID` and a base64 service-account
-key in `.env`, the folder shared with the service account's address, then
-`make verify-live-drive`. The folder **must** be in a Shared Drive — a service account's own
-Drive has had a 0 GB quota since 2023 and fails `storageQuotaExceeded` on an empty account.
-`storage/drive.py` and its live suite are written and unit-tested; nothing else waits on it.
+```
+make tailor id=<any match still at 'discovered'>
+```
 
-Everything else on M5's card is proven: the gate is 7/7, the case set is confirmed
-`human:MAR`, and all 48 documents run 4 wrote have been read against the vaults with zero
-unbacked claims.
+Then check the row: `select type, gdrive_url from documents order by created_at desc limit 2;`
+A non-NULL `gdrive_url` closes the mirror clause and M5's card.
+
+Everything either side of it is proven. `make verify-live-drive` passes 3/3 against the real
+Drive; two integration tests cover the wiring in both directions. The only thing never
+observed is the two joined in one real run, and it is blocked on an **OpenAI 429** — the
+org's quota was spent by four live gate runs on 2026-08-09, and the 429 persists across both
+the strong and the cheap model, so it is a tier limit rather than a burst.
+
+The credentials are in place: the mirror runs as the **user over OAuth**, not as a service
+account, because Shared Drives are a Workspace feature a personal account does not have. See
+DECISIONS → M5 for why that assumption had to be rebuilt.
+
+Everything else on M5's card is proven: the live gate is 7/7, the case set is confirmed
+`human:MAR`, and all 48 documents run 4 wrote were read against the vaults with zero unbacked
+claims.
 
 **The Drive mirror does not block the gate.** Same shape as R2 for M3: the clause is
 proven last, when credentials exist, and nothing else waits on it.
