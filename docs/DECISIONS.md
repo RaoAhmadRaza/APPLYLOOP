@@ -1203,6 +1203,41 @@ construction, which §1 pinned at the time the bar was set rather than discoveri
 honest claim is **"no seeded fabrication in twenty got through"**, bounded at ~15% by the
 rule of three — not "the validator does not leak".
 
+**The Drive mirror had to be rebuilt, because a planning assumption did not hold.** The plan
+said "put the folder in a Shared Drive", on the strength of a verified fact — service accounts
+have had a 0 GB Drive quota since 2023 and cannot own a file. What was not checked is the
+thing that quota forces you into: **Shared Drives are a Google Workspace feature and do not
+exist on a personal account**, which is what this project runs on. So the original design was
+unbuildable here and nobody would have found out until the credentials arrived.
+
+Google's own guidance names both routes — a service account "must upload files and folders
+into shared drives, **or use OAuth 2.0 to upload items on behalf of a human user**". Only the
+second is available, so the mirror runs as the user: four settings (folder id, client id,
+client secret, refresh token) replace the key, the documents are owned by the user against
+their own 15 GB, and only the refresh token is long-lived — the access token is minted per
+session and never stored.
+
+**The narrow scope has a consequence that is easy to meet by accident and hard to diagnose.**
+`drive.file` is the least-privilege scope that can upload, and it covers *files this
+application created* and nothing else in the Drive. A folder made by hand in the web UI was
+not created by this application, so uploading into it fails on permissions — and the error
+reads like a wrong folder id. `scripts/gdrive_token.py` therefore creates the destination
+folder during authorisation and prints all four values together, and the live suite asserts
+that specific case rather than only "an upload worked".
+
+**The rejected alternative was the broad `drive` scope**, which would let the app write into
+any folder the user picked in the UI and would also let it read every file in their Drive.
+For a service that holds résumés, the narrow scope plus one created folder is worth the extra
+paragraph of explanation.
+
+**Also found while doing it, and it would have re-run M5's first failure for anyone who
+copied the file:** `.env.example` still pinned `LLM_TIMEOUT_SECONDS=120`, overriding the 300
+default that exists precisely because 120 killed live gate run 1. A default is only as good
+as the example file that shadows it.
+
+*(The commit that made this change, `b046379`, has two backtick-quoted words eaten from its
+message by shell substitution — "the scope stays , the narrowest". The content is here.)*
+
 **The cover letter is grounded and stilted.** Every paragraph of the second real letter
 opened with the same clause — "For the *role* at *company*, I …" — because the validator's
 allowed universe leaves almost no connective vocabulary to write with. It is exactly the
