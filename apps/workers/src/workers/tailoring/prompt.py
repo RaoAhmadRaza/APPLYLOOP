@@ -60,7 +60,10 @@ prose — an argument, not a list of achievements restated.
 
 Absolute rules:
 1. Every paragraph cites the handles of the evidence it draws on, copied exactly as
-   printed — `E7`, never `7`. The handle is a label, not a number.
+   printed — `E7`, never `7`. The handle is a label, not a number. Put them ONLY in the
+   `evidence_ids` field. Never write a handle in the prose: it is our bookkeeping, the
+   reader of this letter would see `(E7)` printed in the middle of a sentence, and it
+   reads as a number the résumé never stated.
 2. A paragraph may only contain facts from the evidence it cites, plus the employer's
    name and the role title as given. Nothing else.
 3. WRITE NO DIGITS AT ALL. Not a year, not a count, not a duration, not a percentage,

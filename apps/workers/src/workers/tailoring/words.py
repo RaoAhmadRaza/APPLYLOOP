@@ -55,6 +55,9 @@ replaced replacing rewrite rewriting rewrote run running ran scale scaled scalin
 serve served serving ship shipped shipping simplify simplified simplifying solve solved
 solving speed sped speeding spend spent spending support supported supporting take taken
 taking took trim trimmed trimming use used using write writing wrote
+bring bringing brought find finding found keep keeping kept meet meeting met
+put puts putting set sets setting turn turned turning work worked
+pair paired pairing pairs join joined joining show showed showing shown
 """
 
 # Words that only exist to point at something already checked. Every entry is a word a
@@ -85,11 +88,12 @@ also currently exactly first including like now previously same still then today
 work working works role roles kind
 can could may might must shall should will would
 however therefore moreover furthermore additionally instead otherwise meanwhile
+finally lastly secondly beyond likewise similarly overall
 already rather whether directly particularly especially notably often always never
 well much many several enough less least greatly closely fully largely mainly
 alongside beyond throughout upon regarding toward towards since given despite although
 though unless until whereas wherever whenever
-apply applied applies applying
+apply applied applies applying together
 """
 
 ALLOWED = frozenset(word for block in (_FUNCTION, _VERBS, _CONNECTIVE) for word in block.split())

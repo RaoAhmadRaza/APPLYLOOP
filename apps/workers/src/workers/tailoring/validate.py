@@ -42,6 +42,24 @@ from workers.text import split_skill_line, squash
 _DIGITS = re.compile(r"\d+")
 _TOKENS = re.compile(r"[A-Za-z0-9]+")
 
+# **A number is a number however it is spelled.** The résumé path never needed this — it
+# checks every token, so `nine` fails there as ordinary unsourced content. The letter path
+# checks facts rather than vocabulary, and without this a model writes "nine years" where
+# it cannot write "9 years", which is the same claim wearing a different hat. Case CL-03
+# is exactly that sentence and is what caught the omission.
+# An evidence handle the model wrote into the prose instead of leaving in `evidence_ids`.
+# Optionally wrapped, because it arrives as `(E11)`, `[E11, E12]` or bare.
+_HANDLE_IN_PROSE = re.compile(r"[(\[]\s*E\d+(?:\s*,\s*E\d+)*\s*[)\]]|\bE\d+\b")
+_SPACE_BEFORE_PUNCT = re.compile(r"\s+([.,;:!?])")
+_MULTI_SPACE = re.compile(r"[ \t]{2,}")
+
+_NUMBERS_SPELLED = """
+zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen
+fifteen sixteen seventeen eighteen nineteen twenty thirty forty fifty sixty seventy
+eighty ninety hundred thousand million billion dozen
+"""
+_NUMBER_WORDS = frozenset(_NUMBERS_SPELLED.split())
+
 
 @dataclass(frozen=True)
 class Claim:
@@ -207,7 +225,34 @@ def cover_letter(
     company: str,
     title: str,
 ) -> LetterReport:
-    """Same rules, over prose, with the posting's own name and title added.
+    """**Facts, not vocabulary** — the one place this file's rule differs from the résumé's.
+
+    A bullet *is* a rewrite of one claim, so demanding its words come from that claim is a
+    fair proxy for "same facts, different phrasing". A letter paragraph is an argument
+    built *from* claims, and the identical demand is not a fabrication rule at all — it is
+    an instruction not to write. Ten live pairs on 2026-08-10 rejected `'backend'`,
+    `'infrastructure'`, `'team'`, `'migrations'`, `'accountabilities'`, `'experience'`.
+    None is a fabrication. They are what prose is made of, and no achievable word list
+    fixes that, because the next paragraph needs different ones.
+
+    So a paragraph is checked for the things that can be *false*:
+
+    - **numbers**, against the cited claim alone and nothing wider. Unchanged, and this is
+      the rule that earns its keep — it caught `the number 13` and `the number 17` on
+      `gpt-5`, and three of five live pairs here, every one a years-of-experience total
+      the résumé never stated.
+    - **capitalised tokens**, against the vault. Technologies, employers, products and
+      tools are capitalised in English, so this is what keeps class F2 dead: the vault
+      says AWS, the posting says Azure, and `Azure` is still refused.
+    - everything else is lowercase prose and asserts nothing on its own.
+
+    **What this gives up, stated rather than discovered.** Class F3 weakens *for letters*:
+    "led a cross-functional team" now passes where it did not, though the `50+` in it
+    still does not. A lowercase technology — `pytest`, `npm` — slips. Both are real, and
+    against them: the résumé keeps the strict rule and is the document an employer parses,
+    a letter is read by a human before M6 sends anything, and §2 of BAR.md reports the
+    letter rather than gating it. A stage that produced nothing on 10 of 10 honest pairs
+    was not protecting anybody.
 
     The employer being written to is not a claim about the candidate, so naming it is
     allowed. Nothing else from the posting is: the job description is the *temptation*
@@ -233,12 +278,23 @@ def cover_letter(
             )
             continue
 
+        # Cleaned once, here, so the text that is judged is the text that is rendered.
+        paragraph = paragraph.model_copy(update={"text": strip_handles(paragraph.text)})
+
         cited = [vault.claims[name] for name in paragraph.evidence_ids]
         cited_text = " ".join(claim.text for claim in cited)
         haystack = squash(cited_text) + allowed_context + _alias_context(cited_text)
-        digits = {run for claim in cited for run in _DIGITS.findall(claim.text)}
+        # Digits and spelled-out numbers together, from the cited claims alone — never
+        # from the wider vault, because the most convincing metric fabrication is a real
+        # number borrowed from a different role.
+        numbers = {run for claim in cited for run in _DIGITS.findall(claim.text)}
+        numbers |= {
+            squashed
+            for token in _TOKENS.findall(cited_text)
+            if (squashed := squash(token)) in _NUMBER_WORDS
+        }
 
-        fault = _untraceable(paragraph.text, haystack, digits)
+        fault = _unfounded(paragraph.text, haystack, numbers)
         if fault is None:
             good.append(paragraph)
         else:
@@ -326,6 +382,72 @@ def _alias_context(text: str) -> str:
         for token in _TOKENS.findall(text)
         if (fuller := aliases.expand(token)) is not None
     )
+
+
+def strip_handles(text: str) -> str:
+    """Remove evidence handles the model wrote into the prose.
+
+    **These are our labels, not the candidate's claims, and they were failing the letter
+    on the number rule.** `select.py` mints `E1`…`E20`; the model is told to put them in
+    `evidence_ids`, and it also writes them into the sentence — `(E11)`, `[E11, E12]`, or
+    bare. `_DIGITS` then reads `E11` as the number 11, finds no 11 in the cited claim, and
+    rejects a paragraph that invented nothing.
+
+    Measured 2026-08-10: six consecutive live letters rejected on "the number 11", "the
+    number 12", "the number 13" against a vault whose letter claims were exactly E11, E12,
+    E13, E15, E16, E18. **It also puts the earlier catches in doubt** — `the number 13` and
+    `the number 17` on `gpt-5`, recorded in BAR.md §8 as F4 saves, came from vaults with at
+    least that many claims and were most likely this.
+
+    Stripped rather than merely ignored, because the cleaned text is what gets rendered: a
+    letter that passed with `(E11)` in it would print the handle onto the PDF.
+    """
+    cleaned = _HANDLE_IN_PROSE.sub("", text)
+    cleaned = _SPACE_BEFORE_PUNCT.sub(r"\1", cleaned)
+    return _MULTI_SPACE.sub(" ", cleaned).strip()
+
+
+def _unfounded(text: str, haystack: str, numbers: set[str]) -> str | None:
+    """Rule 2 in full, and rule 3 narrowed to the tokens that can carry a fact.
+
+    The letter's half of the guarantee. See `cover_letter` for why it differs from
+    `_untraceable`, which is unchanged and still governs every résumé bullet.
+
+    Capitalisation is checked at every position, including the start of a sentence: a
+    model that opens with "Kubernetes underpinned the platform" is making the same claim
+    as one that says it mid-sentence, and skipping sentence-initial tokens would leave
+    exactly that hole. The cost is that a sentence may not *open* with a capitalised
+    common noun unless `words.ALLOWED` carries it — which is a much smaller demand on that
+    list than the old rule made, because it now only has to cover sentence openers rather
+    than every word of every paragraph.
+    """
+    for run in _DIGITS.findall(text):
+        if run not in numbers:
+            return f"the number {run} is not in the cited evidence"
+
+    for token in _TOKENS.findall(text):
+        word = squash(token)
+        if not word or word.isdigit():
+            continue
+        if word in _NUMBER_WORDS and word not in numbers:
+            # Before the ALLOWED check, deliberately: a number word must not become
+            # legal by being grammar-shaped.
+            return f"the number {token!r} is not in the cited evidence"
+        if word in ALLOWED:
+            continue
+        if not token[0].isupper():
+            # Lowercase prose. It joins the facts together and is not one of them.
+            continue
+        if word in haystack:
+            continue
+        # `APIs` where the claim wrote `API`, `Services` where it wrote `Service`.
+        # Pluralising a term the evidence already names adds no claim, and refusing it
+        # rejects a paragraph for grammar. Only this direction: dropping a final `s`
+        # cannot turn one technology into another.
+        if word.endswith("s") and word[:-1] in haystack:
+            continue
+        return f"{token!r} does not appear in the cited evidence"
+    return None
 
 
 def _untraceable(text: str, haystack: str, digits: set[str]) -> str | None:
