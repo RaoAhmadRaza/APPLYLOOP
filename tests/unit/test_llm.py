@@ -62,6 +62,23 @@ def _transport(*contents: str, seen: list[dict[str, Any]] | None = None) -> http
     return httpx.MockTransport(handler)
 
 
+def _tool_transport(
+    *contents: str, seen: list[dict[str, Any]] | None = None
+) -> httpx.MockTransport:
+    """A provider that answers in a forced tool call, leaving `content` empty."""
+    replies = iter(contents)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if seen is not None:
+            seen.append(json.loads(request.content))
+        call = {"function": {"name": "Sample", "arguments": next(replies)}}
+        return httpx.Response(
+            200, json={"choices": [{"message": {"content": "", "tool_calls": [call]}}]}
+        )
+
+    return httpx.MockTransport(handler)
+
+
 def _patch(monkeypatch: pytest.MonkeyPatch, transport: httpx.MockTransport) -> None:
     real = llm.client
 
@@ -154,6 +171,52 @@ def test_the_request_carries_strict_json_schema(monkeypatch: pytest.MonkeyPatch)
     assert schema["strict"] is True
     assert schema["name"] == "Sample"
     assert seen[0]["model"] == "test/model"
+
+
+def test_deepseek_is_asked_with_a_forced_tool_call_not_a_response_format(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The provider branch in `_enforcement`, pinned against the live endpoint.
+
+    Verified 2026-08-10: DeepSeek's `/v1` answers `This response_format type is
+    unavailable now`, and `/beta` refuses a *forced* `tool_choice` while thinking is on.
+    Every part of the workaround is asserted, because each one alone looks like clutter
+    a later reader would tidy away — and the schema still has to arrive strict, since a
+    tool call that enforces nothing is `json_object` with extra steps.
+    """
+    monkeypatch.setenv("LLM_BASE_URL", "https://api.deepseek.com/beta")
+    monkeypatch.setenv("LLM_MODEL", "deepseek-v4-flash")
+    llm.get_settings.cache_clear()
+    seen: list[dict[str, Any]] = []
+    _patch(monkeypatch, _tool_transport('{"name": "ok"}', seen=seen))
+
+    llm.complete_json(Sample, system="s", user="u")
+
+    body = seen[0]
+    assert "response_format" not in body
+    assert body["thinking"] == {"type": "disabled"}
+    assert body["tool_choice"] == {"type": "function", "function": {"name": "Sample"}}
+    function = body["tools"][0]["function"]
+    assert function["strict"] is True
+    assert function["parameters"]["additionalProperties"] is False
+
+
+def test_a_provider_error_carries_its_body_and_not_just_its_status(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`400 Bad Request` reads identically for a retired model name, a crossed slug and
+    an unsupported `response_format`. Only the body tells them apart, and a bare
+    `raise_for_status` threw it away — which cost an afternoon of guessing once."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            400, json={"error": {"message": "This response_format type is unavailable now"}}
+        )
+
+    _patch(monkeypatch, httpx.MockTransport(handler))
+
+    with pytest.raises(llm.LlmError, match="unavailable now"):
+        llm.complete_json(Sample, system="s", user="u")
 
 
 def test_a_valid_response_is_returned_as_the_model(monkeypatch: pytest.MonkeyPatch) -> None:

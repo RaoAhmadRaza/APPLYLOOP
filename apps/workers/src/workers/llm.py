@@ -204,16 +204,14 @@ def _ask(
 ) -> str:
     response = http.post(
         "/chat/completions",
-        json={
-            "model": model,
-            "messages": messages,
-            "response_format": {
-                "type": "json_schema",
-                "json_schema": {"name": name, "strict": True, "schema": schema},
-            },
-        },
+        json={"model": model, "messages": messages, **_enforcement(name, schema)},
     )
-    response.raise_for_status()
+    if response.is_error:
+        # The body, not just the code. A bare `raise_for_status` cost a whole diagnosis:
+        # `400 Bad Request` reads identically for a retired model name, a wrong slug and
+        # an unsupported response_format, and only the body of the third says
+        # `This response_format type is unavailable now`.
+        raise LlmError(f"{response.status_code} from {response.url}: {response.text[:400]}")
     payload = response.json()
     if usage is not None:
         # Recorded before the content is validated, so a response that fails the schema
@@ -227,12 +225,62 @@ def _ask(
             )
         )
     try:
-        content = payload["choices"][0]["message"]["content"]
+        message = payload["choices"][0]["message"]
+        # A forced tool call puts the JSON in `arguments` and leaves `content` empty —
+        # same schema, same server-side enforcement, different envelope. Read it second
+        # so nothing changes for a provider that answers the ordinary way.
+        content = message.get("content") or _tool_arguments(message)
     except (KeyError, IndexError, TypeError) as error:
         raise LlmError(f"unexpected response shape: {sorted(payload)}") from error
     if not isinstance(content, str) or not content.strip():
         raise LlmError("model returned empty content")
     return content
+
+
+def _tool_arguments(message: dict[str, Any]) -> str:
+    """The JSON out of a forced tool call, or `""` if there wasn't one."""
+    calls = message.get("tool_calls") or []
+    return calls[0]["function"]["arguments"] if calls else ""
+
+
+def _enforcement(name: str, schema: dict[str, Any]) -> dict[str, Any]:
+    """How this provider is asked to enforce the schema server-side.
+
+    Both branches are genuine server-side enforcement — only the spelling differs, and
+    the schema `_strict` produces satisfies both. Verified against the live endpoints on
+    2026-08-10, because the two providers' documentation disagrees with them:
+
+      * OpenAI and OpenRouter take `response_format: json_schema`.
+      * **DeepSeek refuses it** — `This response_format type is unavailable now`, which
+        is what `.env.example` recorded before any of this was written. Its strict
+        schemas live on *tool* definitions behind the `/beta` host. `json_object` is
+        accepted there too, but it enforces nothing: it guarantees parseable JSON and
+        not the right fields, which is the half that matters.
+      * DeepSeek then refuses a **forced** `tool_choice` while thinking is on
+        (`Thinking mode does not support this tool_choice`), and an unforced one is a
+        request rather than a guarantee. Thinking is disabled so the call can be forced.
+        That is the trade taken deliberately: the fabrication validator is the guardrail
+        (§3.3), and it is deterministic Python that does not benefit from the model
+        having reasoned first.
+
+    Branching on the base URL matches `model_slug_mismatch`, which is the other place a
+    provider's spelling leaks in. A capability flag would be a second setting to keep in
+    sync with the one that already says which provider this is.
+    """
+    if "deepseek" not in get_settings().llm_base_url:
+        return {
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {"name": name, "strict": True, "schema": schema},
+            }
+        }
+    return {
+        "thinking": {"type": "disabled"},
+        "tools": [
+            {"type": "function", "function": {"name": name, "strict": True, "parameters": schema}}
+        ],
+        "tool_choice": {"type": "function", "function": {"name": name}},
+    }
 
 
 def _strict(node: Any) -> Any:
