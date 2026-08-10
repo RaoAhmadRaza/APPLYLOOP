@@ -41,7 +41,7 @@ from sqlalchemy.orm import Session
 from storage import drive
 
 from workers import llm
-from workers.tailoring import prompt, render, select, validate
+from workers.tailoring import keywords, prompt, render, select, validate
 
 # The first version of any document for a match. Versioning beyond this needs a reason to
 # re-tailor, which is the deferred résumé-versioning item, so it is a constant not a knob.
@@ -210,6 +210,19 @@ def tailor_match(
             "model": model,
             "documents": written,
             "resume_bytes": len(resume_pdf),
+            # What an ATS will actually see: of the candidate's own skills this posting
+            # names, how many reached the document. Reported, never gated — a low number
+            # is a selection to argue with, and the one thing it must never read as is a
+            # suggestion to add something the vault does not hold.
+            **keywords.coverage(
+                claims=[
+                    claim.text
+                    for claim in work.vault.claims.values()
+                    if claim.kind == EvidenceKind.SKILL.value
+                ],
+                description=work.job.description or "",
+                rendered=" ".join([*report.skills, *(bullet.text for bullet in report.kept)]),
+            ),
             # Zero when the letter did not ship. §3.7's alert-on-volume: a letter block
             # rate that climbs is invisible in an error rate, because nothing errored.
             "letter_bytes": letter_bytes,
