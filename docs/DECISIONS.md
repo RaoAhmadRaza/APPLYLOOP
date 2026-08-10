@@ -1569,6 +1569,67 @@ to 78, grammar only — modals, discourse adverbs, subordinators. **Nine live pa
 the letter rate is still 0/9.** See BAR.md §8; the short version is that the widening moved
 the failure rather than removing it, and the dominant cause was never vocabulary.
 
+## The cover letter, and the citation handles it was dying on (2026-08-10)
+
+Letters went **0 of 10 → 3 of 6** on `deepseek-v4-flash` without the validator being
+relaxed once. Three findings, in the order they were made, because the middle one
+invalidates evidence this repo had been reasoning from.
+
+### The rule was the wrong shape for prose, and that is not the same as being too strict
+
+A résumé bullet **is** a rewrite of one claim, so requiring its words to come from that
+claim is a fair proxy for "same facts, different phrasing". A letter paragraph is an
+argument built **from** claims, and the identical requirement is not a fabrication rule —
+it is an instruction not to write. Ten live pairs rejected `'backend'`, `'infrastructure'`,
+`'team'`, `'migrations'`, `'accountabilities'`, `'experience'`. None is a fabrication and
+no word list fixes it, because the next paragraph needs different words.
+
+So a paragraph is checked for what can be **false** — numbers against the cited claim,
+capitalised tokens against the vault — and lowercase prose is allowed. The first version
+checked digits only, and **committed case CL-03 walked straight through it**: *"I have
+spent nine years building distributed systems at scale."* `test_fabrication_guard` failed,
+which is the case set catching a change made to satisfy a different measurement. Spelled-out
+numbers are now checked, as a general rule rather than a patch for that string.
+
+### Two of this repo's logged fabrication catches were its own citation labels
+
+**`the number 13` and `the number 17`** are recorded in BAR.md §8 and `PROJECT_STATE` as F4
+saves on `gpt-5` — "figures the résumé never stated" — and they are the evidence that
+carried the 2026-08-09 refusal to widen the letter rule.
+
+`select.py` mints handles `E1`…`E20`. The model writes them into the prose as well as into
+`evidence_ids`. `_DIGITS` reads `E13` as the number 13, finds no 13 in the cited claim, and
+rejects a paragraph that invented nothing. **Six consecutive live letters died on "the
+number 11", "the number 12", "the number 13" against a vault whose letter claims were
+exactly E11, E12, E13, E15, E16, E18.** Both historical vaults held at least 17 claims.
+
+Handles are stripped now — before the check *and* before rendering, because a letter that
+passed with `(E11)` in it would print the handle onto the PDF.
+
+**The lesson is not "check the numbers".** It is that a rule which reports *what* it
+rejected but not *where the rejected thing came from* will be believed. Forty runs of
+"the number 13" read as a model with a habit, and it was our own label. The
+handles-in-prose case was never seeded because nobody imagined the validator would see its
+own bookkeeping as the candidate's claim.
+
+### The last blocker is a proxy failing, and both obvious fixes were refused
+
+What survives is sentence-initial capitalised words — `Defining`, `Reliability`,
+`Interactive`, `Robust`, `Tackling`, `Scalable`. Capitalisation is the proxy for "this is a
+technology or an employer", and at the start of a sentence it cannot tell `Reliability`
+from `Redis`.
+
+- **Skipping sentence-initial tokens: refused.** It opens class F2 for convenience — a
+  model that writes "Kafka underpinned the checkout path" would escape.
+- **Adding those six words to `words.py`: refused.** It relocates the failure to the next
+  six, which is the adaptive-analysis shape BAR.md §8 warns about, on the same instrument.
+
+**Shipped instead: one repair attempt, judged by the same validator.** The model is handed
+the validator's own rejection sentences and rewrites. Nothing is relaxed, because the rules
+that rejected the draft are the rules the rewrite must pass. That is the whole reason it is
+allowed to exist, and the distinction is worth keeping: a retry that re-asks the same
+question is different from a threshold that moves.
+
 ## The empty parse that wiped a vault, and the guard that now refuses it (2026-08-10)
 
 **Found by running the same command twice.** `deepseek-v4-flash` returned no roles and no

@@ -241,6 +241,69 @@ obvious moves, and a future session will otherwise propose them again confidentl
 The human read required by §1 is logged here too: one line per live run, with the reader's
 initials, the number of documents read, and what was found.
 
+### AMENDED — the letter is checked for facts, and two logged "catches" were our own labels (2026-08-10)
+
+**No bar moved.** §2 is untouched. What changed is the letter's *rule*, approved by the
+project owner, and one correction to what this log has been claiming.
+
+**The correction first, because it is the part that was wrong.** The entries below record
+`the number 13` and `the number 17` as F4 catches — *"figures the résumé never stated"* —
+and treat them as the reason not to widen the letter rule. **They were almost certainly
+evidence handles.** `select.py` mints `E1`…`E20`, the model writes them into the prose as
+well as into `evidence_ids`, and `_DIGITS` reads `E13` as the number 13. Measured
+2026-08-10: six consecutive live letters rejected on *"the number 11"*, *"the number 12"*,
+*"the number 13"* against a vault whose letter claims were exactly **E11, E12, E13, E15,
+E16, E18**. Both historical vaults held at least 17 claims.
+
+So the sentence "the letter's vocabulary problem and the letter's fabrication guard are
+now measurably different things" — the argument that carried the 2026-08-09 refusal — rested
+on two data points that were probably a bug in our own citation scheme. Handles are now
+stripped before the check and before rendering. **This does not retract the human read of
+run 4**, which was a separate instrument and found 0 unbacked claims in 48 documents.
+
+**The rule change.** A résumé bullet *is* a rewrite of one claim, so requiring its words to
+come from that claim is a fair proxy for "same facts, different phrasing". A letter
+paragraph is an argument built *from* claims and the identical requirement is not a
+fabrication rule — it is an instruction not to write. Ten live pairs rejected `'backend'`,
+`'infrastructure'`, `'team'`, `'migrations'`, `'accountabilities'`, `'experience'`.
+
+A paragraph is now checked for what can be **false**:
+
+- **numbers**, against the cited claim alone — unchanged, and now including spelled-out
+  numbers. The first version checked digits only and committed case **CL-03** ("I have
+  spent nine years building distributed systems at scale") walked straight through it.
+  `test_fabrication_guard` caught that, which is the case set doing its job on a change
+  made to please a different measurement.
+- **capitalised tokens**, against the vault. F2 stays dead: the vault says Redis, the
+  letter may not say Kafka, including at the start of a sentence.
+- lowercase prose asserts nothing on its own and is allowed.
+
+**Given up, stated rather than discovered:** class F3 weakens *for letters only* — "led a
+cross-functional team" now passes, though the `50+` in it does not — and a lowercase
+technology (`pytest`, `npm`) slips. Against that: the résumé keeps the strict rule and is
+the document an employer parses, a human reads the letter before M6 sends anything, and §2
+reports the letter rather than gating it.
+
+**What was refused, and it is the more useful half.** The last blocker is sentence-initial
+capitalised words — `Defining`, `Reliability`, `Interactive`, `Robust`, `Tackling`,
+`Scalable`. Capitalisation is the entity proxy and at a sentence start it cannot tell
+`Reliability` from `Redis`. **Skipping sentence-initial tokens was refused** — it opens F2
+for the price of convenience. **Adding those six words was refused** — it relocates the
+failure to the next six, which is this log's own warning. What shipped instead is one
+repair attempt judged by the *same* validator: the model is told which word failed and
+rewrites. Nothing is relaxed.
+
+```
+letters written, live, deepseek-v4-flash
+  before any of this          0 / 10
+  fact rule, handles buggy    1 / 6     every other failure was a handle
+  handles stripped            1 / 6     failures move to sentence openers
+  + one repair attempt        3 / 6     = 0.50, the rate gpt-5 reached
+```
+
+**Query count: unchanged.** None of this touched the twenty seeded pairs. `cases.json` is
+untouched and CL-03 is what caught the number-word omission.
+
 ### AMENDED — `words.py` widened by the project owner, and it did not work (2026-08-10)
 
 **No bar moved.** §2 is untouched. What moved is a list the bars measure, and then a

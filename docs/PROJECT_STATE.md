@@ -398,14 +398,21 @@ budget, and the parse suite spends real money.
   M5's validator so the two ends cannot drift) and no longer stores the heading as a skill
   in its own right. The live vault went from 2 skill claims to 9. The validator keeps its
   own splitting deliberately: vaults stored before this are still on disk.
-- **The cover letter does not generate at all on `deepseek-v4-flash` — 0 of 9 live pairs,
-  measured 2026-08-10.** Two rounds of fixes moved the cause and did not remove it: first
-  the model invented years-of-experience totals (F4, correctly blocked), then a prompt rule
-  stopped the numbers and the blocks relocated to content nouns — `infrastructure`,
-  `backend`, `accountabilities`. Those cannot be admitted, because a paragraph's nouns are
-  its claims. **Widening `words.py` further is not the route**, and BAR.md §8 now says so
-  with the evidence. The résumé still ships without the letter, 0 fabrications in all nine.
-  Screen 3 of the demo plan already specifies the honest empty state.
+- ~~**The cover letter does not generate at all.**~~ **0 of 10 → 3 of 6, 2026-08-10**, which
+  is the 0.50 `gpt-5` reached. Three changes, none of which relaxed the validator: the
+  letter is checked for **facts** rather than vocabulary (numbers and capitalised tokens
+  against the cited claim; lowercase prose allowed), **evidence handles are stripped**
+  before the check, and a blocked letter gets **one repair attempt judged by the same
+  rules**. A real letter renders to PDF and reads as sendable prose.
+  - **Two logged "F4 catches" were our own labels.** `the number 13` and `the number 17`
+    on `gpt-5` were almost certainly `E13` and `E17` written into the prose — six live
+    letters died on "the number 11/12/13" against a vault whose claims were exactly E11,
+    E12, E13, E15, E16, E18. BAR.md §8 carries the correction.
+  - **What is given up:** class F3 weakens for letters only, and a lowercase technology
+    could slip. The résumé keeps the strict rule.
+  - **Still blocked, and deliberately:** sentence-initial capitalised words. Skipping them
+    would open class F2; adding them to `words.py` relocates the failure. The repair loop
+    is the answer to both.
 - **Résumé strip-rate blocks are running high on live pairs**: 3 of 9 blocked at 100%,
   67% and 100% untraceable, which is 0.33 against BAR §2's ceiling of 0.20. **Not
   comparable to the gate's 0.16** — these are real postings, not the stored ones §7 pins
@@ -471,11 +478,9 @@ shell plus screens 1 and 2, against the endpoints listed under *What runs today*
 
 **Two things to decide before they block someone:**
 
-- **The cover letter.** It does not generate on this model and widening the vocabulary is
-  measurably not the route. Three options, none of them free: a stronger model for the
-  letter call only, paragraph-level dropping instead of failing the whole letter (which
-  `validate.py` argues against on the grounds that it leaves an argument with a hole), or
-  ship the demo résumé-only using the empty state screen 3 already specifies.
+- ~~**The cover letter.**~~ **Closed the same day at 3 of 6** — see above. What remains is
+  a judgement call nobody has to make this week: whether 0.50 is good enough to demo the
+  letter beat, or whether screen 3's empty state carries the other half.
 - **The demo's job list shows the same posting three times, and this is the biggest
   demo risk found today.** Read live from `GET /users/{id}/pipeline`:
 
