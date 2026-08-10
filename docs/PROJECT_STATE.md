@@ -307,8 +307,9 @@ this first.
 ## Test surface
 
 ```
-705 pass, no network            make test  (M5 added 64, incl. test_fabrication_guard;
-                                the provider split added 7 more, 2026-08-10)
+749 pass, no network            make test  (M5 added 64, incl. test_fabrication_guard;
+                                the provider split added 7 more and demo week day 1
+                                added 44, all 2026-08-10. 28m40s on a busy machine)
  12 live, all 8 real feeds      make verify-live-feeds       APPLYLOOP_LIVE_FEEDS=1
   9 live, all 6 real ATS boards make verify-live             APPLYLOOP_LIVE_ATS=1
   3 live, aggregator            make verify-live-aggregator  ← SKIPPED, needs a proxy
@@ -331,7 +332,7 @@ this first.
                                                              embeddings did not move.
 ```
 
-ruff + format + mypy clean on 172 files. Live suites are deliberately **not** in CI — a
+ruff + format + mypy clean on 182 files. Live suites are deliberately **not** in CI — a
 build must not go red because a third party had a bad afternoon, layer 3 spends a metered
 budget, and the parse suite spends real money.
 
