@@ -35,6 +35,7 @@ from typing import Any
 from schemas.enums import EvidenceKind
 from schemas.tailoring import CoverLetterParagraph, TailoredBullet
 
+from workers.tailoring import aliases
 from workers.tailoring.words import ALLOWED
 from workers.text import split_skill_line, squash
 
@@ -88,6 +89,12 @@ class Vault:
             found.setdefault(squash(claim.text), claim.text)
             for part in split_skill_line(claim.text):
                 found.setdefault(squash(part), part)
+                # `Postgres` in the vault also answers for `PostgreSQL`, which is the
+                # string the posting and the ATS use. One direction only — see
+                # `aliases.py`, and case S-06, which is the reverse and still blocks.
+                fuller = aliases.expand(part)
+                if fuller:
+                    found.setdefault(squash(fuller), fuller)
         return found
 
 
@@ -206,7 +213,8 @@ def cover_letter(
             continue
 
         cited = [vault.claims[name] for name in paragraph.evidence_ids]
-        haystack = squash(" ".join(claim.text for claim in cited)) + allowed_context
+        cited_text = " ".join(claim.text for claim in cited)
+        haystack = squash(cited_text) + allowed_context + _alias_context(cited_text)
         digits = {run for claim in cited for run in _DIGITS.findall(claim.text)}
 
         fault = _untraceable(paragraph.text, haystack, digits)
@@ -281,7 +289,22 @@ def _fault(bullet: TailoredBullet, vault: Vault, own: str) -> str | None:
         # citation, and the skill cannot support the part that matters.
         return f"cites {claim.id}, a {claim.kind} claim; a bullet must cite a bullet"
 
-    return _untraceable(bullet.text, squash(claim.text) + own, set(_DIGITS.findall(claim.text)))
+    haystack = squash(claim.text) + own + _alias_context(claim.text)
+    return _untraceable(bullet.text, haystack, set(_DIGITS.findall(claim.text)))
+
+
+def _alias_context(text: str) -> str:
+    """The fuller vendor spellings the words of this claim license, squashed.
+
+    Token by token, and only from the claim being cited — so a bullet may write
+    `PostgreSQL` where the claim wrote `Postgres`, and may not write it where the claim
+    named neither. Expansion only; `aliases.py` carries the argument and case S-06.
+    """
+    return "".join(
+        squash(fuller)
+        for token in _TOKENS.findall(text)
+        if (fuller := aliases.expand(token)) is not None
+    )
 
 
 def _untraceable(text: str, haystack: str, digits: set[str]) -> str | None:
