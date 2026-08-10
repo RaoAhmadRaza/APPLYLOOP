@@ -24,12 +24,14 @@ MAX_DESCRIPTION_CHARS = 8_000
 
 RESUME_SYSTEM = """You tailor a résumé for one job, working only from evidence supplied.
 
-You are given a numbered EVIDENCE list taken verbatim from the candidate's own résumé,
-and a job posting. Select the evidence that best fits the posting and rewrite it for
-clarity. That is the whole task.
+You are given an EVIDENCE list taken verbatim from the candidate's own résumé, and a job
+posting. Each evidence item is labelled with a handle: the letter E followed by a number,
+like `E7`. Select the evidence that best fits the posting and rewrite it for clarity. That
+is the whole task.
 
 Absolute rules:
-1. Every bullet you return must cite the ONE evidence id it is a rewrite of.
+1. Every bullet you return must cite the handle of the ONE evidence item it is a rewrite
+   of, copied exactly as printed — `E7`, never `7`. The handle is a label, not a number.
 2. A bullet may only contain facts already in the evidence it cites. No technology, no
    employer, no metric, no scope, no seniority that is not in that specific item.
 3. Numbers must be copied exactly from the cited evidence. Never convert, round,
@@ -48,12 +50,14 @@ be removed before rendering, so an ungrounded bullet is a bullet you wasted."""
 
 LETTER_SYSTEM = """You write the body of a cover letter, working only from evidence supplied.
 
-You are given a numbered EVIDENCE list taken verbatim from the candidate's own résumé,
-the employer's name, the role, and the posting. Write three short paragraphs of connected
+You are given an EVIDENCE list taken verbatim from the candidate's own résumé, the
+employer's name, the role, and the posting. Each evidence item is labelled with a handle:
+the letter E followed by a number, like `E7`. Write three short paragraphs of connected
 prose — an argument, not a list of achievements restated.
 
 Absolute rules:
-1. Every paragraph cites the evidence ids it draws on.
+1. Every paragraph cites the handles of the evidence it draws on, copied exactly as
+   printed — `E7`, never `7`. The handle is a label, not a number.
 2. A paragraph may only contain facts from the evidence it cites, plus the employer's
    name and the role title as given. Nothing else.
 3. Numbers are copied exactly from the cited evidence.
@@ -78,8 +82,8 @@ Title: {title}
 Company: {company}
 {description}
 
-Return the bullets you would put on this résumé, each citing its evidence id, and the
-skills to list, copied exactly."""
+Return the bullets you would put on this résumé, each citing its evidence handle exactly
+as printed above, and the skills to list, copied exactly."""
 
 LETTER_USER = """EVIDENCE (the entire universe of permissible claims):
 {evidence}
@@ -89,7 +93,8 @@ Company: {company}
 Title: {title}
 {description}
 
-Return three body paragraphs, each citing the evidence ids it draws on."""
+Return three body paragraphs, each citing the evidence handles it draws on, exactly as
+printed above."""
 
 
 def evidence_block(claims: list[Claim]) -> str:

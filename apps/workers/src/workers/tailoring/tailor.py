@@ -272,6 +272,18 @@ def _mirror(session: Session, match: Match, kind: DocumentType, pdf: bytes) -> s
 
 
 def _letter_reason(report: validate.LetterReport) -> str | None:
+    """Every rejected paragraph's fault, not just the first one's.
+
+    Reporting only `rejected[0]` made the letter-block rate unreadable: run 6 wrote no
+    letter on 19 of 19 honest pairs and could name one word for it. One fault per rejected
+    paragraph is a sample worth grouping across a run; one per *letter* is an anecdote.
+
+    Still one fault per paragraph — `_untraceable` returns on its first — which is enough
+    to see which words dominate without touching the rule the résumé path shares.
+
+    Reporting only. The verdict is `LetterReport.blocked`, which is `bool(rejected)` and is
+    not read from here.
+    """
     if not report.rejected:
         return None
-    return f"cover letter: {report.rejected[0].reason}"
+    return "cover letter: " + "; ".join(item.reason for item in report.rejected)
