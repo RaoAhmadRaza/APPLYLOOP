@@ -307,9 +307,10 @@ this first.
 ## Test surface
 
 ```
-749 pass, no network            make test  (M5 added 64, incl. test_fabrication_guard;
+763 pass, no network            make test  (M5 added 64, incl. test_fabrication_guard;
                                 the provider split added 7 more and demo week day 1
-                                added 44, all 2026-08-10. 28m40s on a busy machine)
+                                added 58, all 2026-08-10. ~21 min on an idle machine,
+                                28m40s while container rebuilds competed for Docker)
  12 live, all 8 real feeds      make verify-live-feeds       APPLYLOOP_LIVE_FEEDS=1
   9 live, all 6 real ATS boards make verify-live             APPLYLOOP_LIVE_ATS=1
   3 live, aggregator            make verify-live-aggregator  ← SKIPPED, needs a proxy
