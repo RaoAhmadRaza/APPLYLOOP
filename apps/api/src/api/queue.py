@@ -20,6 +20,7 @@ from api.settings import get_settings
 # rather than at import, so the constant is the only place it can be wrong — and
 # `tests/integration/test_profile_upload.py` asserts it matches the registered task.
 PARSE_PROFILE = "workers.tasks.profiles.parse_profile"
+TAILOR_MATCH = "workers.tasks.tailoring.tailor_match"
 
 _client: Celery | None = None
 

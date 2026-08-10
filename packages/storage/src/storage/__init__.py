@@ -20,6 +20,7 @@ from storage.client import (
     delete,
     get,
     is_configured,
+    presigned_get,
     put,
 )
 from storage.settings import Settings, get_settings
@@ -33,5 +34,6 @@ __all__ = [
     "get",
     "get_settings",
     "is_configured",
+    "presigned_get",
     "put",
 ]

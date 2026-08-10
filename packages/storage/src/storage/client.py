@@ -103,18 +103,43 @@ def delete(key: str) -> None:
         raise StorageError(f"could not delete {key}") from error
 
 
+def presigned_get(key: str, *, expires_in: int = 900) -> str:
+    """A time-limited URL a browser can open, without the bucket being public.
+
+    Signed against `storage_public_endpoint_url` when one is set, because the signature
+    covers the host: inside compose this process reaches MinIO at `http://minio:9000`,
+    and a URL signed for that name does not verify from a browser on the host. R2 sets
+    neither and the two collapse to one.
+
+    No request is made — SigV4 presigning is local arithmetic — so this cannot fail on the
+    network and does not prove the object exists.
+    """
+    settings = _require()
+    public = settings.storage_public_endpoint_url
+    signer = _client(settings, endpoint_url=public) if public else _client(settings)
+    try:
+        url: str = signer.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": settings.storage_bucket, "Key": key},
+            ExpiresIn=expires_in,
+        )
+    except (BotoCoreError, ClientError) as error:
+        raise StorageError(f"could not sign a URL for {key}") from error
+    return url
+
+
 def _require() -> Settings:
     if not is_configured():
         raise StorageError("object storage is not configured")
     return get_settings()
 
 
-def _client(settings: Settings) -> Any:
+def _client(settings: Settings, *, endpoint_url: str | None = None) -> Any:
     assert settings.storage_access_key_id is not None  # noqa: S101 — _require checked
     assert settings.storage_secret_access_key is not None  # noqa: S101
     return boto3.client(
         "s3",
-        endpoint_url=settings.storage_endpoint_url,
+        endpoint_url=endpoint_url or settings.storage_endpoint_url,
         aws_access_key_id=settings.storage_access_key_id.get_secret_value(),
         aws_secret_access_key=settings.storage_secret_access_key.get_secret_value(),
         region_name=settings.storage_region,

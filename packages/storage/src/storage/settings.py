@@ -33,6 +33,13 @@ class Settings(BaseSettings):
     # "auto" is the value Cloudflare's own documentation uses.
     storage_region: str = "auto"
 
+    # The host a BROWSER should be sent to, when it differs from the one this process
+    # talks to. A presigned URL's signature covers the host, so a URL signed for
+    # `http://minio:9000` — the name that resolves inside compose — is not merely
+    # inconvenient outside it, it fails to verify. Empty means they are the same, which
+    # is true of R2 and of every real deployment; it is local MinIO that is split.
+    storage_public_endpoint_url: str | None = None
+
     # A résumé is a handful of pages. The cap exists so a 400 MB upload cannot exhaust
     # the API process's memory before anything has had a chance to reject it.
     max_resume_bytes: int = 10 * 1024 * 1024

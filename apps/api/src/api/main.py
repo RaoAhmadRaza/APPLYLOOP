@@ -7,7 +7,7 @@ from db.session import make_async_engine, make_async_sessionmaker
 from fastapi import FastAPI
 from redis.asyncio import Redis
 
-from api.routers import build_crud_routers, health, resume
+from api.routers import build_crud_routers, documents, health, matches, pipeline, resume
 from api.settings import Settings, get_settings
 
 
@@ -38,9 +38,13 @@ def create_app(cfg: Settings | None = None) -> FastAPI:
     app.state.settings = cfg
 
     app.include_router(health.router)
-    # Before the CRUD routers: both mount /profiles, and the literal path
-    # /profiles/{id}/resume must not be shadowed by /profiles/{row_id}.
+    # Before the CRUD routers, all four: each mounts a literal sub-path under a prefix the
+    # generic routers also claim, and /profiles/{row_id} would otherwise shadow
+    # /profiles/{id}/resume. Any future custom route belongs above this line too.
     app.include_router(resume.router)
+    app.include_router(pipeline.router)
+    app.include_router(matches.router)
+    app.include_router(documents.router)
     for router in build_crud_routers():
         app.include_router(router)
 
