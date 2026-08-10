@@ -106,6 +106,27 @@ Title: {title}
 Return three body paragraphs, each citing the evidence handles it draws on, exactly as
 printed above."""
 
+# Fed back verbatim on the one retry. The rules do not move — the validator that wrote
+# these reasons judges the rewrite by exactly the same test — so this is the model getting
+# told what failed rather than the bar getting lowered.
+LETTER_REPAIR = """Your previous letter was REJECTED. Here is every reason:
+
+{reasons}
+
+Write it again, three paragraphs, obeying every rule above.
+
+How to read those reasons:
+
+- "'Word' does not appear in the cited evidence" means you used a capitalised word the
+  evidence never contains. Capitalised words are read as technologies, products and
+  employers, which is why they are checked. If the word is ordinary English that merely
+  began a sentence, rewrite the sentence so it starts differently — "Reliability mattered"
+  becomes "The reliability of that path mattered". If it is a technology or a company the
+  evidence does not name, remove the claim entirely.
+- "the number N is not in the cited evidence" means you stated a figure the résumé never
+  did — a total of years, a team size, a count. Spelled-out numbers count. Remove it.
+  Do not replace it with a different number and do not approximate."""
+
 
 def evidence_block(claims: list[Claim]) -> str:
     """The list the model may draw on, and nothing else.

@@ -103,15 +103,16 @@ def tailor_match(
         usage=usage,
         model=model,
     )
+    letter_user = prompt.build_letter(
+        claims=prompt.for_letter(claims),
+        title=work.job.title,
+        company=work.job.company,
+        description=work.job.description,
+    )
     letter = llm.complete_json(
         CoverLetterDraft,
         system=prompt.LETTER_SYSTEM,
-        user=prompt.build_letter(
-            claims=prompt.for_letter(claims),
-            title=work.job.title,
-            company=work.job.company,
-            description=work.job.description,
-        ),
+        user=letter_user,
         usage=usage,
         model=model,
     )
@@ -138,6 +139,35 @@ def tailor_match(
         company=work.job.company,
         title=work.job.title,
     )
+    letter_retried = False
+    if letter_report.blocked:
+        # **One repair attempt, judged by exactly the same validator.** Nothing is
+        # relaxed here — the rules that rejected the draft are the rules the rewrite must
+        # pass, so this is the model being told what failed rather than the bar moving.
+        #
+        # It exists because the last blocker is not fabrication. Measured over 22 live
+        # pairs on 2026-08-10, what survives is sentence-initial capitalised words:
+        # `Defining`, `Reliability`, `Interactive`, `Robust`. Capitalisation is the proxy
+        # for "technology or employer", and at the start of a sentence that proxy cannot
+        # tell `Reliability` from `Redis`. Weakening it would open class F2; adding those
+        # four words just moves the failure to the next four. Asking the model to start
+        # the sentence differently costs one cheap call and gives up nothing.
+        letter_retried = True
+        letter = llm.complete_json(
+            CoverLetterDraft,
+            system=prompt.LETTER_SYSTEM,
+            user=letter_user
+            + "\n\n"
+            + prompt.LETTER_REPAIR.format(reasons=_repair_reasons(letter_report)),
+            usage=usage,
+            model=model,
+        )
+        letter_report = validate.cover_letter(
+            paragraphs=letter.paragraphs,
+            vault=work.vault,
+            company=work.job.company,
+            title=work.job.title,
+        )
 
     result = TailorResult(
         match_id=match_id,
@@ -210,6 +240,9 @@ def tailor_match(
             "model": model,
             "documents": written,
             "resume_bytes": len(resume_pdf),
+            # §3.7 alert-on-volume: a repair rate climbing toward 1.00 means the first
+            # letter call has stopped working, which raises no error on its own.
+            "letter_retried": letter_retried,
             # What an ATS will actually see: of the candidate's own skills this posting
             # names, how many reached the document. Reported, never gated — a low number
             # is a selection to argue with, and the one thing it must never read as is a
@@ -288,6 +321,15 @@ def _mirror(session: Session, match: Match, kind: DocumentType, pdf: bytes) -> s
             user_id=match.user_id,
         )
         return None
+
+
+def _repair_reasons(report: validate.LetterReport) -> str:
+    """The validator's own sentences, handed back to the model unedited.
+
+    Deliberately verbatim: a summarised reason is a second description of the rule to keep
+    in step with the first, and the rule already says exactly what it objected to.
+    """
+    return "\n".join(f"- {fault.reason}" for fault in report.rejected)
 
 
 def _letter_reason(report: validate.LetterReport) -> str | None:
