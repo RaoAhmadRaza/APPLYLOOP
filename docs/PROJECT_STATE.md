@@ -6,7 +6,7 @@ ending one.
 CLAUDE.md §9 says what "in scope" means. This file says what is *true* — what has been
 proven, with what evidence, and what is known to be broken.
 
-> Last updated: **2026-08-09**. `MATCH_THRESHOLD=20` is set and the matcher has written
+> Last updated: **2026-08-10**. `MATCH_THRESHOLD=20` is set and the matcher has written
 > its first 40 `matches` rows against the live pool. **M5 is built and partly proven**:
 > the fabrication validator, the renderer and the stage are green offline (694 tests),
 > and two real tailored documents exist in object storage. Its gate is **not** green —
@@ -40,7 +40,7 @@ proven, with what evidence, and what is known to be broken.
 | PDF opens and an ATS parser reads the fields back | ✅ **offline and live** | `test_tailoring_render.py` renders both engineering fixtures and reads **19/19** and **15/15** expected fields back out with `markitdown` — the same extractor M3 parses uploads with, so a field this repo cannot read out of its own PDF is one it would fail to read off a candidate's. Free, in CI, on every push. The real generated résumé was also read back by hand. **Presence is asserted, adjacency is not**: extraction returns the date ranges away from their roles, which is a property of PDF text extraction rather than of the document (BAR.md §3). |
 | **`test_fabrication_guard` passes** | ✅ **offline, live, and read by a human** | Offline: **17/17** seeded fabrications caught across five classes, retention **1.00** on rewrites (floor 0.70), **2/2** verbatim — in CI, never skipped. Live, run 4: **20 seeded cases, 0 escapes**, over 40 pairs with 0 errors. **The count is the claim, never a rate** — zero in twenty bounds the true escape rate at ~15%, and the gate prints that beside the zero. **Human read, `human:MAR`, 2026-08-09: all 48 documents run 4 wrote, 0 unbacked claims**, with F1, F4 and F5 checked by name — no percentage computed from absolutes, no number moved between roles, no skill attached to a role that never used it. Zero in 48 bounds the per-document escape rate at ~6%. §1 required this because an automated audit uses the same rule that produced the document and agrees by construction. |
 | Cover letter grounded only in vault evidence | ✅ **grounded**, 🟡 half are not written | Every paragraph that ships traces to cited evidence. But 10 of 20 honest pairs produced **no letter**: eight on connective vocabulary (`includes`, `would`, `Together`), and **two on a number the résumé never states** — `the number 13`, `the number 17` — which is §4's F4 class caught in prose by a run nobody seeded for it. A failing letter no longer discards the résumé (BAR §8, amended). The vocabulary half is deferred to M6/M7; widening `words.py` would loosen the rule that caught the two real ones. |
-| Docs stored, mirrored, logged | 🟡 **stored ✅ logged ✅ mirrored: proven in parts, not yet end to end** | Stored: PDFs in MinIO under `documents/<match_id>/`, `documents` rows written, match at `tailored`. Logged: `tailor.generated` carries bullet counts, strip counts, document keys, token spend and elapsed. **Mirrored, 2026-08-10:** `make verify-live-drive` passes **3/3 against the real Google Drive** — a file uploaded and came back with a working link — and two integration tests prove the wiring either side of it (the returned link reaches `documents.gdrive_url`; a `DriveError` leaves the document intact with a NULL link and a `tailor.mirror_failed` event). **What is missing is one real `make tailor` producing a row with `gdrive_url` non-NULL**, which is blocked on an OpenAI 429: the org's quota was exhausted by four gate runs the same day, and the 429 persists across both the strong and the cheap model. Code-complete, waiting on quota. |
+| Docs stored, mirrored, logged | 🟡 **stored ✅ logged ✅ mirrored: proven in parts, not yet end to end** | Stored: PDFs in MinIO under `documents/<match_id>/`, `documents` rows written, match at `tailored`. Logged: `tailor.generated` carries bullet counts, strip counts, document keys, token spend and elapsed. **Mirrored, 2026-08-10:** `make verify-live-drive` passes **3/3 against the real Google Drive** — a file uploaded and came back with a working link — and two integration tests prove the wiring either side of it (the returned link reaches `documents.gdrive_url`; a `DriveError` leaves the document intact with a NULL link and a `tailor.mirror_failed` event). **What is missing is one real `make tailor` producing a row with `gdrive_url` non-NULL**, which is blocked on an OpenAI 429 — **and the 429 is `insufficient_quota` / `credit_balance_exhausted`, not a rate cap.** Probed directly 2026-08-10: `"You have no credits remaining."` A zero balance does not reset with time; it clears when someone adds credit. Code-complete, waiting on billing rather than on the clock. |
 
 **The live gate, run 4 of 4, 2026-08-09** — `gpt-5`, 40 pairs, 9m20s at concurrency 4:
 
@@ -383,20 +383,25 @@ budget, and the parse suite spends real money.
 
 ## Next
 
-**One thing is left in M5, and it is one command when the LLM quota resets.**
+**One thing is left in M5, and it is one command once the OpenAI account has credit.**
 
 ```
-make tailor id=<any match still at 'discovered'>
+make tailor id=<any match still at 'discovered'>     # 68 of them, 2026-08-10
 ```
 
 Then check the row: `select type, gdrive_url from documents order by created_at desc limit 2;`
-A non-NULL `gdrive_url` closes the mirror clause and M5's card.
+A non-NULL `gdrive_url` closes the mirror clause and M5's card. One pair costs ~$0.06.
 
 Everything either side of it is proven. `make verify-live-drive` passes 3/3 against the real
 Drive; two integration tests cover the wiring in both directions. The only thing never
-observed is the two joined in one real run, and it is blocked on an **OpenAI 429** — the
-org's quota was spent by four live gate runs on 2026-08-09, and the 429 persists across both
-the strong and the cheap model, so it is a tier limit rather than a burst.
+observed is the two joined in one real run.
+
+**The blocker was misdiagnosed, and the correction matters.** It was recorded as a rate
+limit that would clear on its own. A direct probe on 2026-08-10 returned
+`insufficient_quota` / `credit_balance_exhausted` — *"You have no credits remaining"* — which
+is a **zero balance, not a tier cap**. Waiting does nothing; someone has to add credit. The
+symptom (429 on both the strong and the cheap model) is identical either way, which is how a
+whole day of "wait for the reset" was possible. **Read the body, not the status code.**
 
 The credentials are in place: the mirror runs as the **user over OAuth**, not as a service
 account, because Shared Drives are a Workspace feature a personal account does not have. See
