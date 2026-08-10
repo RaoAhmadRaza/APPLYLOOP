@@ -1398,13 +1398,38 @@ to match whatever was affordable.
 
 ---
 
-## Embeddings moved to Gemini, and four things its endpoint says that its docs do not (2026-08-10)
+## Embeddings got their own provider — and stayed on OpenAI (2026-08-10)
 
 Chat and embeddings had shared one client since M3, on the reasonable assumption that an
 OpenAI-compatible host serves both routes. DeepSeek does not serve `/embeddings` at all, so
 that assumption became a 404 rather than an inconvenience. `Settings` grows `embed_base_url`
 and `embed_api_key`, both defaulting to empty, and **empty means "wherever the chat model
 is"** — every deployment that predates the split keeps working without an edit.
+
+### The split shipped; the migration to Gemini was built, measured, and reversed
+
+Gemini `gemini-embedding-001` was wired up end to end and works. It was reverted the same
+day, before it ever ran against the real pool, and the reasoning is worth more than the diff:
+
+**A different embedding model is a different vector space, and M4's numbers live in the old
+one.** Precision 0.86 and `MATCH_THRESHOLD=20` were both measured against
+`text-embedding-3-small` at 1536 dimensions. Moving providers does not degrade them — it
+*invalidates* them, along with every stored vector, and buys a re-embed plus a golden-set
+re-run. Staying keeps two measured numbers that cost a milestone to obtain.
+
+**The money was never in the embeddings, and checking that is what settled it.** The whole
+open pool embeds for well under a dollar at $0.02/Mtok; four `gpt-5` gate runs in one
+afternoon are what emptied the account. Choosing a provider to save a cost that does not
+exist would have thrown away M4 for nothing.
+
+So: **chat moved, embeddings did not.** That is only possible because of the split, which is
+therefore the load-bearing change here — not the choice of Gemini, which was the part that
+got undone. Migration `0008` (1536 → 768) was deleted rather than reversed, having never been
+applied to any database.
+
+**What the Gemini detour still bought**, all of it kept: the two-host client, the per-host
+slug interlock, the `index`-may-be-absent fix, the shared error-body helper, and the header
+gating. Every one of those is a real defect fixed, independent of which provider wins.
 
 ### The probe was written to answer three questions and answered four
 
@@ -1452,19 +1477,23 @@ OpenRouter's, the comment beside them always said so, and they were being sent t
 too. Splitting providers would have started announcing this repo's URL and name to Google for
 nothing.
 
-### Two consequences recorded rather than fixed
+### Two consequences avoided by staying, both of which would have been real
 
-**M4's numbers are stale, both of them.** `MATCH_THRESHOLD=20` and the 0.86 pooled precision
-were measured in `text-embedding-3-small`'s 1536-dimension space. A different model is a
-different space, so neither describes the system that now runs. Re-embedding the pool and
-re-running the golden gate is the trigger; it was scoped out deliberately so an M5 fix would
-not turn into an M4 milestone.
+**M4's numbers survive.** `MATCH_THRESHOLD=20` and the 0.86 pooled precision were measured in
+`text-embedding-3-small`'s 1536-dimension space. Moving would have left both describing a
+system that no longer runs, and the repair — re-embed the pool, re-run the golden gate — is an
+M4 milestone's work bolted onto an M5 fix.
 
-**M4's live gate will fail on its own anti-stub proof.** It asserts `embed_tokens > 0`,
-reasoning that a fake reports zero. Gemini reports zero because it sends no `usage` object,
-so a true statement about a stub is now also true about the real provider. The assertion needs
-a different proof of life before that gate can pass — naming it here so it is found by reading
-rather than by a red run.
+**M4's live gate would have failed on its own anti-stub proof.** It asserts
+`embed_tokens > 0`, reasoning that a fake reports zero. **Gemini reports zero too**, because
+it sends no `usage` object at all — so a statement that was only ever true of a stub would
+have become true of the real provider, and the gate would have gone red on a working system.
+OpenAI reports `usage`, so the proof still means what it says.
+
+That second one is worth keeping in view even now: **the assertion tests the provider's
+reporting habits, not whether a model was actually called.** It happens to hold today. Any
+future provider that omits `usage` breaks it, and the fix is a different proof of life rather
+than a weaker assertion.
 
 ---
 

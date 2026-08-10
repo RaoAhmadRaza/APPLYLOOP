@@ -111,12 +111,14 @@ class Settings(BaseSettings):
     embed_base_url: str = ""
     embed_api_key: SecretStr | None = None
 
-    # 768 native dimensions, which is what `job_embeddings.embedding` is declared as.
-    # This string is stored verbatim in `job_embeddings.model` (with the template version
-    # appended, see `matching.embed`), so changing it is additive *within a width*: old
-    # vectors stay, new ones land beside them. Changing the WIDTH is a migration, because
-    # one column cannot hold two.
-    embed_model: str = "google/gemini-embedding-001"
+    # Embeddings stayed on OpenAI when chat moved to DeepSeek, deliberately: 1536 native
+    # dimensions is what `job_embeddings.embedding` is declared as, so M4's measured
+    # precision and its threshold survive the provider change instead of being invalidated
+    # by a new vector space. This string is stored verbatim in `job_embeddings.model` (with
+    # the template version appended, see `matching.embed`), so changing it is additive
+    # *within a width*: old vectors stay, new ones land beside them. Changing the WIDTH is
+    # a migration, because one column cannot hold two.
+    embed_model: str = "openai/text-embedding-3-small"
 
     # **The Part 14 interlock, made mechanical.** None is not a missing value — it is the
     # state before the golden set has spoken. With no threshold the matching task records

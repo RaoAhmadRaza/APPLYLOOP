@@ -18,16 +18,20 @@ from uuid import UUID
 
 from schemas.common import Schema
 
-EMBEDDING_DIM = 768
-"""Column dimension — `text-embedding-004`'s native width, since 2026-08-10.
+EMBEDDING_DIM = 1536
+"""Column dimension — `text-embedding-3-small`'s native width.
 
-Was 1536 for `text-embedding-3-small`. Changing this is **not** additive the way changing
-the model *name* is: the name is a column value, so two providers coexist as two rows,
-but the width is the column's type and one column cannot hold two. It moves with a
-migration, and the rows written at the old width do not survive it.
+**Changing this is not additive, unlike changing the model *name*.** The name is a column
+value, so two providers coexist as two rows; the width is the column's type and one column
+cannot hold two. It moves with a migration, and the rows written at the old width do not
+survive it.
 
-There is no `dim` column: the type carries it, so this constant and the migration are one
-fact in two places and must land together."""
+Briefly 768 on 2026-08-10, for Gemini. Reverted the same day: keeping 1536 keeps M4's
+measured precision and its threshold valid, which a re-embed into a new vector space would
+have thrown away. Embeddings stayed on OpenAI; only chat moved to DeepSeek.
+
+There is no `dim` column: the type carries it, so this constant and the schema migration
+are one fact in two places and must land together."""
 
 
 class JobEmbeddingBase(Schema):
