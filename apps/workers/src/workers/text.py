@@ -21,6 +21,9 @@ import unicodedata
 
 _NON_ALNUM = re.compile(r"[^a-z0-9]+")
 
+# The delimiters a résumé's skills line uses: `Languages: Python, Go · SQL / TypeScript`.
+_SKILL_PARTS = re.compile(r"[:,;·|/]|\s{2,}")
+
 
 def squash(value: str) -> str:
     """Lowercase, strip accents, drop everything that is not a letter or a digit.
@@ -38,3 +41,20 @@ def squash(value: str) -> str:
     folded = unicodedata.normalize("NFKD", value.lower())
     stripped = "".join(char for char in folded if not unicodedata.combining(char))
     return _NON_ALNUM.sub("", stripped)
+
+
+def split_skill_line(value: str) -> list[str]:
+    """`Languages: Python, Go, SQL` -> `["Languages", "Python", "Go", "SQL"]`.
+
+    **Splitting, never substring containment.** `Java` is not a member of
+    `Languages: JavaScript, Python`, and `Postgres` is not a member of
+    `Infrastructure: PostgreSQL, Redis` — a containment check says both are, which is the
+    difference between a skills rule and no skills rule at all. Every member has to be a
+    whole delimited part of the line.
+
+    Here rather than in either stage that calls it: M3 splits so a group line becomes
+    individually checkable claims, and M5 splits so a group line still answers "is Go in
+    the vault" for the vaults M3 stored before it did. The two have to agree exactly, for
+    the same reason `squash` above is shared, and neither may import the other (§3.1).
+    """
+    return [part.strip() for part in _SKILL_PARTS.split(value) if part.strip()]

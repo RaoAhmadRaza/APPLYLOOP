@@ -29,7 +29,7 @@ from schemas.resume import ParsedResume
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from workers.text import squash
+from workers.text import split_skill_line, squash
 
 # A claim shorter than this carries no information a validator could act on: a one-word
 # bullet, a stray "C" that would match half the alphabet's worth of source text.
@@ -63,10 +63,23 @@ def claims(resume: ParsedResume) -> list[Claim]:
 
     for index, skill in enumerate(resume.skills):
         if skill.name:
-            found.append(Claim(EvidenceKind.SKILL, skill.name, f"skills[{index}]"))
-        # Keywords are where the real skills usually are — "Languages: Python, Go" puts
-        # the group in `name`. §3.3 names inventing a *skill* as the adversarial case,
-        # so each one has to be individually checkable, not buried in a group label.
+            # `name` is supposed to be the group LABEL, with the members in `keywords`.
+            # Whether the model obeys that is a property of the run and not of the
+            # résumé: the same fixture parsed twice gave `{"Languages", [...]}` once and
+            # `{"Languages: Python, Go, SQL, TypeScript", []}` the next time, and the
+            # second shape buries four real skills in one claim that nothing can match.
+            #
+            # Splitting here rather than re-prompting because the prompt already asks for
+            # the right shape (`profiles/prompt.py`) and asking harder is not a fix. The
+            # whole line is kept as well: it is what the résumé says, and dropping it
+            # would break a bullet that quotes the line verbatim.
+            found.extend(
+                Claim(EvidenceKind.SKILL, part, f"skills[{index}]")
+                for part in dict.fromkeys([skill.name, *split_skill_line(skill.name)])
+            )
+        # Keywords are where the real skills usually are when the model obeys.
+        # §3.3 names inventing a *skill* as the adversarial case, so each one has to be
+        # individually checkable, not buried in a group label.
         found.extend(
             Claim(EvidenceKind.SKILL, keyword, f"skills[{index}].keywords[{position}]")
             for position, keyword in enumerate(skill.keywords)

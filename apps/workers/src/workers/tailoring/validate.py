@@ -36,14 +36,10 @@ from schemas.enums import EvidenceKind
 from schemas.tailoring import CoverLetterParagraph, TailoredBullet
 
 from workers.tailoring.words import ALLOWED
-from workers.text import squash
+from workers.text import split_skill_line, squash
 
 _DIGITS = re.compile(r"\d+")
 _TOKENS = re.compile(r"[A-Za-z0-9]+")
-
-# The delimiters a résumé's skills line uses: `Languages: Python, Go · SQL / TypeScript`.
-# Splitting on these is what lets an unsplit group claim still answer "is Go in the vault".
-_SKILL_PARTS = re.compile(r"[:,;·|/]|\s{2,}")
 
 
 @dataclass(frozen=True)
@@ -79,20 +75,19 @@ class Vault:
         called every one of the candidate's real skills a fabrication, which blocked the
         document outright.
 
-        So a group line is also read as its members, split on its own delimiters. This is
-        deliberately splitting and **not** substring containment: `Java` is not a member
-        of `Languages: JavaScript, Python`, where a substring check would say it is. Every
-        member has to be a whole delimited part of a claim the vault actually stores.
+        So a group line is also read as its members, via `text.split_skill_line` — the
+        same splitter M3 now applies at write time, shared so the two ends cannot drift.
+        This stays here as well as there: vaults stored before M3 split are still on disk,
+        and a validator that trusted the parser to have done it would call the candidate's
+        own skills fabrications on every one of them.
         """
         found: dict[str, str] = {}
         for claim in self.claims.values():
             if claim.kind != EvidenceKind.SKILL.value:
                 continue
             found.setdefault(squash(claim.text), claim.text)
-            for part in _SKILL_PARTS.split(claim.text):
-                stripped = part.strip()
-                if stripped:
-                    found.setdefault(squash(stripped), stripped)
+            for part in split_skill_line(claim.text):
+                found.setdefault(squash(part), part)
         return found
 
 

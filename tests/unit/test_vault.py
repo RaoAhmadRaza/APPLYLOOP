@@ -127,6 +127,38 @@ def test_every_skill_keyword_becomes_its_own_claim() -> None:
     assert {"Python", "Go", "SQL", "Kubernetes", "Terraform"} <= skills
 
 
+def test_a_group_line_left_whole_by_the_parser_is_split_into_its_members() -> None:
+    """The model is asked for `{name: "Languages", keywords: [...]}` and sometimes returns
+    the whole line in `name` instead. Which happens is a property of the run: the same
+    fixture parsed twice gave both shapes, and the second one buried four real skills in
+    one claim nothing could match. M5's first live run was blocked by exactly this."""
+    parsed = ParsedResume(
+        skills=[ResumeSkill(name="Languages: Python, Go, SQL, TypeScript", keywords=[])]
+    )
+
+    skills = {claim.text for claim in vault.claims(parsed) if claim.kind == "skill"}
+
+    assert {"Python", "Go", "SQL", "TypeScript"} <= skills
+    # The line itself stays a claim: it is what the résumé says, and a bullet quoting it
+    # verbatim must still be traceable.
+    assert "Languages: Python, Go, SQL, TypeScript" in skills
+
+
+def test_splitting_a_group_line_never_admits_a_prefix_of_a_member() -> None:
+    """Splitting, not substring containment. `Postgres` is a prefix of `PostgreSQL` and
+    `Java` of `JavaScript`; a containment check calls both members and the skills rule
+    stops meaning anything. Case S-06 in the fabrication set is the paid half of this."""
+    parsed = ParsedResume(
+        skills=[ResumeSkill(name="Infrastructure: PostgreSQL, JavaScript", keywords=[])]
+    )
+
+    skills = {claim.text for claim in vault.claims(parsed) if claim.kind == "skill"}
+
+    assert "PostgreSQL" in skills
+    assert "Postgres" not in skills
+    assert "Java" not in skills
+
+
 def test_bullets_from_roles_and_projects_are_both_claims() -> None:
     """M5 tailors from both. A project bullet that was not in the vault would be
     stripped from the generated résumé as unbacked."""
