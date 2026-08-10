@@ -57,11 +57,39 @@ solving speed sped speeding spend spent spending support supported supporting ta
 taking took trim trimmed trimming use used using write writing wrote
 """
 
-# Words that only exist to point at something already checked. Deliberately short: every
-# entry here is a word a cover letter needs and a bullet's facts do not live in.
+# Words that only exist to point at something already checked. Every entry is a word a
+# cover letter needs and a bullet's facts do not live in.
+#
+# **Widened 2026-08-10, by the project owner, reversing the refusal in BAR.md §8.** That
+# refusal was right for its run: it declined to add the seven words that had just failed,
+# immediately after watching them fail, on the third query of the same twenty pairs — the
+# adaptive-analysis shape M4's §8 warns about. Three things are different now. The rate is
+# 1.00, not 0.50: on `deepseek-v4-flash` no letter is written at all, and a stage that
+# produces nothing on every honest pair is a product failure rather than a strict one. The
+# letter's rate is reported and not gated (BAR.md §2), so nothing here can make the gate
+# lie. And the owner has ruled prose quality in scope, which it previously was not.
+#
+# **What was still refused, and why the split matters.** Run 4's two real catches were
+# `the number 13` and `the number 17` — figures the résumé never states — and the number
+# rule runs before any of this and is untouched. Of the words that blocked run 3, the
+# nouns stay out: `projects`, `outcomes`, `training`, `background`, `results` are the
+# OBJECTS of the verbs above, and this file's own argument for allowing verbs is that
+# "the object it acts on is still checked". An object is a fact. `certified`, `senior`,
+# `team` and `million` stay out for the reason already stated above.
+#
+# So the widening is grammar only: modals, discourse adverbs, and the frame words a letter
+# needs to be addressed to somebody. Nothing added below can be the answer to "what did
+# this candidate do".
 _CONNECTIVE = """
 also currently exactly first including like now previously same still then today
 work working works role roles kind
+can could may might must shall should will would
+however therefore moreover furthermore additionally instead otherwise meanwhile
+already rather whether directly particularly especially notably often always never
+well much many several enough less least greatly closely fully largely mainly
+alongside beyond throughout upon regarding toward towards since given despite although
+though unless until whereas wherever whenever
+apply applied applies applying
 """
 
 ALLOWED = frozenset(word for block in (_FUNCTION, _VERBS, _CONNECTIVE) for word in block.split())
