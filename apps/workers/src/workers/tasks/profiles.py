@@ -51,7 +51,7 @@ def parse_profile(profile_id: str) -> dict[str, Any] | None:
 
         try:
             result = parse.parse_profile(session, profile)
-        except (extract.ExtractError, llm.LlmError) as error:
+        except (extract.ExtractError, llm.LlmError, parse.ParseEmptyError) as error:
             # Loud, and on the row's own audit trail. A profile whose parse failed must
             # not look like a profile with an empty résumé — M4 would score it against
             # nothing and produce confidently wrong matches.

@@ -6,7 +6,6 @@ table symmetric, which is the change that looks obviously correct and is not.
 """
 
 from schemas.tailoring import TailoredBullet
-
 from workers.tailoring import aliases, validate
 
 

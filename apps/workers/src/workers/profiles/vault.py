@@ -70,12 +70,23 @@ def claims(resume: ParsedResume) -> list[Claim]:
             # second shape buries four real skills in one claim that nothing can match.
             #
             # Splitting here rather than re-prompting because the prompt already asks for
-            # the right shape (`profiles/prompt.py`) and asking harder is not a fix. The
-            # whole line is kept as well: it is what the résumé says, and dropping it
-            # would break a bullet that quotes the line verbatim.
+            # the right shape (`profiles/prompt.py`) and asking harder is not a fix.
+            # **A heading is not a skill.** `Languages` and `Infrastructure` were reaching
+            # the vault as claims in their own right, which made them selectable onto a
+            # résumé and countable as ATS keywords, and they are neither. `name` is a
+            # heading exactly when it introduces members — either its own, after the
+            # split, or the ones the model put in `keywords`.
+            parts = split_skill_line(skill.name)
+            if len(parts) > 1:
+                # A group LINE. The line itself stays, because a bullet may quote
+                # `Languages: Python, Go` verbatim; its members stay; its heading does not.
+                texts = [skill.name, *parts[1:]]
+            elif skill.keywords:
+                texts = []
+            else:
+                texts = [skill.name]
             found.extend(
-                Claim(EvidenceKind.SKILL, part, f"skills[{index}]")
-                for part in dict.fromkeys([skill.name, *split_skill_line(skill.name)])
+                Claim(EvidenceKind.SKILL, text, f"skills[{index}]") for text in dict.fromkeys(texts)
             )
         # Keywords are where the real skills usually are when the model obeys.
         # §3.3 names inventing a *skill* as the adversarial case, so each one has to be

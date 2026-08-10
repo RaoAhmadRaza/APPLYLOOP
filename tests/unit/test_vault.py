@@ -142,6 +142,29 @@ def test_a_group_line_left_whole_by_the_parser_is_split_into_its_members() -> No
     # The line itself stays a claim: it is what the résumé says, and a bullet quoting it
     # verbatim must still be traceable.
     assert "Languages: Python, Go, SQL, TypeScript" in skills
+    # Its heading does not. A heading is not a skill, and one stored alone is selectable
+    # onto a résumé and countable as an ATS keyword while being neither.
+    assert "Languages" not in skills
+
+
+def test_a_group_heading_with_keywords_is_not_itself_a_claim() -> None:
+    """The shape the prompt asks for. `Languages` introduces the members and is not one
+    of them — storing it put `Languages` and `Infrastructure` in the live vault as skills
+    in their own right, and the ATS keyword count duly reported them missing."""
+    parsed = ParsedResume(skills=[ResumeSkill(name="Languages", keywords=["Python", "Go"])])
+
+    skills = {claim.text for claim in vault.claims(parsed) if claim.kind == "skill"}
+
+    assert skills == {"Python", "Go"}
+
+
+def test_a_lone_skill_with_no_members_is_kept() -> None:
+    """`name` is only a heading when it introduces something. On its own it is the skill."""
+    parsed = ParsedResume(skills=[ResumeSkill(name="Python", keywords=[])])
+
+    skills = {claim.text for claim in vault.claims(parsed) if claim.kind == "skill"}
+
+    assert skills == {"Python"}
 
 
 def test_splitting_a_group_line_never_admits_a_prefix_of_a_member() -> None:

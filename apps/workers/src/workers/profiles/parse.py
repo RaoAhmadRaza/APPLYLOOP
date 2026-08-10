@@ -29,6 +29,16 @@ from workers import llm
 from workers.profiles import derive, extract, prompt, vault
 
 
+class ParseEmptyError(RuntimeError):
+    """The model returned nothing usable for a résumé that plainly has content."""
+
+
+# Below this, "no roles and no skills" is a plausible answer rather than a failure — a
+# near-empty upload really does parse to nothing, and refusing it would be the loud
+# failure landing on the honest case. A real résumé is thousands of characters.
+_MIN_MEANINGFUL_RESUME = 200
+
+
 @dataclass(frozen=True)
 class ParseResult:
     resume_chars: int
@@ -45,6 +55,28 @@ def parse_profile(session: Session, profile: Profile) -> ParseResult:
     profile.master_resume = source
 
     resume = llm.complete_json(ParsedResume, system=prompt.SYSTEM, user=prompt.build(source))
+    if _is_empty(resume) and len(source) >= _MIN_MEANINGFUL_RESUME:
+        # **A re-parse is destructive, so an empty answer must not be believed.**
+        # `vault.rebuild` deletes every `origin='parsed'` claim before inserting what the
+        # model returned, and `parsed_json` is overwritten outright. So a model that
+        # answers `{}` — schema-valid, no error, nothing raised — silently empties a vault
+        # that took a real résumé to build. Observed 2026-08-10 on `deepseek-v4-flash`:
+        # `roles: 0, skills: 0, claims_stored: 0` against 1,255 characters of résumé that
+        # had parsed to 20 claims a minute earlier, and again a minute later.
+        #
+        # This is §3.7's alert-on-volume, and it is a gate rather than a dashboard for the
+        # reason M2's feed check is: by the time a human reads a dashboard the rows are
+        # already gone. Nothing is written and the previous parse survives.
+        #
+        # Raising rather than recording here: this function commits nothing, so an event
+        # written on the way out would be rolled back with everything else. The task
+        # catches it and records `profile.parse_failed`, which is the path that already
+        # exists for "the parse produced nothing usable".
+        raise ParseEmptyError(
+            f"the model returned no roles and no skills for {len(source)} characters of "
+            f"résumé; refusing to overwrite the existing parse"
+        )
+
     years = derive.years_of_experience(resume)
     # Stored on the record rather than recomputed downstream: M4 reads parsed_json, and
     # a second implementation of the merge arithmetic is a second thing to get wrong.
@@ -82,6 +114,12 @@ def parse_profile(session: Session, profile: Profile) -> ParseResult:
         claims_rejected=result.rejected,
         promoted=promoted,
     )
+
+
+def _is_empty(resume: ParsedResume) -> bool:
+    """No work history and no skills. Education and a name alone cannot build a vault,
+    and every downstream stage reads one of these two."""
+    return not resume.work and not resume.skills
 
 
 def _resume_text(profile: Profile) -> str:

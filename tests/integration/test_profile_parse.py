@@ -243,6 +243,44 @@ def test_a_re_parse_drops_claims_the_new_resume_no_longer_makes(
     assert (EvidenceKind.SKILL.value, "Go") not in _claims(session, profile)
 
 
+def test_an_empty_parse_is_refused_and_the_previous_vault_survives(
+    session: Session, profile: Profile, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """**A re-parse is destructive, so an empty answer must not be believed.**
+
+    Observed live on 2026-08-10: `deepseek-v4-flash` returned no roles and no skills for
+    1,255 characters of résumé that had parsed to 20 claims a minute earlier. Nothing
+    raised, nothing errored, and the vault was gone — `rebuild` had already deleted every
+    parsed claim before inserting the nothing it was given.
+    """
+    _model(monkeypatch)
+    parse.parse_profile(session, profile)
+    before = _claims(session, profile)
+    assert before
+
+    _model(monkeypatch, {"basics": {"name": "Dana Whitfield"}, "work": [], "skills": []})
+    with pytest.raises(parse.ParseEmptyError):
+        parse.parse_profile(session, profile)
+
+    assert _claims(session, profile) == before
+
+
+def test_a_genuinely_empty_resume_still_parses_to_nothing(
+    session: Session, profile: Profile, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The guard fires on volume, not on emptiness as such. A near-empty upload really
+    does parse to nothing, and a loud failure landing on the honest case is worse than
+    the defect it was written for."""
+    profile.master_resume = "Dana Whitfield"
+    profile.resume_url = None
+    _model(monkeypatch, {"basics": {"name": "Dana Whitfield"}, "work": [], "skills": []})
+
+    result = parse.parse_profile(session, profile)
+
+    assert result.roles == 0
+    assert result.claims_stored == 0
+
+
 def test_a_re_parse_keeps_claims_the_user_added_by_hand(
     session: Session, profile: Profile, monkeypatch: pytest.MonkeyPatch
 ) -> None:

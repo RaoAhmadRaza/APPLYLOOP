@@ -13,7 +13,8 @@ from uuid import UUID
 
 import storage
 from db.models import Document
-from fastapi import APIRouter, HTTPException, status as http
+from fastapi import APIRouter, HTTPException
+from fastapi import status as http
 from fastapi.responses import RedirectResponse
 
 from api.deps import SessionDep

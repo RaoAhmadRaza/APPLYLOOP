@@ -63,7 +63,9 @@ def _retire(engine: Engine, job_id: str, column: str, value: str) -> None:
         )
 
 
-async def _match(client: AsyncClient, user_id: str, job_id: str, **overrides: Any) -> dict[str, Any]:
+async def _match(
+    client: AsyncClient, user_id: str, job_id: str, **overrides: Any
+) -> dict[str, Any]:
     response = await client.post(
         "/matches", json={"user_id": user_id, "job_id": job_id, **overrides}
     )
@@ -224,7 +226,7 @@ async def test_skip_is_legal_from_discovered_and_is_idempotent(client: AsyncClie
 
 
 async def test_a_skipped_match_cannot_then_be_approved(client: AsyncClient) -> None:
-    """"Skip excludes it from every apply path" is the M6 gate clause, and this is where
+    """ "Skip excludes it from every apply path" is the M6 gate clause, and this is where
     it holds — `skipped` is not a state approve accepts."""
     user_id = await _user(client)
     job = await _job(client, "Unwanted")

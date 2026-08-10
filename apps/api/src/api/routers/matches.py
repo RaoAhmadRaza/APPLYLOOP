@@ -16,7 +16,8 @@ status and then decides what to write, which is Part 13 rule 10.
 from uuid import UUID
 
 from db.models import Match
-from fastapi import APIRouter, HTTPException, status as http
+from fastapi import APIRouter, HTTPException
+from fastapi import status as http
 from schemas.enums import MatchStatus
 from schemas.match import MatchRead
 from sqlalchemy import update

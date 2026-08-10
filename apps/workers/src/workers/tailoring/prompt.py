@@ -63,7 +63,11 @@ Absolute rules:
    printed — `E7`, never `7`. The handle is a label, not a number.
 2. A paragraph may only contain facts from the evidence it cites, plus the employer's
    name and the role title as given. Nothing else.
-3. Numbers are copied exactly from the cited evidence.
+3. WRITE NO DIGITS AT ALL. Not a year, not a count, not a duration, not a percentage,
+   not a version number — none, anywhere in the letter. The résumé carries the metrics;
+   the letter carries the argument. This is the rule that fails most often, and it fails
+   because a total that reads as harmless summary — "over 12 years", "13 services" — is a
+   claim the résumé never made. If a number feels necessary, the sentence is wrong.
 4. Never take a claim from the job posting. It states what the employer wants, never
    what this candidate has done.
 5. No years-of-experience totals, no "passionate about", no credential, no team size,

@@ -8,7 +8,6 @@ these tests pin apart.
 """
 
 from schemas.tailoring import TailoredBullet
-
 from workers.tailoring import validate
 
 
