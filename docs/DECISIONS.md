@@ -1388,19 +1388,83 @@ about a vendor, and no mock was ever going to contain one.
 ### What this migration does NOT cover, stated so it is not discovered
 
 **DeepSeek serves no `/embeddings` route.** There is no slug to swap; the capability does not
-exist. `EMBED_MODEL` still names an OpenAI model the configured base URL cannot reach, so
-**M4's `match_all` will fail on every 12-hourly beat tick** until embeddings get their own
-provider. That is loud and harmless — it raises rather than writing wrong vectors — but it is
-a scheduled task failing on a timer, not a dormant setting. Local Ollama (`bge-m3`,
-`nomic-embed-text`) is the free answer and costs a migration: `job_embeddings.embedding` is
-`HALFVEC(dim=1536)`, hard-coded to `text-embedding-3-small`'s width, and nothing free emits
-1536.
+exist. *(Closed the same day — see the next section.)*
 
 **CLAUDE.md §7.2 says the tailoring model is a strong one, and `deepseek-v4-flash` is not.**
 That amendment is not written here yet on purpose: §7.2 is law, law is amended against
 evidence, and the evidence is the live gate re-run on the new model. Until that number
 exists, the `.env` comment carries the contradiction rather than the law being quietly edited
 to match whatever was affordable.
+
+---
+
+## Embeddings moved to Gemini, and four things its endpoint says that its docs do not (2026-08-10)
+
+Chat and embeddings had shared one client since M3, on the reasonable assumption that an
+OpenAI-compatible host serves both routes. DeepSeek does not serve `/embeddings` at all, so
+that assumption became a 404 rather than an inconvenience. `Settings` grows `embed_base_url`
+and `embed_api_key`, both defaulting to empty, and **empty means "wherever the chat model
+is"** — every deployment that predates the split keeps working without an edit.
+
+### The probe was written to answer three questions and answered four
+
+The plan called for one request before anything expensive. It earned its place immediately:
+
+| What was assumed | What the endpoint did |
+|---|---|
+| `text-embedding-004` exists | **404, retired.** `ListModels` offers `gemini-embedding-001`, `gemini-embedding-2` and `-2-preview`. Nothing else supports `embedContent`. |
+| the width is the model's native one | **3072 by default**, not 768. `dimensions` is honoured when asked for, so `llm.embed` now states the width it needs instead of accepting one. |
+| every row carries `index` | **omitted when it is 0.** proto3 drops default-valued fields, so row 0 arrives with no `index` key while row 1 carries `index: 1`. |
+| `usage` reports tokens | **no `usage` object at all.** |
+
+**The `index` one is the dangerous member of that list**, and it is the reason `llm.embed`
+sorts rather than trusting arrival order in the first place. `row["index"]` raised on the
+first real batch — loudly, which is the good case. Had the sort silently mis-ordered instead,
+job A's text would carry job B's vector and *every downstream cosine would be wrong in a way
+nothing else in the system can detect*. The unit test added for it asserts on a **reversed**
+payload, so a wrong default cannot pass by luck.
+
+**None of these were catchable offline.** Every mock in `test_llm.py` was written by us, from
+the same assumptions the code was written from, so the fixtures agreed with the bug. That is
+the M3 lesson — *a stubbed model tests the plumbing, not the judgement* — arriving a third
+time, now about a response shape rather than a model's output.
+
+### Decisions
+
+**A property on `Settings`, not an `or` at each call site.** `embed_url` and `embed_key` have
+two consumers — the client factory and `model_slug_mismatch` — and if those ever disagreed
+about which host embeddings use, the check would validate the wrong host. That is precisely
+the failure `model_slug_mismatch` exists to prevent, so it must not be able to cause it.
+
+**`model_slug_mismatch` joins its two groups rather than returning the first.** Returning
+early would hide `EMBED_MODEL` behind `LLM_MODEL` and reintroduce the fix-one-hit-the-next-run
+defect the function was written against — the existing
+`test_every_mismatched_variable_is_named_at_once` is what pins this.
+
+**The width is a migration, the model name is not.** `job_embeddings` is keyed
+`(job_id, model)` and every read filters on `storage_model()`, so two providers coexist as two
+rows and a name change is additive. The width is the column's type and one column cannot hold
+two, so 0008 deletes and narrows. The deleted rows were already unreachable — nothing had been
+able to select a `text-embedding-3-small` vector since the setting changed.
+
+**The attribution headers are now gated on the host.** `HTTP-Referer` and `X-Title` are
+OpenRouter's, the comment beside them always said so, and they were being sent to DeepSeek
+too. Splitting providers would have started announcing this repo's URL and name to Google for
+nothing.
+
+### Two consequences recorded rather than fixed
+
+**M4's numbers are stale, both of them.** `MATCH_THRESHOLD=20` and the 0.86 pooled precision
+were measured in `text-embedding-3-small`'s 1536-dimension space. A different model is a
+different space, so neither describes the system that now runs. Re-embedding the pool and
+re-running the golden gate is the trigger; it was scoped out deliberately so an M5 fix would
+not turn into an M4 milestone.
+
+**M4's live gate will fail on its own anti-stub proof.** It asserts `embed_tokens > 0`,
+reasoning that a fake reports zero. Gemini reports zero because it sends no `usage` object,
+so a true statement about a stub is now also true about the real provider. The assertion needs
+a different proof of life before that gate can pass — naming it here so it is found by reading
+rather than by a red run.
 
 ---
 
