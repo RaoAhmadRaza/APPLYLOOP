@@ -6,6 +6,31 @@ ending one.
 CLAUDE.md §9 says what "in scope" means. This file says what is *true* — what has been
 proven, with what evidence, and what is known to be broken.
 
+> **2026-08-10, later the same day — demo week day 1 landed.** `docs/DEMO_PLAN.md` §4b and
+> §5 are built. Four new endpoints exist (`GET /users/{id}/pipeline`,
+> `POST /matches/{id}/approve|skip|tailor`, `GET /documents/{id}/download`), the vault now
+> splits skill group lines and drops headings, a directional alias table lets a vault
+> spelling reach its fuller vendor form, and every tailored document reports ATS keyword
+> coverage on `tailor.generated`.
+>
+> **Three things are true that the plan did not expect, and they matter more than the diff:**
+>
+> 1. **No part of §4b moves a match score.** M4 reads `profiles.master_resume` and nothing
+>    else from the profile; `evidence` is M5's input. The before/after came out identical,
+>    which is the correct result. See DECISIONS → *demo week, day 1*.
+> 2. **Cover letters still do not generate — 0 of 9 live pairs.** The vocabulary widening
+>    moved the failure rather than removing it: the dominant cause was the model inventing
+>    years-of-experience totals (F4, correctly blocked), and once a prompt rule stopped
+>    that, the blocks relocated to content nouns, which cannot be admitted. 0 fabrications
+>    shipped in any of the nine. BAR.md §8 carries the numbers.
+> 3. **An empty parse used to wipe the vault silently, and did.** `deepseek-v4-flash`
+>    returned zero roles and zero skills for a résumé that parsed to 20 claims a minute
+>    earlier; `rebuild` deletes before it inserts, so the vault went with it. Guarded now,
+>    with a test.
+>
+> Live spend for the day: about **$0.50** (2 parses, 9 tailorings). `make verify-live-tailor`
+> is still unrun and still last.
+>
 > **2026-08-10, read this first.** The OpenAI balance hit zero, so **chat moved to DeepSeek**
 > (`deepseek-v4-flash`, `/beta`) and **embeddings stayed on OpenAI** (`text-embedding-3-small`,
 > its own key and host). That split is the day's load-bearing change: DeepSeek serves no
@@ -204,6 +229,24 @@ job the matcher considered and rejected is on the record instead of being invisi
 
 Ten stages, all scheduled by Celery Beat, no manual step:
 
+**The API surface, as of 2026-08-10.** Generic CRUD on nine tables, plus five hand-written
+routes. The custom ones are included before the CRUD routers in `main.py`, because
+`/profiles/{row_id}` would otherwise shadow `/profiles/{id}/resume`:
+
+```
+POST /profiles/{id}/resume        upload, store, enqueue the parse
+GET  /users/{id}/pipeline         matches best first, jobs + documents + keyword counts
+                                  attached; reads the deduped pool only (§6.3)
+POST /matches/{id}/approve        tailored -> queued -> approved, one transaction
+POST /matches/{id}/skip           legal from anywhere except `applied`
+POST /matches/{id}/tailor         202; the stage still no-ops unless `discovered`
+GET  /documents/{id}/download     307 to a signed URL, Drive as the fallback
+```
+
+All idempotent, all conditional UPDATEs rather than check-then-act. `packages/storage`
+gained `presigned_get` and `STORAGE_PUBLIC_ENDPOINT_URL` — **a presigned signature covers
+the host**, so a URL signed for `minio:9000` does not verify from a browser.
+
 ```
 ingest_all      → ingest_company    every 6h    layer 1, six ATS providers
 ingest_feed     × 8                 6–12h each  layer 3, eight free feeds
@@ -349,13 +392,24 @@ budget, and the parse suite spends real money.
   `dedupe_key`. This fires M2's deferred fuzzy-dedupe trigger. The sampler works around it
   with a per-`(company, title)` cap, which still misses the same role reposted under
   punctuation variants — two Cloudflare pairs in the set are one role.
-- **M3 does not always split a skills line, and it is a property of the *run*, not the
-  fixture.** The golden set's stored parse of `senior_backend.pdf` splits its keywords; the
-  live parse of the same résumé stored `Languages: Python, Go, SQL, TypeScript` as one
-  claim. That blocked M5's first real document by calling nine of the candidate's own
-  skills fabrications. **M5's validator now handles both shapes** (delimiter splitting,
-  never substring), so this is no longer blocking — but anything else reading
-  `parsed_json.skills` still has to.
+- ~~**M3 does not always split a skills line.**~~ **Fixed 2026-08-10.** `vault.claims`
+  splits a group line on its own delimiters (`workers.text.split_skill_line`, shared with
+  M5's validator so the two ends cannot drift) and no longer stores the heading as a skill
+  in its own right. The live vault went from 2 skill claims to 9. The validator keeps its
+  own splitting deliberately: vaults stored before this are still on disk.
+- **The cover letter does not generate at all on `deepseek-v4-flash` — 0 of 9 live pairs,
+  measured 2026-08-10.** Two rounds of fixes moved the cause and did not remove it: first
+  the model invented years-of-experience totals (F4, correctly blocked), then a prompt rule
+  stopped the numbers and the blocks relocated to content nouns — `infrastructure`,
+  `backend`, `accountabilities`. Those cannot be admitted, because a paragraph's nouns are
+  its claims. **Widening `words.py` further is not the route**, and BAR.md §8 now says so
+  with the evidence. The résumé still ships without the letter, 0 fabrications in all nine.
+  Screen 3 of the demo plan already specifies the honest empty state.
+- **Résumé strip-rate blocks are running high on live pairs**: 3 of 9 blocked at 100%,
+  67% and 100% untraceable, which is 0.33 against BAR §2's ceiling of 0.20. **Not
+  comparable to the gate's 0.16** — these are real postings, not the stored ones §7 pins
+  the harness to — so it fails nothing. It is a reason to expect the gate re-run to be
+  interesting.
 - **The cover letter is grounded and stilted.** Every paragraph of the second real letter
   opened with the same clause, because the validator's allowed vocabulary leaves almost
   nothing connective to write with. A prompt line now forbids it and **has not been
@@ -373,8 +427,12 @@ budget, and the parse suite spends real money.
 - **The Drive mirror has never uploaded anything.** Code and live suite are written;
   `gdrive_url` is NULL on every document. Needs a Google Cloud project and a **Shared
   Drive** — a service account's own Drive has a 0 GB quota and fails `storageQuotaExceeded`.
-- **`POST /profiles/{id}/resume` is unauthenticated**, like every other route here. It
-  accepts an upload for any profile id. M8's problem, stated so it is not discovered.
+- **Every route is unauthenticated**, and as of 2026-08-10 that surface is wider:
+  `POST /profiles/{id}/resume` accepts an upload for any profile id,
+  `GET /users/{id}/pipeline` believes the id in its path, `POST /matches/{id}/approve`
+  will approve anyone's match, and `GET /documents/{id}/download` signs a URL for any
+  document. **The demo must run on localhost or a private tunnel** — DEMO_PLAN §9 risk 2
+  is the one that must not slip.
 
 ---
 
@@ -406,6 +464,20 @@ budget, and the parse suite spends real money.
 ---
 
 ## Next
+
+**Day 1 of demo week is done** (§4b and §5 of `docs/DEMO_PLAN.md`). Day 2 is the dashboard
+shell plus screens 1 and 2, against the endpoints listed under *What runs today*.
+
+**Two things to decide before they block someone:**
+
+- **The cover letter.** It does not generate on this model and widening the vocabulary is
+  measurably not the route. Three options, none of them free: a stronger model for the
+  letter call only, paragraph-level dropping instead of failing the whole letter (which
+  `validate.py` argues against on the grounds that it leaves an argument with a hole), or
+  ship the demo résumé-only using the empty state screen 3 already specifies.
+- **The demo's top row.** DEMO_PLAN §6 screen 2 says to check it before the demo, and it
+  is worth doing early: the pool's best match is 82 and the three above it in the current
+  ordering are all tailored.
 
 **The plan changed on 2026-08-10, deliberately and by the owner.** A working V0 has to be
 demonstrated by the end of that week, so the order is now:

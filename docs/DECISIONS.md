@@ -1497,6 +1497,142 @@ than a weaker assertion.
 
 ---
 
+## Demo week, day 1: three of §4b's four premises were wrong (2026-08-10)
+
+`docs/DEMO_PLAN.md` §4b listed four fixes to "raise the score and the ATS keyword match".
+All four were built. **Three of the four rationales did not survive contact with the
+code**, and each was wrong in a different way that a future session would otherwise
+rediscover at the same cost.
+
+### §4b.1: the parser dropping skills does not suppress the score. Nothing does.
+
+The plan said an unsplit `Languages: Python, Go, SQL, TypeScript` claim means "those
+skills never count toward coverage". They never counted toward it either way — **the
+matching stage does not read `evidence` or `parsed_json.skills` at all.**
+
+```
+match.py:74           resume = profile.master_resume or ""
+embed.py:70           profile_text(...) = titles + seniority + that raw string
+matching/prompt.py    USER_TEMPLATE interpolates that raw string
+score.py:23-71        score = len(met) / (len(met) + len(missing))
+```
+
+`met` and `missing` are the model's partition of **the posting's** stated requirements,
+judged against the résumé text. The vault is M5's input, not M4's — `PROJECT_STATE`'s own
+"what M4 gets" listing says so, and the `evidence` query in it is annotated *"and, for
+M5"*. So no change to how skills are stored can move a match score, and the before/after
+the plan asked for came out identical, which is the correct result rather than a failure.
+
+**The fix was still worth making**, for reasons the plan did not give: an unsplit line is
+one chip reading `Languages: Python, Go, SQL, TypeScript` on the profile screen, and it is
+what blocked M5's first real document by calling nine of the candidate's own skills
+fabrications. It is a document-quality fix that was filed as a score fix.
+
+**The general lesson, which is the part worth keeping:** the plan named a defect
+correctly and attributed it to the wrong stage, and every number in the justification was
+plausible. Reading the four files above took ten minutes and was the difference between
+"we fixed the score" and "we fixed the vault". Trace the value claim, not just the defect.
+
+### §4b.2: a symmetric alias map would have failed a committed case
+
+The plan asked for `Postgres ≡ PostgreSQL`. `S-06` in `evals/fabrication/cases.json` gives
+the model `Postgres` against a vault holding `PostgreSQL` and expects a **block**, and its
+own note explains why that is right on the merits: the résumé says PostgreSQL, so the
+résumé should say PostgreSQL. An equivalence makes that case pass, which is Part 13 rule 3.
+
+**Applied: expansion only, one direction.** A vault spelling licenses its fuller form and
+never its shorter one. §4b.2's actual case (vault says `Postgres`, posting says
+`PostgreSQL`) is an expansion and now works; S-06 is a contraction and still blocks.
+
+The direction is also the safer one on its own terms, which is why it is a rule rather
+than a workaround: expanding an abbreviation states something *more* specific than the
+résumé did, while contracting states something less specific, and less specific is where a
+near-miss hides.
+
+### §4b.3: "let bullets use the posting's vocabulary" is class F2 with better manners
+
+The plan asked to relax rule 4 so bullets could phrase facts in the posting's language.
+There is no version of "admit words from the posting" that is not **F2** in BAR.md §4 —
+*the vault says AWS, the posting says Azure, the bullet says Azure*. The validator's entire
+design is that a bullet is diffed against the claim it cites, and the posting is the
+temptation rather than a permission source.
+
+**Applied instead:** the posting's **company and title**, the two strings the letter path
+has always allowed, added to the bullet path. Naming the employer you are writing to is
+not a claim about the candidate. Plus a prompt reword saying the posting guides *how* a
+fact is phrased and never what the fact is. A test pins the F2 case still blocking.
+
+### The one premise that held, and the measurement that broke it anyway
+
+§4b.4 said letters fail on connective vocabulary. `_CONNECTIVE` was widened from 18 words
+to 78, grammar only — modals, discourse adverbs, subordinators. **Nine live pairs later,
+the letter rate is still 0/9.** See BAR.md §8; the short version is that the widening moved
+the failure rather than removing it, and the dominant cause was never vocabulary.
+
+## The empty parse that wiped a vault, and the guard that now refuses it (2026-08-10)
+
+**Found by running the same command twice.** `deepseek-v4-flash` returned no roles and no
+skills for 1,255 characters of résumé that had parsed to 20 claims a minute earlier, and
+parsed correctly again a minute later:
+
+```
+{'resume_chars': 1255, 'skills': 0, 'roles': 0, 'claims_stored': 0, 'promoted': []}
+```
+
+Nothing raised. `profile.parsed` was recorded as a success. `parsed_json` fell to 252
+bytes and the vault was empty, because `vault.rebuild` deletes every `origin='parsed'`
+claim *before* inserting what the model returned. **A schema-valid empty answer was
+therefore silently destructive** — §3.7's exact shape, a stage that quietly does nothing
+while looking like it worked, and one that would have destroyed the demo profile on a
+Friday with no error anywhere to point at.
+
+**The guard is a gate, not a dashboard**, for the same reason M2's feed volume check is:
+by the time a human reads a dashboard the rows are already deleted. Below 200 characters
+of résumé "nothing" stays a plausible answer, so the loud failure cannot land on the
+honest case; that case has its own test.
+
+**It raises rather than recording an event.** `parse_profile` commits nothing, so an event
+written on the way out rolls back with everything else — the first version of this guard
+had exactly that bug. The task's existing `parse_failed` handler is the path that already
+commits before re-raising.
+
+**Why 448 green tests and a live gate never caught it.** Every fixture in
+`test_profile_parse.py` returns a populated résumé, because they were written to test what
+a parse *does*. Nobody wrote the case where the model returns a valid nothing, and a
+retry-shaped defect only appears when you run the same input twice and compare.
+
+**A second defect came out of the same reading.** The ATS keyword counters reported
+`6/7, missing: ["Infrastructure"]`. `Languages` and `Infrastructure` were being stored as
+skill claims in their own right — headings, selectable onto a résumé and countable as
+keywords, and neither is a skill. A heading is now dropped when it introduces members. The
+group *line* is still stored, because a bullet may quote `Languages: Python, Go` verbatim.
+
+## The match score's degenerate zero is re-asked, not re-weighted (2026-08-10)
+
+`met=[]` beside a non-empty `missing` makes coverage 0/n, so `score()` returns 0 by
+arithmetic and `reasons_json` holds nothing a human can check. The live gate saw it on a
+*different* relevant pair each run, which is what makes it the model sampling badly rather
+than a property of the posting — and in the output it is indistinguishable from an honest
+rejection.
+
+**Applied: one re-ask in `_explain`, and the second answer is kept whatever it says.**
+
+**Rejected: changing the arithmetic.** Treating an empty partition as inconclusive would
+move every score in the system and invalidate `MATCH_THRESHOLD=20` and the 0.86 pooled
+precision, both measured against the current formula — an M4 milestone's work as a side
+effect of a demo fix. A retry changes the *input* the ratio was always meant to get, and
+`test_matching_score.py` is untouched by construction.
+
+A profile that genuinely evidences none of a posting's requirements still scores 0 and is
+still skipped. That has its own test, because without it this would be a way of deleting
+every honest rejection.
+
+**Trigger to re-measure:** the next `make verify-live-match`. It should raise recall
+slightly and cost about three extra explain calls per forty-pair run. **Deliberately not
+run in demo week** — three runs, real money, and the number is not on the critical path.
+
+---
+
 ## Open, deferred deliberately
 
 | Item | Trigger to revisit | Recorded |

@@ -91,16 +91,32 @@ Beat 7 is the differentiator. Every competitor demo shows autofill; showing the 
 
 ## 4b. Score and keyword quality (do first — cheap, and it lifts every screen)
 
-Four fixes that raise the score and the ATS keyword match **without inventing anything**.
-They exist because we are currently stricter than the category leader in ways that cost
-points and buy nothing.
+> **BUILT AND MEASURED 2026-08-10. Read this box before the four sections below, which
+> are kept as written so the corrections are legible against them.**
+>
+> **None of 4b.1–4b.4 can move a match score.** The matching stage's only profile input is
+> `profiles.master_resume` — raw text — and the score is coverage of the *posting's* stated
+> requirements against it (`match.py:74`, `score.py:23-71`). `evidence` and
+> `parsed_json.skills` are M5's inputs, not M4's. These are document- and keyword-quality
+> fixes and were worth building as such.
+>
+> **4b.2 shipped one-directional.** A symmetric alias fails committed case `S-06`.
+> **4b.3 shipped narrowed** to the posting's company and title; the literal version is
+> class F2. **4b.4 shipped and did not work** — nine live pairs, 0 letters written, and
+> the cause was never vocabulary. Full accounting in `evals/fabrication/BAR.md` §8 and
+> `docs/DECISIONS.md`.
+>
+> Landed alongside, neither of them planned: the `met=[]` degenerate zero is re-asked
+> rather than re-weighted, and an empty parse no longer wipes the vault.
 
 ### 4b.1 The parser drops skills — bug, highest value
 
 M3 sometimes stores `Languages: Python, Go, SQL, TypeScript` as **one** evidence claim
-instead of four. Those skills then don't count toward coverage at all, so the score is
-suppressed by a parsing defect rather than by the candidate. Known, recorded, never fixed —
-it is the same defect that blocked M5's first real document.
+instead of four. ~~Those skills then don't count toward coverage at all, so the score is
+suppressed by a parsing defect rather than by the candidate.~~ **Wrong — the matcher never
+reads the vault.** What it actually costs: one chip reading `Languages: Python, Go, SQL,
+TypeScript` on demo beat 1 instead of four, and it is the same defect that blocked M5's
+first real document by calling nine of the candidate's own skills fabrications.
 
 *Fix:* split group lines on their own delimiters at parse time, never by substring.
 `unsplit_skills` already exists as a vault fixture, so the failing shape is on hand.
@@ -136,8 +152,8 @@ employer, technology, scope or seniority that is not in the cited claim.
 ### 4b.4 Let the cover letter actually be written
 
 **100% of letters currently fail to generate.** Every word of every paragraph must appear in
-the cited evidence or in a 20-word connective list, which is not enough English to write a
-sentence with.
+the cited evidence or in an 18-word connective list (the plan said 20), which is not enough
+English to write a sentence with.
 
 *Fix:* widen the connective vocabulary. **Numbers and metrics stay hard** — the two real
 catches on `gpt-5` were `the number 13` and `the number 17`, figures the résumé never
@@ -151,6 +167,15 @@ the letter rate is reported, not gated, so this cannot make the gate lie.
 
 *verify:* letters generate on a majority of honest pairs; `test_fabrication_guard` unmoved;
 the F4 number cases still blocked.
+
+> **Measured 2026-08-10: 0 of 9 live pairs wrote a letter.** The guard is unmoved and the
+> F4 cases are still blocked, so the fix is not harmful — it just is not the fix. Round 1
+> blocked 3/5 on invented years-of-experience numbers (F4, working); a prompt rule
+> forbidding digits moved that to 1/4 and the failures relocated to content nouns —
+> `infrastructure`, `backend`, `accountabilities` — which cannot be added, because a
+> paragraph's nouns are its claims. **Widening the list further is not the route.** For
+> the demo, screen 3 already specifies the honest empty state; a letter needs either a
+> stronger model or paragraph-level dropping, and both are decisions for after the demo.
 
 **Order:** 4b.1 first — it is a bug, it is cheap, and it may be worth several points on its
 own since skills are currently being silently lost.

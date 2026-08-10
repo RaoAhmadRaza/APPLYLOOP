@@ -241,6 +241,71 @@ obvious moves, and a future session will otherwise propose them again confidentl
 The human read required by §1 is logged here too: one line per live run, with the reader's
 initials, the number of documents read, and what was found.
 
+### AMENDED — `words.py` widened by the project owner, and it did not work (2026-08-10)
+
+**No bar moved.** §2 is untouched. What moved is a list the bars measure, and then a
+measurement that says the list was not the problem.
+
+**The reversal, stated plainly.** The entry below dated 2026-08-09 refused to widen
+`words.py`, on the grounds that it was adding the words that had just failed, immediately
+after watching them fail, on the third query of this set. **That refusal is overridden by
+the project owner**, and the reason is different rather than louder: run 6 wrote **no
+letter at all** for every honest pair, where run 3's rate was half; §2 reports the letter
+rate rather than gating it, so widening cannot make the gate lie; and prose quality has
+been ruled in scope for the demo, which it explicitly was not on 2026-08-09.
+
+**Applied.** `_CONNECTIVE` 18 words → 78; `ALLOWED` 329 → 389. Grammar only: modals,
+discourse adverbs, subordinators, and the verb `apply`. Plus a `LETTER_SYSTEM` rule
+forbidding digits anywhere in a letter.
+
+**Still refused, and this is the half that matters.** The nouns that blocked run 3 —
+`projects`, `outcomes`, `training`, `background`, `results` — stay out. They are the
+OBJECTS of the verbs `words.py` already allows, and that file's own argument for allowing
+verbs is *"the object it acts on is still checked"*. An object is a fact. `certified`,
+`senior`, `team` and `million` stay out for the reason already written there. The number
+rule at `validate.py` is untouched and runs first.
+
+**Then it was measured on nine real pairs, and the letter rate is still 0.00.**
+
+```
+round 1, 5 pairs, after the vocabulary widening
+  letters written   0/5
+  blocked on numbers   3/5   the number 17, 12, 13   <- F4, the rule working
+  blocked on nouns     2/5   bring, required, developer, background, centers, experience
+
+round 2, 4 pairs, after the no-digits prompt rule
+  letters written   0/4
+  blocked on numbers   1/4   the number 13, 14, 17
+  blocked on nouns     3/4   backend, full, infrastructure, judged, spans,
+                             accountabilities, equally, calls
+```
+
+**What this establishes.** The dominant cause of a blocked letter on
+`deepseek-v4-flash` was never connective vocabulary. Round 1 says it was the model writing
+years-of-experience totals the résumé never states — §4's F4, caught in prose, by a run
+nobody seeded for it, exactly as run 4 found. The prompt rule moved that from 3/5 to 1/4
+and the failures simply relocated to content nouns.
+
+**And content nouns cannot be added.** `infrastructure`, `backend`, `accountabilities` are
+what a paragraph is *about*. Admitting them is admitting the claim. So the honest reading
+is structural rather than a tuning problem: a paragraph of connected prose built only from
+the words of the claims it cites, plus ~389 grammar words and four proper nouns, is a
+sentence the model can rarely write. **Widening the list further is not the fix and this
+round is the evidence for that, which is worth more than the words it added.**
+
+**Nothing false shipped in any of the nine.** Every block is the validator doing its job,
+0 fabrications, and the résumé still ships without the letter (see the 2026-08-09
+amendment below). §2's letter row stays *reported, not gated*, and that remains correct.
+
+**Also observed and NOT a bar question, flagged because somebody will quote it:** three of
+those nine résumés were blocked on strip rate (100%, 67%, 100% untraceable), which is 0.33
+against §2's ceiling of 0.20. **These are live pairs against real postings, not the gate's
+stored ones**, so the number is not comparable to run 6's 0.16 and does not fail anything.
+It is a reason to expect the gate re-run to be interesting, not a result.
+
+**Query count: unchanged.** None of this touched the twenty seeded pairs — it is nine live
+tailorings against the real pool, which is a different instrument.
+
 ### LOGGED — runs 5 and 6: the provider changed, and the set has now been queried six times (2026-08-10)
 
 **The model is no longer the one every number above was measured on.** The OpenAI balance
