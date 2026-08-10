@@ -12,6 +12,7 @@ import httpx
 import pytest
 from pydantic import Field
 from schemas.common import Schema
+from schemas.job_embedding import EMBEDDING_DIM
 from schemas.resume import ParsedResume
 from schemas.tailoring import CoverLetterDraft, TailoredResume
 from workers import llm
@@ -80,13 +81,18 @@ def _tool_transport(
 
 
 def _patch(monkeypatch: pytest.MonkeyPatch, transport: httpx.MockTransport) -> None:
-    real = llm.client
+    """Intercepts at `_client`, the single factory both paths now share.
 
-    def fake() -> httpx.Client:
-        client = real()
-        return httpx.Client(base_url=client.base_url, headers=client.headers, transport=transport)
+    It used to patch `client()`. When `embed()` moved onto its own host it stopped going
+    through that function, and two of these tests silently made **real requests to
+    openrouter.ai** — a unit suite whose whole contract is that it touches no network.
+    Patching the factory rather than one of its callers is what makes that unrepeatable.
+    """
 
-    monkeypatch.setattr(llm, "client", fake)
+    def fake(base_url: str, api_key: object) -> httpx.Client:
+        return httpx.Client(base_url=base_url, transport=transport)
+
+    monkeypatch.setattr(llm, "_client", fake)
 
 
 # ------------------------------------------------------------------ the schema rewrite
@@ -217,6 +223,95 @@ def test_a_provider_error_carries_its_body_and_not_just_its_status(
 
     with pytest.raises(llm.LlmError, match="unavailable now"):
         llm.complete_json(Sample, system="s", user="u")
+
+
+def test_embeddings_go_to_the_embed_host_and_chat_does_not(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The split, asserted where it can actually go wrong: the URL each call is sent to.
+
+    Before 2026-08-10 one client served both, and DeepSeek — which serves no `/embeddings`
+    route at all — made that arrangement impossible rather than merely inconvenient.
+    """
+    monkeypatch.setenv("LLM_BASE_URL", "https://api.deepseek.com/beta")
+    monkeypatch.setenv("EMBED_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai")
+    monkeypatch.setenv("EMBED_MODEL", "text-embedding-004")
+    llm.get_settings.cache_clear()
+
+    hosts: list[str] = []
+
+    def recorder(base_url: str, api_key: object) -> httpx.Client:
+        hosts.append(base_url)
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path.endswith("/embeddings"):
+                return httpx.Response(200, json={"data": [{"index": 0, "embedding": [0.5]}]})
+            call = {"function": {"name": "Sample", "arguments": '{"name": "ok"}'}}
+            return httpx.Response(
+                200, json={"choices": [{"message": {"content": "", "tool_calls": [call]}}]}
+            )
+
+        return httpx.Client(base_url=base_url, transport=httpx.MockTransport(handler))
+
+    monkeypatch.setattr(llm, "_client", recorder)
+
+    llm.embed(["a"])
+    llm.complete_json(Sample, system="s", user="u")
+
+    assert hosts == [
+        "https://generativelanguage.googleapis.com/v1beta/openai",
+        "https://api.deepseek.com/beta",
+    ]
+
+
+def test_a_row_without_an_index_is_treated_as_index_zero(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Gemini omits `index` when it is 0. Verified against the live endpoint 2026-08-10.
+
+    proto3 drops default-valued fields, so row 0 arrives with no `index` key at all while
+    row 1 carries `index: 1`. `row["index"]` raised `LlmError: unexpected embeddings
+    response shape` on the first real batch — a provider difference no mock in this file
+    contained, because every mock here was written by us.
+
+    Asserted on a *reversed* payload so a wrong default cannot pass by luck: if the absent
+    index sorted anywhere but first, `a` and `b` come back swapped and every downstream
+    cosine silently belongs to the wrong job.
+    """
+    seen: list[dict[str, Any]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(json.loads(request.content))
+        return httpx.Response(
+            200,
+            json={
+                "data": [
+                    {"object": "embedding", "index": 1, "embedding": [2.0]},
+                    {"object": "embedding", "embedding": [1.0]},  # index 0, omitted
+                ]
+            },
+        )
+
+    _patch(monkeypatch, httpx.MockTransport(handler))
+
+    vectors, tokens = llm.embed(["a", "b"])
+
+    assert vectors == [[1.0], [2.0]]
+    # No `usage` object either — Gemini sends none, and zero must not be an exception.
+    assert tokens == 0
+    # The width is requested, never assumed: the default is 3072 and the column is not.
+    assert seen[0]["dimensions"] == EMBEDDING_DIM
+
+
+def test_an_embeddings_error_carries_its_body(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Chat got this fix a day before embeddings did, which is exactly how the next
+    afternoon would have been lost — a Gemini 400 on a model name, reading as an outage."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json={"error": {"message": "Unsupported embedding model"}})
+
+    _patch(monkeypatch, httpx.MockTransport(handler))
+
+    with pytest.raises(llm.LlmError, match="Unsupported embedding model"):
+        llm.embed(["a"])
 
 
 def test_a_valid_response_is_returned_as_the_model(monkeypatch: pytest.MonkeyPatch) -> None:

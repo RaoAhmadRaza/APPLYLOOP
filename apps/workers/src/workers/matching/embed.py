@@ -134,9 +134,10 @@ def ensure(session: Session, job_ids: list[uuid.UUID]) -> tuple[int, int]:
 def _checked(vectors: list[list[float]]) -> list[list[float]]:
     """Refuse a vector of the wrong width rather than letting the column truncate it.
 
-    `HALFVEC(1536)` rejects a mismatch, but the error surfaces as an opaque insert
+    The `HALFVEC` column rejects a mismatch, but the error surfaces as an opaque insert
     failure halfway through a batch. A model swapped to one with different dimensions is
-    a configuration mistake worth naming at the boundary.
+    a configuration mistake worth naming at the boundary — and it is now a likelier
+    mistake than it was, because embeddings and chat can point at different providers.
     """
     for vector in vectors:
         if len(vector) != EMBEDDING_DIM:

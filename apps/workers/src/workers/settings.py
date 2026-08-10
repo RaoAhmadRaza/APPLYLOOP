@@ -103,13 +103,20 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = 300.0
 
     # --- M4: matching and scoring --------------------------------------------------
-    # Same base URL and key as the chat model — OpenRouter and OpenAI direct both expose
-    # an OpenAI-shaped POST /embeddings, so §7.2's "keep the interface swappable" stays
-    # one variable. 1536 native dimensions, which is what `job_embeddings.embedding` is
-    # declared as. This string is stored verbatim in `job_embeddings.model` (with the
-    # template version appended, see `matching.embed`), so changing it is additive: the
-    # old vectors stay, the new ones land beside them, and nothing needs an ALTER.
-    embed_model: str = "openai/text-embedding-3-small"
+    # **Embeddings may live at a different provider from the chat model, and now do.**
+    # DeepSeek serves no /embeddings route at all — 404 on every host, verified
+    # 2026-08-10 — so "one base URL for everything" stopped being true the day the chat
+    # provider changed. Empty means "wherever the chat model is", which is what every
+    # single-provider deployment wants and what this repo did until now.
+    embed_base_url: str = ""
+    embed_api_key: SecretStr | None = None
+
+    # 768 native dimensions, which is what `job_embeddings.embedding` is declared as.
+    # This string is stored verbatim in `job_embeddings.model` (with the template version
+    # appended, see `matching.embed`), so changing it is additive *within a width*: old
+    # vectors stay, new ones land beside them. Changing the WIDTH is a migration, because
+    # one column cannot hold two.
+    embed_model: str = "google/gemini-embedding-001"
 
     # **The Part 14 interlock, made mechanical.** None is not a missing value — it is the
     # state before the golden set has spoken. With no threshold the matching task records
@@ -170,6 +177,28 @@ class Settings(BaseSettings):
     # Object storage is configured by `packages/storage`, not here: the API writes the
     # upload and the worker reads it back, so neither app can own those settings.
 
+    @property
+    def embed_url(self) -> str:
+        """Where `POST /embeddings` goes. Empty `EMBED_BASE_URL` means the chat provider.
+
+        A property rather than an `or` at each call site because there are two consumers —
+        the client factory and `model_slug_mismatch` — and if they ever disagreed about
+        which host embeddings use, the check would validate the wrong one. That is the
+        exact failure `model_slug_mismatch` exists to prevent, so it must not be able to
+        cause it.
+        """
+        return self.embed_base_url or self.llm_base_url
+
+    @property
+    def embed_key(self) -> SecretStr | None:
+        """Falls back deliberately, and not gated on `embed_base_url` being empty.
+
+        Sending the chat key to a foreign embeddings host earns a legible 401. Refusing to
+        fall back would instead break the legitimate case of pointing `EMBED_BASE_URL` at a
+        host the existing key already works for.
+        """
+        return self.embed_api_key or self.llm_api_key
+
     @field_validator("jobspy_proxies", mode="before")
     @classmethod
     def _split_comma_separated(cls, value: object) -> object:
@@ -207,17 +236,43 @@ def model_slug_mismatch(settings: "Settings") -> str | None:
 
     Only the two providers configured here are checked. A third OpenAI-compatible host
     may use slashes or not, and guessing on its behalf turns a helpful check into a false
-    refusal, which is the worse failure.
+    refusal, which is the worse failure. That escape hatch is what lets embeddings sit on
+    Gemini without this function inventing a rule for a host it has never seen.
+
+    **Two hosts, since 2026-08-10.** `EMBED_MODEL` is judged against the embeddings host
+    and the other two against the chat host. Judging all three against one URL was correct
+    only while one URL served both, and it silently became wrong the day it did not.
     """
-    slugs = {
-        "LLM_MODEL": settings.llm_model,
-        "EMBED_MODEL": settings.embed_model,
-        "TAILOR_MODEL": settings.tailor_model,
-    }
-    if "openrouter.ai" in settings.llm_base_url:
+    problems = [
+        problem
+        for problem in (
+            _slugs_at(
+                settings.llm_base_url,
+                "LLM_BASE_URL",
+                {"LLM_MODEL": settings.llm_model, "TAILOR_MODEL": settings.tailor_model},
+            ),
+            _slugs_at(
+                settings.embed_url,
+                "EMBED_BASE_URL" if settings.embed_base_url else "LLM_BASE_URL",
+                {"EMBED_MODEL": settings.embed_model},
+            ),
+        )
+        if problem
+    ]
+    # Joined, never `or`: the two groups are checked against different hosts now, and
+    # returning the first would hide EMBED_MODEL behind LLM_MODEL — reintroducing the
+    # fix-one-hit-the-next-next-run defect this function was written against. When
+    # embeddings fall back, the variable named is the chat one, because that is the line
+    # the operator has to edit.
+    return "; ".join(problems) or None
+
+
+def _slugs_at(base_url: str, variable: str, slugs: dict[str, str]) -> str | None:
+    """The per-host rule, unchanged — now applied to one group of slugs at a time."""
+    if "openrouter.ai" in base_url:
         wrong = [name for name, slug in slugs.items() if "/" not in slug]
         expectation = "OpenRouter slugs carry a vendor prefix, e.g. openai/gpt-5"
-    elif "api.openai.com" in settings.llm_base_url:
+    elif "api.openai.com" in base_url:
         wrong = [name for name, slug in slugs.items() if "/" in slug]
         expectation = "OpenAI's own API takes the bare model name, e.g. gpt-5"
     else:
@@ -225,6 +280,4 @@ def model_slug_mismatch(settings: "Settings") -> str | None:
 
     if not wrong:
         return None
-    return (
-        f"{', '.join(wrong)} cannot exist at LLM_BASE_URL={settings.llm_base_url} — {expectation}"
-    )
+    return f"{', '.join(wrong)} cannot exist at {variable}={base_url} — {expectation}"

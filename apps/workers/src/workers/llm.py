@@ -21,16 +21,20 @@ bandwidth would be an expensive accident caused by an env var nobody read.
 
 **The line this module draws, stated once:** anything that talks to the model provider
 lives here; anything that talks to Postgres lives in the stage. That is why `embed()` is
-here and the `job_embeddings` write is not, and why `client()` is public — M4's embed
-call needs the identical base URL, auth and `trust_env=False`, and a second copy of those
-twelve lines is the drift `db.events.record` exists to prevent.
+here and the `job_embeddings` write is not.
+
+**Chat and embeddings are two providers, not one.** They shared a client until DeepSeek —
+which serves no `/embeddings` route at all — became the chat provider. `_client()` takes
+the host and key it is given; `embed_url` / `embed_key` on `Settings` fall back to the
+chat pair, so a single-provider deployment sets nothing new.
 """
 
 from dataclasses import dataclass
 from typing import Any
 
 import httpx
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, SecretStr, ValidationError
+from schemas.job_embedding import EMBEDDING_DIM
 
 from workers.settings import get_settings
 
@@ -150,44 +154,78 @@ def embed(texts: list[str]) -> tuple[list[list[float]], int]:
     every downstream cosine would be wrong in a way nothing else can detect.
     """
     settings = get_settings()
-    if settings.llm_api_key is None:
-        raise LlmError("no LLM API key configured")
+    key = settings.embed_key
+    if key is None:
+        raise LlmError("no embeddings API key configured")
     if not texts:
         # Not an error, and deliberately before the client is opened: M4 calls this with
         # whatever the hard filters left, and "nothing survived" is a normal run.
         return [], 0
 
-    with client() as http:
-        response = http.post("/embeddings", json={"model": settings.embed_model, "input": texts})
-    response.raise_for_status()
+    # `embed_url`, not `llm_base_url`: embeddings may live at another provider entirely,
+    # and since 2026-08-10 they do — DeepSeek serves no /embeddings route.
+    with _client(settings.embed_url, key) as http:
+        response = http.post(
+            "/embeddings",
+            json={
+                "model": settings.embed_model,
+                "input": texts,
+                # Asked for, never assumed. `gemini-embedding-001` returns 3072 by default
+                # and the column is EMBEDDING_DIM wide, so taking the default would fail
+                # every insert. Stating the width we require also documents it at the one
+                # place the request is made — `_checked()` still verifies what came back.
+                "dimensions": EMBEDDING_DIM,
+            },
+        )
+    _raise_for_body(response)
     payload = response.json()
 
     try:
         # Sorted by `index`, not trusted to arrive in order. The spec says ordered; a
         # misordered batch is indistinguishable from a correct one at every later step.
-        rows = sorted(payload["data"], key=lambda row: row["index"])
+        #
+        # `.get(..., 0)` because **Gemini omits `index` entirely when it is 0** — proto3
+        # drops default-valued fields, so row 0 arrives without the key and row 1 carries
+        # `index: 1`. `row["index"]` raised on the very first real batch. Only the zero can
+        # be missing, so defaulting to 0 restores the true order rather than guessing at it.
+        rows = sorted(payload["data"], key=lambda row: row.get("index", 0))
         vectors = [row["embedding"] for row in rows]
     except (KeyError, IndexError, TypeError) as error:
         raise LlmError(f"unexpected embeddings response shape: {sorted(payload)}") from error
 
     if len(vectors) != len(texts):
         raise LlmError(f"asked for {len(texts)} embeddings, got {len(vectors)}")
-    return vectors, int(payload.get("usage", {}).get("prompt_tokens", 0))
+    # **Gemini sends no `usage` object at all**, so this is 0 on every embed call there —
+    # not a stub, a provider that does not report it. M4's live gate asserts
+    # `embed_tokens > 0` as its anti-stub proof and will fail on that alone; see
+    # docs/PROJECT_STATE.md. `or {}` because absent and null must behave the same.
+    return vectors, int((payload.get("usage") or {}).get("prompt_tokens", 0))
 
 
 def client() -> httpx.Client:
-    """The one provider client. Public because `matching` needs it and may not copy it."""
+    """The chat client."""
     settings = get_settings()
     assert settings.llm_api_key is not None  # noqa: S101 — the caller checked
+    return _client(settings.llm_base_url, settings.llm_api_key)
+
+
+def _client(base_url: str, api_key: SecretStr) -> httpx.Client:
+    """One factory, two hosts. Chat and embeddings no longer have to be the same provider.
+
+    The attribution headers are gated rather than always sent: they are OpenRouter's, the
+    comment above them has always said so, and sending this repo's URL and name to Google
+    or DeepSeek tells a third party who we are in exchange for nothing.
+    """
+    headers = {
+        "Authorization": f"Bearer {api_key.get_secret_value()}",
+        "Content-Type": "application/json",
+    }
+    if "openrouter.ai" in base_url:
+        headers |= {"HTTP-Referer": _REFERER, "X-Title": _TITLE}
     return httpx.Client(
-        base_url=settings.llm_base_url,
-        timeout=settings.llm_timeout_seconds,
-        headers={
-            "Authorization": f"Bearer {settings.llm_api_key.get_secret_value()}",
-            "Content-Type": "application/json",
-            "HTTP-Referer": _REFERER,
-            "X-Title": _TITLE,
-        },
+        base_url=base_url,
+        timeout=get_settings().llm_timeout_seconds,
+        headers=headers,
         # Part 13 rule 12: the proxy is the aggregator's, and an ambient HTTPS_PROXY
         # would silently bill model traffic to residential bandwidth.
         trust_env=False,
@@ -206,12 +244,7 @@ def _ask(
         "/chat/completions",
         json={"model": model, "messages": messages, **_enforcement(name, schema)},
     )
-    if response.is_error:
-        # The body, not just the code. A bare `raise_for_status` cost a whole diagnosis:
-        # `400 Bad Request` reads identically for a retired model name, a wrong slug and
-        # an unsupported response_format, and only the body of the third says
-        # `This response_format type is unavailable now`.
-        raise LlmError(f"{response.status_code} from {response.url}: {response.text[:400]}")
+    _raise_for_body(response)
     payload = response.json()
     if usage is not None:
         # Recorded before the content is validated, so a response that fails the schema
@@ -235,6 +268,22 @@ def _ask(
     if not isinstance(content, str) or not content.strip():
         raise LlmError("model returned empty content")
     return content
+
+
+def _raise_for_body(response: httpx.Response) -> None:
+    """The body, not just the code.
+
+    A bare `raise_for_status` cost a whole afternoon: `400 Bad Request` reads identically
+    for a retired model name, a crossed vendor slug and an unsupported `response_format`,
+    and this repo has now hit all three. Only the body of the last one says
+    `This response_format type is unavailable now`.
+
+    Shared by both paths deliberately. Chat was fixed first and embeddings kept the old
+    shape for a day, which is exactly how the next instance of this would have happened —
+    a Gemini 400 on a model name, read as an outage.
+    """
+    if response.is_error:
+        raise LlmError(f"{response.status_code} from {response.url}: {response.text[:400]}")
 
 
 def _tool_arguments(message: dict[str, Any]) -> str:

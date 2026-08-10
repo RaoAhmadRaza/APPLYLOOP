@@ -17,6 +17,7 @@ from typing import Any
 import pytest
 from db.models import Event, Job, JobEmbedding, Match, Profile, User
 from schemas.enums import MatchStatus, Seniority
+from schemas.job_embedding import EMBEDDING_DIM
 from schemas.match import MatchFacts
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -47,7 +48,10 @@ def _model(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         state["embedded"].extend(texts)
         # Distinct but deterministic: the first token of the text drives one dimension so
         # the ordering is stable without being uniform.
-        return [[float(len(text) % 7 + 1)] + [0.0] * 1535 for text in texts], 11 * len(texts)
+        # Padded from the constant, not from a literal: the width is a fact the schema
+        # owns, and restating it here is how a dimension change becomes a grep.
+        pad = [0.0] * (EMBEDDING_DIM - 1)
+        return [[float(len(text) % 7 + 1)] + pad for text in texts], 11 * len(texts)
 
     def fake_complete(schema: Any, *, system: str, user: str, usage: Any = None) -> MatchFacts:
         state["seen_jobs"].append(user)

@@ -50,6 +50,54 @@ def test_an_openai_url_with_a_prefixed_slug_is_named() -> None:
     assert "bare model name" in mismatch
 
 
+def test_an_empty_embed_base_url_falls_back_to_the_chat_provider() -> None:
+    """The compatibility guarantee. Every deployment that predates the split sets neither
+    new variable, and must keep working with no edit at all."""
+    shared = _settings(llm_base_url="https://api.openai.com/v1", llm_api_key="chat-key")
+    assert shared.embed_url == "https://api.openai.com/v1"
+    assert shared.embed_key is not None
+    assert shared.embed_key.get_secret_value() == "chat-key"
+
+    split = _settings(
+        llm_base_url="https://api.deepseek.com/beta",
+        llm_api_key="chat-key",
+        embed_base_url="https://generativelanguage.googleapis.com/v1beta/openai",
+        embed_api_key="embed-key",
+    )
+    assert split.embed_url == "https://generativelanguage.googleapis.com/v1beta/openai"
+    assert split.embed_key is not None
+    assert split.embed_key.get_secret_value() == "embed-key"
+
+
+def test_the_embed_model_is_judged_against_the_embed_host() -> None:
+    """The whole point of the split, in both directions.
+
+    A bare Gemini slug is correct at Gemini and would have been named as an error while
+    every slug was judged against the chat URL — a false refusal. The chat slugs must
+    still be judged, against their own host, in the same call.
+    """
+    settings = _settings(
+        llm_base_url="https://openrouter.ai/api/v1",
+        llm_model="google/gemini-2.5-flash",
+        tailor_model="anthropic/claude-sonnet-5",
+        embed_base_url="https://generativelanguage.googleapis.com/v1beta/openai",
+        embed_model="text-embedding-004",
+    )
+    assert model_slug_mismatch(settings) is None
+
+    still_checked = _settings(
+        llm_base_url="https://openrouter.ai/api/v1",
+        llm_model="google/gemini-2.5-flash",
+        tailor_model="claude-sonnet-5",
+        embed_base_url="https://generativelanguage.googleapis.com/v1beta/openai",
+        embed_model="text-embedding-004",
+    )
+    mismatch = model_slug_mismatch(still_checked)
+    assert mismatch is not None
+    assert "TAILOR_MODEL" in mismatch
+    assert "EMBED_MODEL" not in mismatch
+
+
 def test_every_mismatched_variable_is_named_at_once() -> None:
     """Naming one of three means fixing it and hitting the next on the following run."""
     mismatch = model_slug_mismatch(
