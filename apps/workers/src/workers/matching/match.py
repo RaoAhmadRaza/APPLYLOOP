@@ -205,18 +205,34 @@ def _explain(
     resume: str,
     usage: list[llm.Usage],
 ) -> MatchFacts | None:
-    """One paid call. A failure is recorded and skipped, never fatal.
+    """One paid call, twice at most. A failure is recorded and skipped, never fatal.
 
     One malformed posting must not kill a forty-job run: the other thirty-nine have
     already been paid for by the time it fails.
+
+    **`met=[]` beside a non-empty `missing` is re-asked once.** Coverage is then 0/n and
+    `score()` returns 0 by arithmetic, with nothing in `reasons_json` for a human to read
+    — and the live gate saw it on a *different* relevant pair each run, which makes it a
+    sampling artefact of the model rather than a property of the posting. The retry fixes
+    the input the ratio was always meant to get; widening the ratio itself would move
+    every score and invalidate the threshold the golden set was run to choose. Whatever
+    the second answer says is kept, so a genuine "evidences none of it" is still a 0.
     """
     try:
-        return llm.complete_json(
+        facts = llm.complete_json(
             MatchFacts,
             system=prompt.SYSTEM,
             user=prompt.build(job, view, prefs, resume),
             usage=usage,
         )
+        if not facts.met and facts.missing:
+            facts = llm.complete_json(
+                MatchFacts,
+                system=prompt.SYSTEM,
+                user=prompt.build(job, view, prefs, resume),
+                usage=usage,
+            )
+        return facts
     except llm.LlmError as error:
         record(
             session,

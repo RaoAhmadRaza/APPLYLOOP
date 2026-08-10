@@ -58,6 +58,10 @@ def _model(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         if usage is not None:
             usage.append(llm.Usage(prompt_tokens=100, completion_tokens=20))
         result = state["facts"]
+        # A list scripts consecutive answers, for the paths that call twice. The last
+        # entry repeats, so a test only lists the answers it cares about.
+        if isinstance(result, list):
+            result = result.pop(0) if len(result) > 1 else result[0]
         if isinstance(result, Exception):
             raise result
         return result
@@ -333,6 +337,46 @@ def test_a_posting_stating_no_requirements_scores_null_and_is_skipped(
     assert row.score is None
     assert row.label is None
     assert row.status == MatchStatus.SKIPPED
+
+
+def test_an_empty_met_partition_is_re_asked_once(
+    session: Session, _model: dict[str, Any]
+) -> None:
+    """`met=[]` beside a non-empty `missing` scores 0 by arithmetic and reads as a
+    rejection nobody can check. The live gate saw it on a different relevant pair each
+    run, so it is the model sampling badly rather than the posting being bad."""
+    _model["facts"] = [
+        MatchFacts(met=[], missing=["Rust"], summary="Nothing matched."),
+        MatchFacts(met=["Python", "Go", "SQL"], missing=["Rust"], summary="Strong overall."),
+    ]
+    profile = _profile(session)
+    _job(session)
+
+    _run(session, profile)
+
+    row = _matches(session, profile)[0]
+    assert row.score == 75
+    assert row.status == MatchStatus.DISCOVERED
+    # Exactly two calls for the one job: the first answer and its retry.
+    assert len(_model["seen_jobs"]) == 2
+
+
+def test_a_second_empty_met_partition_is_believed(
+    session: Session, _model: dict[str, Any]
+) -> None:
+    """The retry fixes a sampling artefact, not the score. A profile that genuinely
+    evidences none of a posting's requirements still scores 0 and is still skipped —
+    otherwise this would be a way of deleting every honest rejection."""
+    _model["facts"] = MatchFacts(met=[], missing=["Rust", "Elixir"], summary="No overlap.")
+    profile = _profile(session)
+    _job(session)
+
+    _run(session, profile)
+
+    row = _matches(session, profile)[0]
+    assert row.score == 0
+    assert row.status == MatchStatus.SKIPPED
+    assert len(_model["seen_jobs"]) == 2
 
 
 # ---- one bad posting must not kill a run -----------------------------------------
