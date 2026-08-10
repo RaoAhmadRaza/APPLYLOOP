@@ -89,6 +89,74 @@ Beat 7 is the differentiator. Every competitor demo shows autofill; showing the 
 
 ---
 
+## 4b. Score and keyword quality (do first — cheap, and it lifts every screen)
+
+Four fixes that raise the score and the ATS keyword match **without inventing anything**.
+They exist because we are currently stricter than the category leader in ways that cost
+points and buy nothing.
+
+### 4b.1 The parser drops skills — bug, highest value
+
+M3 sometimes stores `Languages: Python, Go, SQL, TypeScript` as **one** evidence claim
+instead of four. Those skills then don't count toward coverage at all, so the score is
+suppressed by a parsing defect rather than by the candidate. Known, recorded, never fixed —
+it is the same defect that blocked M5's first real document.
+
+*Fix:* split group lines on their own delimiters at parse time, never by substring.
+`unsplit_skills` already exists as a vault fixture, so the failing shape is on hand.
+
+*verify:* re-parse `senior_backend.pdf`, assert 4 skill claims not 1; re-score one match and
+record the score before/after.
+
+### 4b.2 Skill alias map
+
+The vault says `Postgres`, the posting says `PostgreSQL`, and an ATS keyword-matches on
+exact strings. Today the prompt says *"do not translate one vendor's name to another's"* and
+`S-06` exists to enforce it — so we lose the keyword on a skill the candidate genuinely has.
+
+*Fix:* a small static alias table (`Postgres ≡ PostgreSQL`, `K8s ≡ Kubernetes`,
+`JS ≡ JavaScript`, `GCP ≡ Google Cloud`). An alias is only usable when the candidate already
+holds the skill — this changes **spelling**, never possession.
+
+*verify:* a bullet citing a `Postgres` claim may render `PostgreSQL`; a bullet citing nothing
+may not render either. `S-06`'s substring rule stays — `Postgres` must still not license
+`PostgresQL Administration Certified`.
+
+### 4b.3 Bullets may use the posting's vocabulary for facts already held
+
+Rule 4 currently forbids taking *any* word from the posting unless the cited evidence
+contains it. That was written against fabrication, but it also blocks honest rephrasing
+toward the language the ATS scans for.
+
+*Fix:* allow posting vocabulary for **phrasing**, keep the hard rules on facts — no number,
+employer, technology, scope or seniority that is not in the cited claim.
+
+*verify:* `test_fabrication_guard` stays at 17/17 offline. If it moves, this is wrong.
+
+### 4b.4 Let the cover letter actually be written
+
+**100% of letters currently fail to generate.** Every word of every paragraph must appear in
+the cited evidence or in a 20-word connective list, which is not enough English to write a
+sentence with.
+
+*Fix:* widen the connective vocabulary. **Numbers and metrics stay hard** — the two real
+catches on `gpt-5` were `the number 13` and `the number 17`, figures the résumé never
+stated, and that rule does not move.
+
+**This reverses a decision recorded in BAR.md §8**, which refused to widen `words.py` on the
+grounds that it was fitting-to-result while chasing a green gate. The reason is different
+now: a letter stage that produces nothing on every honest pair is a product failure, and the
+owner has ruled prose quality in scope. Log it in §8 as an owner decision, and re-measure —
+the letter rate is reported, not gated, so this cannot make the gate lie.
+
+*verify:* letters generate on a majority of honest pairs; `test_fabrication_guard` unmoved;
+the F4 number cases still blocked.
+
+**Order:** 4b.1 first — it is a bug, it is cheap, and it may be worth several points on its
+own since skills are currently being silently lost.
+
+---
+
 ## 5. Backend work (do first — the dashboard depends on it)
 
 ### 5.1 Pipeline read endpoint
@@ -340,13 +408,17 @@ full day and pick the target posting **early** — ideally one already in the po
 ## 8. Order and verification
 
 ```
-Day 1   backend §5.1-5.4                → pytest: order, idempotency, 409, no double-spend
+Day 1a  quality fixes §4b.1-4b.4        → score before/after on one match; letters generate
+Day 1b  backend §5.1-5.4                → pytest: order, idempotency, 409, no double-spend
 Day 2   dashboard shell + screens 1, 2  → upload a real résumé, see it parsed and scored
 Day 3   screens 3, 4, 5                 → approve a real match end to end
 Day 4   extension: popup + Greenhouse   → fill a real posting, HOLD proven
 Day 5   rehearsal on real data, fixes   → run the whole narrative twice, unassisted
 Last    make verify-live-tailor         → M5's gate, ~13 min, ~$2
 ```
+
+§4b goes first because it changes the numbers every screen displays. Doing it after the
+dashboard means demoing scores, then changing them.
 
 Each day ends with the demo narrative runnable up to that point. If a day slips, the demo
 degrades gracefully instead of collapsing — that is the reason for this order and not a
