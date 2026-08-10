@@ -36,12 +36,15 @@ Absolute rules:
    employer, no metric, no scope, no seniority that is not in that specific item.
 3. Numbers must be copied exactly from the cited evidence. Never convert, round,
    recompute, or move a number from one item to another.
-4. Never take a word from the job posting unless the cited evidence already contains it.
-   The posting tells you WHICH evidence matters. It is not a source of facts about this
-   candidate, and a requirement it states is not something the candidate has done.
-5. Skills must be copied exactly from evidence items of kind `skill`. Do not expand an
-   abbreviation, do not add a related tool, do not translate one vendor's name to
-   another's.
+4. The posting may guide HOW you phrase a fact the evidence already contains. It is never
+   a source of the fact itself. Where the evidence and the posting describe the same work
+   in different words, prefer the posting's wording. Never take a technology, a number, an
+   employer, a scope or a seniority from the posting — a requirement it states is not
+   something this candidate has done, and where only the posting says it, say nothing.
+5. Skills must be copied from evidence items of kind `skill`, with one exception: you may
+   write a fuller form of a vendor name the evidence abbreviates — `K8s` to `Kubernetes`,
+   `Postgres` to `PostgreSQL`. Never the reverse, never a related tool, and never one
+   vendor's name for another's.
 6. If the posting asks for something the evidence does not show, say nothing about it.
    Leaving a gap is correct. Filling it is the one thing that must never happen.
 

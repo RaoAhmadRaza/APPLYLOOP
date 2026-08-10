@@ -159,9 +159,30 @@ def vault_from(blob: dict[str, Any]) -> Vault:
     )
 
 
-def resume(*, bullets: list[TailoredBullet], skills: list[str], vault: Vault) -> ResumeReport:
-    """Check every generated bullet against the claim it says it came from."""
-    own = squash(" ".join(vault.companies) + " " + " ".join(vault.titles))
+def resume(
+    *,
+    bullets: list[TailoredBullet],
+    skills: list[str],
+    vault: Vault,
+    company: str = "",
+    title: str = "",
+) -> ResumeReport:
+    """Check every generated bullet against the claim it says it came from.
+
+    `company` and `title` are the *posting's*, and they are the only two strings from the
+    posting a bullet may use — the same two the letter path has always allowed, for the
+    same reason: naming the employer being applied to is not a claim about the candidate.
+    A bullet reading "the platform work Stripe is hiring for" is honest; the facts in it
+    are still checked against the cited claim. Nothing else from the posting is admitted,
+    because "take the posting's vocabulary" and class F2 — vault says AWS, posting says
+    Azure, bullet says Azure — are the same code change.
+
+    They default to empty so the eval harness and the offline cases, which judge a bullet
+    against a vault and no posting, keep their current meaning exactly.
+    """
+    own = squash(
+        " ".join(vault.companies) + " " + " ".join(vault.titles) + " " + company + " " + title
+    )
 
     kept: list[TailoredBullet] = []
     stripped: list[Stripped] = []

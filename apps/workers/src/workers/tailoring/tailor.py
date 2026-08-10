@@ -117,7 +117,13 @@ def tailor_match(
     )
 
     # ---- the guardrail, before anything is rendered ---------------------------------
-    report = validate.resume(bullets=drafted.bullets, skills=drafted.skills, vault=work.vault)
+    report = validate.resume(
+        bullets=drafted.bullets,
+        skills=drafted.skills,
+        vault=work.vault,
+        company=work.job.company or "",
+        title=work.job.title or "",
+    )
     call = validate.verdict(
         report,
         strip_ceiling=strip_ceiling,
