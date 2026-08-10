@@ -1287,6 +1287,123 @@ either way.
 
 ---
 
+## The provider moved to DeepSeek, and the schema mechanism moved with it (2026-08-10)
+
+**The trigger was billing, not engineering.** The OpenAI balance hit zero. The 429 had been
+recorded here and in `PROJECT_STATE` as a rate limit that would reset on its own; a direct
+probe returned `insufficient_quota` / `credit_balance_exhausted` — *"You have no credits
+remaining."* **Both failures return 429, on every model, and only the response body tells
+them apart.** A day was spent waiting for a reset that was never going to come.
+
+### `.env.example`'s one-line note about DeepSeek was right, and was not enough
+
+It said *"DeepSeek's own API rejects `json_schema`"* and that is exactly true. What it did
+not say is what to do instead, so the note read as "DeepSeek is not an option" for months.
+Four requests against the live endpoint on 2026-08-10 mapped the actual surface:
+
+```
+/v1    response_format json_schema           400  "This response_format type is unavailable now"
+/v1    response_format json_object           200  parses, enforces NOTHING
+/beta  strict tools + forced tool_choice     400  "Thinking mode does not support this tool_choice"
+/beta  strict tools + tool_choice auto       200  correct — but a request, not a guarantee
+/beta  strict tools + forced + thinking off  200  guaranteed, schema enforced server-side
+```
+
+**The last row is what shipped** — and the reason first given for shipping it was wrong,
+which is the part worth recording.
+
+The argument was: it preserves *enforced server-side, then validated client-side*, the
+property `llm.py`'s module docstring is built on, and `json_object` does not. **That is
+false, and one more probe would have caught it before the commit.** Asked to violate its own
+registered tool schema, DeepSeek returned:
+
+```
+{"city": ["Paris", "Lyon"], "population": many}
+```
+
+A list where the schema says string, and `many` unquoted — not merely off-schema, **not
+valid JSON**. `strict: true` on a DeepSeek tool validates the schema you *register*; it does
+not constrain what the model then writes. So the tool route and `json_object` offer the same
+guarantee, which is none, and the stated reason for preferring one over the other evaporated.
+
+**The mechanism survived the argument that justified it, for a smaller reason.** A tool
+definition *transmits* the schema; `json_object` transmits nothing, so field names, types and
+nesting would have to be serialised into the prompt by hand — a second copy of the schema to
+keep in step with the pydantic model. Transmission is not enforcement, and only transmission
+was ever on offer here.
+
+**What actually holds the line on DeepSeek is `complete_json`'s client-side validation and
+its single re-ask.** On OpenAI that loop is a backstop. Here it is the guardrail. Anyone
+economising on `MAX_ATTEMPTS`, or widening the schema to make a red run go green, should know
+they are cutting the only thing left. §3.3's fabrication validator sits downstream of both and
+is untouched by this: it re-derives every claim from the vault regardless of how the JSON
+arrived.
+
+`_strict()` needed no change at all — the rewrite it already performed for OpenAI strict mode
+(every property required, `additionalProperties: false`) is what DeepSeek's registration-time
+validator demands too.
+
+**Thinking is disabled on the call, deliberately, and it is a real trade.** DeepSeek refuses
+a forced tool choice while thinking is on, and unforced is not a guarantee. The reasoning
+tokens buy nothing here that matters: the fabrication validator is deterministic Python that
+does not care whether the model reasoned first, and a bullet is diffed against the claim it
+cites either way.
+
+**The branch is on the base URL, not on a new capability setting.** `model_slug_mismatch()`
+already branches on the same string for the same reason. A second setting saying *how* the
+provider enforces schemas would have to be kept in sync with the one that already says *which
+provider this is* — two facts, one truth, and eventually they disagree.
+
+### Two defects the migration exposed, both older than the migration
+
+**The live gate could lose forty pairs to one of them.** `_one()` in
+`tests/integration/test_tailoring_live.py` caught `httpx.TimeoutException`,
+`HTTPStatusError` and `TransportError` — and not `LlmError`. So a model that answered but
+would not satisfy the schema escaped `pool.map`, killed the session fixture, and errored all
+seven tests, three lines below a docstring reading *"Never raises out of the run."* It cost
+**eleven minutes of paid work that measured nothing**, and measuring nothing is strictly
+worse than measuring a failure: a failure is a number somebody can act on. `LlmError` is now
+recorded as an error row — deliberately *without* a retry, because `complete_json` already
+re-asked once inside that call and a second attempt re-spends the pair to ask the same model
+the same question.
+
+The clause had been correct for as long as every failure was a network failure. Swapping
+providers turned "the model refused the schema" from theoretical into the first thing that
+happened.
+
+### The other defect, which is the more useful half
+
+**`_ask` called `raise_for_status()` and threw the body away.** `400 Bad Request` reads
+identically for a retired model name, a crossed vendor slug and an unsupported
+`response_format` — and this repo has now hit all three. The status code was never the
+information; the body always was. The live gate duly reported **40 errors, 40 pairs,
+`HTTPStatusError`** and could not say why any of them failed, so the diagnosis had to happen
+outside the harness with `curl`. It now raises `LlmError` carrying the provider's own
+message, and `test_a_provider_error_carries_its_body_and_not_just_its_status` keeps it.
+
+Note what the offline suite could not catch: every unit test mocks the transport, so the
+error path was exercised only with responses this repo wrote itself. The 400 body is a fact
+about a vendor, and no mock was ever going to contain one.
+
+### What this migration does NOT cover, stated so it is not discovered
+
+**DeepSeek serves no `/embeddings` route.** There is no slug to swap; the capability does not
+exist. `EMBED_MODEL` still names an OpenAI model the configured base URL cannot reach, so
+**M4's `match_all` will fail on every 12-hourly beat tick** until embeddings get their own
+provider. That is loud and harmless — it raises rather than writing wrong vectors — but it is
+a scheduled task failing on a timer, not a dormant setting. Local Ollama (`bge-m3`,
+`nomic-embed-text`) is the free answer and costs a migration: `job_embeddings.embedding` is
+`HALFVEC(dim=1536)`, hard-coded to `text-embedding-3-small`'s width, and nothing free emits
+1536.
+
+**CLAUDE.md §7.2 says the tailoring model is a strong one, and `deepseek-v4-flash` is not.**
+That amendment is not written here yet on purpose: §7.2 is law, law is amended against
+evidence, and the evidence is the live gate re-run on the new model. Until that number
+exists, the `.env` comment carries the contradiction rather than the law being quietly edited
+to match whatever was affordable.
+
+---
+
 ## Open, deferred deliberately
 
 | Item | Trigger to revisit | Recorded |

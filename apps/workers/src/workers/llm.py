@@ -244,24 +244,38 @@ def _tool_arguments(message: dict[str, Any]) -> str:
 
 
 def _enforcement(name: str, schema: dict[str, Any]) -> dict[str, Any]:
-    """How this provider is asked to enforce the schema server-side.
+    """How this provider is asked for the schema, and how much that asking is worth.
 
-    Both branches are genuine server-side enforcement — only the spelling differs, and
-    the schema `_strict` produces satisfies both. Verified against the live endpoints on
-    2026-08-10, because the two providers' documentation disagrees with them:
+    **The two branches are not equally strong, and the weaker one is not a fallback — it
+    is the only thing DeepSeek offers.** Verified against the live endpoints 2026-08-10:
 
-      * OpenAI and OpenRouter take `response_format: json_schema`.
+      * OpenAI and OpenRouter take `response_format: json_schema` and genuinely
+        constrain decoding. The module docstring's "enforced server-side" is true there.
       * **DeepSeek refuses it** — `This response_format type is unavailable now`, which
         is what `.env.example` recorded before any of this was written. Its strict
-        schemas live on *tool* definitions behind the `/beta` host. `json_object` is
-        accepted there too, but it enforces nothing: it guarantees parseable JSON and
-        not the right fields, which is the half that matters.
-      * DeepSeek then refuses a **forced** `tool_choice` while thinking is on
-        (`Thinking mode does not support this tool_choice`), and an unforced one is a
-        request rather than a guarantee. Thinking is disabled so the call can be forced.
-        That is the trade taken deliberately: the fabrication validator is the guardrail
-        (§3.3), and it is deterministic Python that does not benefit from the model
-        having reasoned first.
+        schemas live on *tool* definitions behind the `/beta` host.
+      * **DeepSeek's `strict: true` does not constrain generation.** It validates the
+        schema you register, then the model writes what it likes. Asked to violate its
+        own tool schema it returned `{"city": ["Paris", "Lyon"], "population": many}` —
+        a list where the schema says string, and `many` unquoted, so not even JSON. Do
+        not read this branch as an equivalent of the one above.
+      * DeepSeek also refuses a **forced** `tool_choice` while thinking is on
+        (`Thinking mode does not support this tool_choice`), so thinking is disabled to
+        force the call. Unforced, the model may answer in prose and return no arguments
+        at all.
+
+    **So why tools rather than `json_object`, if neither constrains?** Because the tool
+    definition *transmits* the schema and `json_object` transmits nothing — field names,
+    types and nesting would have to be serialised into the prompt by hand, which is a
+    second copy of the schema to keep in step with the pydantic model. Tools carry the
+    real one. The guarantee is different from the transmission, and only the second is
+    on offer here.
+
+    **What actually holds the line on DeepSeek is `complete_json`'s client-side
+    validation and its one re-ask.** On OpenAI that loop is a backstop; here it is the
+    guardrail, and it should be read that way before anyone economises on it. §3.3's
+    fabrication validator is downstream of both and is unaffected — it re-derives every
+    claim from the vault regardless of how the JSON arrived.
 
     Branching on the base URL matches `model_slug_mismatch`, which is the other place a
     provider's spelling leaks in. A capability flag would be a second setting to keep in

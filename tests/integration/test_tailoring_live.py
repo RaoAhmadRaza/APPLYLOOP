@@ -28,6 +28,7 @@ import storage
 from db.models import Evidence, Job, Match, Profile, User
 from schemas.enums import EvidenceOrigin, MatchStatus
 from sqlalchemy.orm import Session
+from workers.llm import LlmError
 from workers.settings import get_settings, model_slug_mismatch
 from workers.tailoring import tailor
 
@@ -174,6 +175,18 @@ def _one(maker: Any, posting: dict[str, Any], profile_name: str) -> dict[str, An
                     min_bullets=settings.tailor_min_bullets,
                 )
                 session.rollback()  # the eval writes nothing durable
+        except LlmError as error:
+            # A model that will not answer the schema is a RESULT, not an outage, and it
+            # is not retried here: `complete_json` already re-asked once inside this call,
+            # so a second attempt re-spends the pair to ask the same model the same
+            # question. Recorded so the run completes and the error count reaches the
+            # ceiling in `test_every_pair_produced_a_result`.
+            #
+            # This clause is missing on 2026-08-10 and one pair took all forty down after
+            # eleven minutes of paid work, three lines below a docstring promising it
+            # never raises. The gate then measured nothing — which is strictly worse than
+            # measuring a failure, because a failure is a number somebody can act on.
+            return {**label, "error": f"LlmError: {error}"}
         except (httpx.TimeoutException, httpx.HTTPStatusError, httpx.TransportError) as error:
             if attempt == _RETRY_ATTEMPTS - 1:
                 return {**label, "error": f"{type(error).__name__}"}
