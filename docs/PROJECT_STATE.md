@@ -475,9 +475,29 @@ shell plus screens 1 and 2, against the endpoints listed under *What runs today*
   letter call only, paragraph-level dropping instead of failing the whole letter (which
   `validate.py` argues against on the grounds that it leaves an argument with a hole), or
   ship the demo résumé-only using the empty state screen 3 already specifies.
-- **The demo's top row.** DEMO_PLAN §6 screen 2 says to check it before the demo, and it
-  is worth doing early: the pool's best match is 82 and the three above it in the current
-  ordering are all tailored.
+- **The demo's job list shows the same posting three times, and this is the biggest
+  demo risk found today.** Read live from `GET /users/{id}/pipeline`:
+
+  ```
+   82  Jobgether             Software Development Engineer III       lever
+   74  MariaDB               Senior Software Engineer - AI Platform  himalayas
+   74  Jobgether             Software Development Engineer III       lever
+   69  Elevenlabs            Forward Deployed Engineer               ashby
+   68  Jobgether             Software Development Engineer III       lever
+   65  Pavago                DevOps Engineer                         workable
+   64  Bluelight Consulting  Senior Software Engineer (Flask/React)   lever
+   64  Bluelight Consulting  Senior Software Engineer (Flask/React)   lever
+  ```
+
+  Three of the top five rows are one job; rows 7 and 8 are another. Distinct
+  `external_id`s, so `dedupe_key` does not collapse them — this is M2's **fuzzy-dedupe
+  trigger, already recorded as fired**, arriving on the screen that opens the demo. It
+  reads as the product failing to do the one thing its dedupe story claims.
+
+  Not fixed today: it is real work (trigram or normalised-title matching) and out of
+  Day 1's scope. **Collapsing it in the read model would be the wrong fix** — a false
+  merge removes a real job, and §6.3 makes survivorship a property of `jobs`, not of a
+  query. Decide before Day 2's job screen: fix the deduper, or curate the demo pool.
 
 **The plan changed on 2026-08-10, deliberately and by the owner.** A working V0 has to be
 demonstrated by the end of that week, so the order is now:
