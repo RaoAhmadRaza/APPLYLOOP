@@ -6,15 +6,22 @@ ending one.
 CLAUDE.md §9 says what "in scope" means. This file says what is *true* — what has been
 proven, with what evidence, and what is known to be broken.
 
-> **2026-08-10, read this first.** The OpenAI balance hit zero, so the provider is now
-> **DeepSeek** (`deepseek-v4-flash`, `/beta`). **M5's gate was green on `gpt-5` and is red on
-> the new model** — 18 seeded cases against a floor of 20, 3 errors against a ceiling of 2,
-> **0 escapes**. It is red on coverage, not on a leak. All three errors are one defect: the
-> model returns evidence handles in a shape pydantic refuses. **Every M5 and M4 number in this
-> file below was measured on OpenAI models and describes nothing that runs today.** Two things
-> did move forward: the Drive mirror clause is **closed** by a real end-to-end run, and the
-> live harness no longer loses a whole run to one bad pair. Embeddings have **no provider** —
-> DeepSeek serves no `/embeddings` route, so `match_all` fails on every beat tick.
+> **2026-08-10, read this first.** The OpenAI balance hit zero, so **chat moved to DeepSeek**
+> (`deepseek-v4-flash`, `/beta`) and **embeddings stayed on OpenAI** (`text-embedding-3-small`,
+> its own key and host). That split is the day's load-bearing change: DeepSeek serves no
+> `/embeddings` route at all, and moving embeddings would have invalidated M4's precision and
+> threshold along with every stored vector. **M4's numbers therefore still hold.**
+>
+> **M5's gate was green on `gpt-5` and is red on `deepseek-v4-flash`** — 18 seeded cases
+> against a floor of 20, 3 errors against a ceiling of 2, **0 escapes**. Red on *coverage*,
+> not on a leak. All three errors are one defect and it is **ours**: `select.py` mints
+> handles as `E1`, and both prompts said "a numbered EVIDENCE list" while never stating the
+> `E`. `gpt-5` inferred it; DeepSeek read what was written. Fixed, **not yet re-measured** —
+> the gate re-run is deliberately last (owner's call, 2026-08-10).
+>
+> **Every M5 number below describes `gpt-5` and nothing that runs today.** M4's describe the
+> current system. Also closed today: the Drive mirror (a real run wrote a non-NULL
+> `gdrive_url`), and the live harness no longer loses a whole run to one bad pair.
 >
 > Last updated: **2026-08-10**. `MATCH_THRESHOLD=20` is set and the matcher has written
 > its first 40 `matches` rows against the live pool. **M5 is built and partly proven**:
@@ -257,7 +264,8 @@ this first.
 ## Test surface
 
 ```
-694 pass, no network            make test  (M5 added 64, incl. test_fabrication_guard)
+705 pass, no network            make test  (M5 added 64, incl. test_fabrication_guard;
+                                the provider split added 7 more, 2026-08-10)
  12 live, all 8 real feeds      make verify-live-feeds       APPLYLOOP_LIVE_FEEDS=1
   9 live, all 6 real ATS boards make verify-live             APPLYLOOP_LIVE_ATS=1
   3 live, aggregator            make verify-live-aggregator  ← SKIPPED, needs a proxy
@@ -267,15 +275,20 @@ this first.
                                                              the local MinIO. First time a
                                                              blob has been through the real
                                                              client rather than a mock.
-  2 live, the Drive mirror      make verify-live-drive       ← SKIPPED, needs Google creds
-  6 live, the M5 gate           make verify-live-tailor      ← NEVER RUN. Refuses a
-                                                             `proposed` case set (BAR.md §6)
+  3 live, the Drive mirror      make verify-live-drive       ← GREEN 2026-08-10, 3/3
+                                                             against the real Drive
+  7 live, the M5 gate           make verify-live-tailor      ← RED 2026-08-10 on
+                                                             deepseek-v4-flash: 5 pass,
+                                                             2 fail (18 cases vs floor 20,
+                                                             3 errors vs ceiling 2),
+                                                             0 escapes. See BAR.md §8.
  12 live, the M4 gate           make verify-live-match       ← GREEN 2026-08-08 (3 runs
                                                              pooled, ~6 min, ~$0.04):
-                                                             12 pass. Gate met.
+                                                             12 pass. Gate met. Still valid:
+                                                             embeddings did not move.
 ```
 
-ruff + format + mypy clean on 153 files. Live suites are deliberately **not** in CI — a
+ruff + format + mypy clean on 172 files. Live suites are deliberately **not** in CI — a
 build must not go red because a third party had a bad afternoon, layer 3 spends a metered
 budget, and the parse suite spends real money.
 
@@ -394,33 +407,44 @@ budget, and the parse suite spends real money.
 
 ## Next
 
-**One thing is left in M5, and it is one command once the OpenAI account has credit.**
+**The plan changed on 2026-08-10, deliberately and by the owner.** A working V0 has to be
+demonstrated by the end of that week, so the order is now:
 
 ```
-make tailor id=<any match still at 'discovered'>     # 68 of them, 2026-08-10
+1. M8 + M9 for the demo, plus thin slices of M6 and M7   docs/DEMO_PLAN.md
+2. M5's gate re-run                                       LAST
 ```
 
-Then check the row: `select type, gdrive_url from documents order by created_at desc limit 2;`
-A non-NULL `gdrive_url` closes the mirror clause and M5's card. One pair costs ~$0.06.
+**This is out of build order and CLAUDE.md §9.1 says what that costs.** It is a decision, not
+a drift — recorded here so nobody reading later mistakes it for one. What is being deferred,
+precisely: Telegram (M6 proper), a proven unattended run (M7 proper), and the adversarial
+verification of documents on the model that now writes them (M5's gate).
 
-Everything either side of it is proven. `make verify-live-drive` passes 3/3 against the real
-Drive; two integration tests cover the wiring in both directions. The only thing never
-observed is the two joined in one real run.
+**What that last one means in practice:** the demo can generate documents no adversarial run
+has checked on `deepseek-v4-flash`. The offline `test_fabrication_guard` is green and the
+validator is unchanged, so the *mechanism* is intact — what is unmeasured is the new model's
+behaviour against it. Acceptable for a demo to humans. **Not acceptable before a document
+reaches a real employer.**
 
-**The blocker was misdiagnosed, and the correction matters.** It was recorded as a rate
-limit that would clear on its own. A direct probe on 2026-08-10 returned
-`insufficient_quota` / `credit_balance_exhausted` — *"You have no credits remaining"* — which
-is a **zero balance, not a tier cap**. Waiting does nothing; someone has to add credit. The
-symptom (429 on both the strong and the cheap model) is identical either way, which is how a
-whole day of "wait for the reset" was possible. **Read the body, not the status code.**
+**One command closes M5 whenever the gate is run:**
 
-The credentials are in place: the mirror runs as the **user over OAuth**, not as a service
-account, because Shared Drives are a Workspace feature a personal account does not have. See
-DECISIONS → M5 for why that assumption had to be rebuilt.
+```
+make verify-live-tailor      # ~13 min, ~$2 on deepseek-v4-flash
+```
 
-Everything else on M5's card is proven: the live gate is 7/7, the case set is confirmed
-`human:MAR`, and all 48 documents run 4 wrote were read against the vaults with zero unbacked
-claims.
+The prompt defect behind run 6's three errors is fixed (`c8e431f`) and **not yet
+re-measured**. If it worked, both red clauses clear together: errors 3 → 1 (under the ceiling
+of 2) and cases 18 → 20 (meeting the floor).
+
+**The mirror clause is closed.** A real `make tailor` on 2026-08-10 wrote a document with a
+non-NULL `gdrive_url` — model → validator → PDF → MinIO → Drive → row, the first end-to-end
+trip. `make verify-live-drive` is 3/3 against the real Drive.
+
+**Two diagnostic notes from the same day, both cheap to forget and expensive to re-learn.**
+The 429 that stopped everything was `insufficient_quota` / `credit_balance_exhausted` — a
+**zero balance, not a rate cap** — and it reads identically to one. *Read the body, not the
+status code.* The same lesson repeated on a `400`: `_ask` discarded the response body, so
+forty gate failures could not say why. Both now surface the provider's own message.
 
 **The Drive mirror does not block the gate.** Same shape as R2 for M3: the clause is
 proven last, when credentials exist, and nothing else waits on it.
