@@ -241,6 +241,58 @@ obvious moves, and a future session will otherwise propose them again confidentl
 The human read required by §1 is logged here too: one line per live run, with the reader's
 initials, the number of documents read, and what was found.
 
+### LOGGED — runs 5 and 6: the provider changed, and the set has now been queried six times (2026-08-10)
+
+**The model is no longer the one every number above was measured on.** The OpenAI balance
+reached zero, so `TAILOR_MODEL` is `deepseek-v4-flash` and `LLM_BASE_URL` is DeepSeek's
+`/beta` host. **Every figure in the run-4 entry below describes `gpt-5` and describes nothing
+that runs today.** Read them as history, not as status.
+
+**Run 5 measured nothing and is logged anyway**, because a run that spends money and returns
+no number is a fact about the harness. All 40 pairs errored on `HTTPStatusError` — DeepSeek
+rejects `response_format: json_schema` — and then a later pair raised `LlmError`, which
+`_one()` did not catch, so the fixture died and all seven tests errored. Eleven minutes, no
+measurement. Both defects are fixed (`dbb25bb`); neither touched a bar.
+
+**Run 6, the first that measured anything on the new provider:**
+
+```
+live seeded cases    18   floor 20        FAIL   inconclusive, NOT a leak
+escapes               0   bar 0           held   by class F1:3 F2:4 F3:3 F4:4 F5:4
+                                                 0 in 18 bounds the rate at ~17%
+pairs attempted      40
+errors                3   ceiling 2       FAIL
+block rate         0.16   ceiling 0.20    PASS
+retention          0.99   spread 0.17     PASS
+letters not written 1.00  reported, not gated    — was 0.50 on gpt-5
+cost/application $0.0446  ceiling $0.50   PASS   $1.65 over 37, 749s
+```
+
+**Two red clauses, one cause.** All three errors are the same defect and every failing
+location is an evidence handle — `('bullets', 0, 'evidence_id')`, `('paragraphs', 1,
+'evidence_ids', 0)`. `deepseek-v4-flash` returns the handle in a shape pydantic refuses,
+twice running. Two of the three were adversarial pairs, so the seeded count fell 20 → 18 and
+failed §2's floor as a side effect. **The gate is red on coverage and errors, not on an
+escape:** nothing got through, across all five classes.
+
+**Rejected, and named so they are not proposed again as fresh ideas.** `MAX_ERRORS` 2 → 3
+would clear one clause. `MIN_LIVE_CASES` 20 → 18 would clear the other. Widening
+`TailoredBullet.evidence_id` to accept a non-string would clear both at once and could be
+argued as provider tolerance. Each is one line and each is defensible alone — which is what
+§8's whole preamble says adaptive analysis feels like from the inside. **This is query six of
+the same twenty pairs.** The set cannot absorb a bar edit made to fit a run.
+
+**The change that is legitimate is the model, and it is a correction rather than a tuning.**
+CLAUDE.md §7.2 requires a *strong* model for tailoring. `v4-flash` is not one; choosing it was
+the deviation, and `deepseek-v4-pro` is on the same key behind the same mechanism. Trying it
+changes an input the law already specifies, not a threshold the result is measured against.
+
+**Not blocking the gate, and worse than any number here: no cover letter was written at all.**
+1.00, against 0.50 on `gpt-5`. §2 reports this rather than gating it, and that stays correct —
+the clause asks whether the system invented anything, and it did not. But a letter stage that
+produces nothing on every honest pair is a product failure even with a green fabrication
+count, and M6 inherits it.
+
 ### LOGGED — the human read of run 4: 0 escapes in 48 documents, `human:MAR` (2026-08-09)
 
 **§1's second non-circular measure, and §2's *escapes found by human read* row, both now have

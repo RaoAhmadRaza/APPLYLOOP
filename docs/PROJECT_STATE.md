@@ -6,6 +6,16 @@ ending one.
 CLAUDE.md §9 says what "in scope" means. This file says what is *true* — what has been
 proven, with what evidence, and what is known to be broken.
 
+> **2026-08-10, read this first.** The OpenAI balance hit zero, so the provider is now
+> **DeepSeek** (`deepseek-v4-flash`, `/beta`). **M5's gate was green on `gpt-5` and is red on
+> the new model** — 18 seeded cases against a floor of 20, 3 errors against a ceiling of 2,
+> **0 escapes**. It is red on coverage, not on a leak. All three errors are one defect: the
+> model returns evidence handles in a shape pydantic refuses. **Every M5 and M4 number in this
+> file below was measured on OpenAI models and describes nothing that runs today.** Two things
+> did move forward: the Drive mirror clause is **closed** by a real end-to-end run, and the
+> live harness no longer loses a whole run to one bad pair. Embeddings have **no provider** —
+> DeepSeek serves no `/embeddings` route, so `match_all` fails on every beat tick.
+>
 > Last updated: **2026-08-10**. `MATCH_THRESHOLD=20` is set and the matcher has written
 > its first 40 `matches` rows against the live pool. **M5 is built and partly proven**:
 > the fabrication validator, the renderer and the stage are green offline (694 tests),
@@ -30,7 +40,8 @@ proven, with what evidence, and what is known to be broken.
 | **M2** | Aggregators + dedupe | ✅ **proven** 2026-08-07, one clause pending | See below. |
 | **M3** | Profiles & résumé parsing | ✅ **proven** 2026-08-07 | Live gate **24/24 against a real model** (OpenAI, `gpt-5.4-nano` class). See below. |
 | **M4** | Matching | ✅ **proven 2026-08-08 — 12/12, with a stated caveat** | Set is 121 human-confirmed pairs (`human:MAR`, 0 borderline, 40 relevant). Threshold **20**, chosen on the pooled tuning split. **Pooled reporting precision 0.86, recall 0.89, n=69, 95% CI [0.75, 0.92].** All three runs individually cleared 0.80 (0.82 / 0.83 / 0.91), so the pass is not an artefact of pooling. Filter recall 1.00 (40/40), cost $0.304/1k against a $2.00 ceiling, grounding 0.98. **The bar lies inside the interval** — see the caveat below and BAR.md §8. |
-| **M5** | Documents | 🟡 **three clauses of four proven; blocked only on Google credentials** 2026-08-09 | Live gate **7/7**: 20 seeded cases, **0 escapes**, 0 errors over 40 pairs, résumé block rate 0.05 vs 0.20, retention 0.99, $0.0573/application vs $0.50. **Human read of all 48 documents: 0 unbacked claims, `human:MAR`** — the non-circular measure §1 requires. 696 offline tests, `test_fabrication_guard` 17/17. **Outstanding: the mirror has never uploaded**, and needs a Shared Drive folder plus a service-account key. Nothing else blocks it. |
+| **M5** | Documents | 🔴 **regressed 2026-08-10 — the provider changed and the gate went red.** The mirror clause is now **closed** (a real run wrote a non-NULL `gdrive_url`), and the clause that was green is not: `test_fabrication_guard` fails on `deepseek-v4-flash` at 18 live cases against a floor of 20, with 3 errors against a ceiling of 2. **Escapes are still 0** — it is red on coverage, not on a leak. Every number in the cell below describes `gpt-5`, which no longer runs. See *M5 gate* and BAR.md §8 runs 5–6. |
+| ~~M5~~ | ~~Documents (on `gpt-5`, historical)~~ | ⬛ **superseded 2026-08-10** | Live gate **7/7**: 20 seeded cases, **0 escapes**, 0 errors over 40 pairs, résumé block rate 0.05 vs 0.20, retention 0.99, $0.0573/application vs $0.50. **Human read of all 48 documents: 0 unbacked claims, `human:MAR`** — the non-circular measure §1 requires. 696 offline tests, `test_fabrication_guard` 17/17. **Outstanding: the mirror has never uploaded**, and needs a Shared Drive folder plus a service-account key. Nothing else blocks it. |
 | M6–M11 | — | ⬜ | Strict chain from M5. |
 
 ### M5 gate, item by item
