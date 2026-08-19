@@ -1,0 +1,10 @@
+node_modules
+.next
+.env.local
+
+# Build caches, not sources.
+tsconfig.tsbuildinfo
+
+# Re-included: the root .gitignore excludes `.env.*`, and its `!.env.example`
+# negation does not cover this template.
+!.env.local.example
