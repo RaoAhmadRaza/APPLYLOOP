@@ -59,3 +59,17 @@ class PipelineRow(Schema):
     # the score because it is the number tailoring can actually move.
     keywords_matched: int | None = None
     keywords_total: int | None = None
+    # Same event, the rest of its counters: how much of the model's draft survived the
+    # fabrication validator. Reported beside the score for the same reason as the
+    # keyword counters above — it's a number the demo can point at.
+    bullets_kept: int | None = None
+    bullets_stripped: int | None = None
+    skills_kept: int | None = None
+    fabricated_skills: int | None = None
+    generated_at: datetime | None = None
+    # From the latest `tailor.blocked` event. A match the validator refused stays at
+    # `discovered` forever (§3.3 — nothing may promote an unbacked document to
+    # `tailored`), so this is the only signal a reader has that a tailor attempt ran
+    # and was rejected rather than never having been tried. Absent = never attempted,
+    # or the latest attempt succeeded.
+    blocked_reason: str | None = None
