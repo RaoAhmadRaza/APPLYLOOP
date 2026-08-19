@@ -306,11 +306,13 @@ def test_a_re_parse_keeps_claims_the_user_added_by_hand(
     assert result.claims_stored > 0
 
 
-def test_a_re_parse_does_not_overwrite_a_column_the_user_set(
+def test_a_re_parse_overwrites_a_previously_promoted_column(
     session: Session, profile: Profile, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A person who corrected their own seniority has said something the résumé cannot
-    contradict. The promotion rule fills only what is empty."""
+    """`parse_profile` only ever runs in response to a résumé upload — there is no
+    unrelated re-parse to protect a stale value from. A résumé swap for a genuinely
+    different person (the live case that found this) must not leave the old person's
+    seniority and location silently governing every match after it."""
     profile.seniority = Seniority.PRINCIPAL.value
     profile.locations = ["Remote", "Berlin"]
     session.flush()
@@ -318,10 +320,10 @@ def test_a_re_parse_does_not_overwrite_a_column_the_user_set(
 
     result = parse.parse_profile(session, profile)
 
-    assert profile.seniority == Seniority.PRINCIPAL.value
-    assert profile.locations == ["Remote", "Berlin"]
-    assert "seniority" not in result.promoted
-    assert "locations" not in result.promoted
+    assert profile.seniority != Seniority.PRINCIPAL.value
+    assert profile.locations != ["Remote", "Berlin"]
+    assert "seniority" in result.promoted
+    assert "locations" in result.promoted
 
 
 # ------------------------------------------------------------------------ the edges

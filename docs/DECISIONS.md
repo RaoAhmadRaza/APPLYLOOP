@@ -1694,6 +1694,83 @@ run in demo week** — three runs, real money, and the number is not on the crit
 
 ---
 
+## The 429 that was never a quota, and the retry that was never wired (2026-08-19)
+
+A first match run against a cold pool cannot finish, and three sessions read the reason
+wrong. Recorded because every part of the diagnosis was plausible and none of it was
+right until the response body was read.
+
+**What the provider actually said**, captured verbatim from the worker on 2026-08-19:
+
+```
+429 from https://api.openai.com/v1/embeddings:
+  "Rate limit reached for text-embedding-3-small ... on tokens per min (TPM):
+   Limit 1000000, Used 878603, Requested 138109. Please try again in 1.002s."
+  code: rate_limit_exceeded
+```
+
+`rate_limit_exceeded`, **not** `insufficient_quota`. The balance was fine the whole time —
+a live probe returned 200 with `x-ratelimit-remaining-tokens: 999999`. The 2026-08-10 entry
+teaches "read the body, not the status code" for exactly this endpoint and the lesson still
+had to be learned twice, because a 429 logged without its body is indistinguishable from
+the zero-balance one that came before it.
+
+**The arithmetic makes the refusal ordinary, not exceptional.** 9,728 candidates at ~843
+embed tokens each is 8.2M tokens against a ceiling of 1M per minute. A cold pool is refused
+partway through *by construction*. This is the normal shape of a first run for any new user
+or any profile whose filters widen — not an incident.
+
+### Three defects, and the third is why the first two hid
+
+1. **Nothing retried.** `_raise_for_body` converts every error status into `LlmError`, a
+   `RuntimeError`. `match_profile` declares `autoretry_for=(httpx.HTTPError,)`. The two
+   never intersect, so a 429 failed the task outright — while `llm.embed`'s own docstring
+   said a retry loop was unnecessary *because Celery's backoff sat above it*. The comment
+   described a mechanism that could not fire.
+
+2. **A failed run threw away everything it had bought.** `ensure` held every batch in the
+   task's single trailing transaction. One refusal rolled back all of them, so three runs
+   on 2026-08-18 (16:24, 16:29, 16:39) left the table at 2,126 rows and no `match.scored`
+   event on any attempt. Vectors are the one thing in this stage that is already paid for
+   and independently valid; holding them hostage to the rest of the run finishing was the
+   error.
+
+3. **The failure was invisible in `events`.** `match.filtered` is recorded before `ensure`
+   and committed after it, so a run that died in between recorded *nothing at all*. The
+   pipeline's `last_run_at` simply stayed at the previous success, which reads as "no run
+   was triggered" rather than "three runs failed". §3.7 says a stage that quietly does
+   nothing is the failure mode; this was that, caused by transaction scope rather than by
+   a missing `record()` call.
+
+### What changed
+
+- `embed.ensure` **commits after each batch** — the one function in the stage that commits,
+  and the docstring says so. A refusal now costs the batch in flight, never the run.
+- `llm.embed` retries **a 429 and nothing else**, `RATE_LIMIT_ATTEMPTS = 6`, honouring the
+  provider's `retry-after` header and falling back to doubling. Bounded, so a genuinely
+  capped key still fails loudly.
+- Retry lives at the request, not the task: a task-level retry re-runs the 45-second
+  candidate query and the whole scoring loop to recover one batch the provider asked us to
+  wait a second for.
+
+**Measured after, one run, no manual step:** 9,728 candidates, 6,371 embedded, 5,370,128
+embed tokens, 0 failures, 611.9 s, 23 above threshold. The preceding partial run's 2,500
+vectors survived its own failure and were not re-bought — which is the whole claim, and the
+regression test (`test_a_provider_failure_keeps_the_batches_already_paid_for`) asserts it by
+rolling the session back and counting what is left.
+
+**Why the existing tests could not catch any of this.** Every embedding test stubs the
+provider with a function that cannot fail, so no test had ever asked what a raise mid-`ensure`
+leaves behind — the fake had no failure mode to exercise. And the retry gap was a type
+mismatch between two files that never import each other: `autoretry_for` in the task, the
+exception class in `llm`. Both are now covered, and both tests are cheap and offline.
+
+**Trigger to revisit:** pacing instead of reacting. Six tries spans the one-minute window,
+so a pool several times larger than today's could still exhaust them. The fix at that point
+is to spread batches under the TPM rather than to raise the attempt count.
+
+---
+
 ## Open, deferred deliberately
 
 | Item | Trigger to revisit | Recorded |

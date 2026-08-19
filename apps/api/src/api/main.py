@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 
 from db.session import make_async_engine, make_async_sessionmaker
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from redis.asyncio import Redis
 
 from api.routers import build_crud_routers, documents, health, matches, pipeline, resume
@@ -36,6 +37,13 @@ def create_app(cfg: Settings | None = None) -> FastAPI:
         lifespan=lifespan,
     )
     app.state.settings = cfg
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cfg.cors_origins,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     app.include_router(health.router)
     # Before the CRUD routers, all four: each mounts a literal sub-path under a prefix the

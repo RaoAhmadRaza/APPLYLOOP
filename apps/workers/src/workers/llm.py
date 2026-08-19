@@ -29,6 +29,7 @@ the host and key it is given; `embed_url` / `embed_key` on `Settings` fall back 
 chat pair, so a single-provider deployment sets nothing new.
 """
 
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -42,6 +43,16 @@ from workers.settings import get_settings
 # own schema twice, the prompt is wrong and burning credit will not fix it. Celery's
 # retries sit above this and handle transport failures.
 MAX_ATTEMPTS = 2
+
+# Tries per embedding batch against a rate limit, and *only* against a rate limit.
+#
+# A token-per-minute ceiling is arithmetic, not an incident: a cold pool of 8,871 jobs
+# needs several million tokens and the limit is a million a minute, so a first run is
+# refused partway through by construction. The provider says how long to wait — measured
+# 2026-08-19, `Please try again in 1.002s` — so waiting is the whole remedy, and six
+# tries spans more than the one-minute window the limit resets on. Bounded rather than
+# indefinite so a genuinely capped key fails loudly instead of sleeping forever.
+RATE_LIMIT_ATTEMPTS = 6
 
 # Sent by OpenRouter as attribution. Honest identification, same policy as the scraper's
 # User-Agent: these are public endpoints and we are not pretending to be a browser.
@@ -146,8 +157,16 @@ def complete_json[T: BaseModel](
 def embed(texts: list[str]) -> tuple[list[list[float]], int]:
     """Embed a batch. Returns the vectors in input order, and the tokens they cost.
 
-    A tuple rather than the `usage` sink `complete_json` takes: there is no retry loop
-    here and no existing caller whose signature has to survive, so the smaller diff wins.
+    A tuple rather than the `usage` sink `complete_json` takes: no existing caller whose
+    signature has to survive, so the smaller diff wins.
+
+    **Retries a 429, and nothing else.** The comment this replaces said Celery's backoff
+    sat above and made a loop here unnecessary; that was wrong twice over. A 429 leaves
+    here as `LlmError`, which is a `RuntimeError` and so never matched
+    `match_profile`'s `autoretry_for=(httpx.HTTPError,)` — there was no retry at any
+    level. And a task-level retry is the wrong altitude anyway: it re-runs the
+    candidate query and the scoring loop to recover one batch the provider asked us to
+    wait a second for.
 
     Raises `LlmError` if the provider returns a different number of vectors than it was
     given — a length mismatch would silently pair job A's text with job B's vector, and
@@ -165,18 +184,23 @@ def embed(texts: list[str]) -> tuple[list[list[float]], int]:
     # `embed_url`, not `llm_base_url`: embeddings may live at another provider entirely,
     # and since 2026-08-10 they do — DeepSeek serves no /embeddings route.
     with _client(settings.embed_url, key) as http:
-        response = http.post(
-            "/embeddings",
-            json={
-                "model": settings.embed_model,
-                "input": texts,
-                # Asked for, never assumed. `gemini-embedding-001` returns 3072 by default
-                # and the column is EMBEDDING_DIM wide, so taking the default would fail
-                # every insert. Stating the width we require also documents it at the one
-                # place the request is made — `_checked()` still verifies what came back.
-                "dimensions": EMBEDDING_DIM,
-            },
-        )
+        for attempt in range(RATE_LIMIT_ATTEMPTS):
+            response = http.post(
+                "/embeddings",
+                json={
+                    "model": settings.embed_model,
+                    "input": texts,
+                    # Asked for, never assumed. `gemini-embedding-001` returns 3072 by
+                    # default and the column is EMBEDDING_DIM wide, so taking the default
+                    # would fail every insert. Stating the width we require also documents
+                    # it at the one place the request is made — `_checked()` still
+                    # verifies what came back.
+                    "dimensions": EMBEDDING_DIM,
+                },
+            )
+            if response.status_code != 429 or attempt == RATE_LIMIT_ATTEMPTS - 1:
+                break
+            time.sleep(_retry_after(response, attempt))
     _raise_for_body(response)
     payload = response.json()
 
@@ -200,6 +224,22 @@ def embed(texts: list[str]) -> tuple[list[list[float]], int]:
     # `embed_tokens > 0` as its anti-stub proof and will fail on that alone; see
     # docs/PROJECT_STATE.md. `or {}` because absent and null must behave the same.
     return vectors, int((payload.get("usage") or {}).get("prompt_tokens", 0))
+
+
+def _retry_after(response: httpx.Response, attempt: int) -> float:
+    """How long the provider asked us to wait, falling back to doubling.
+
+    Its own number beats ours: it knows when the window rolls over and we are guessing.
+    A malformed header falls back rather than raising, because failing to parse a hint
+    is not a reason to abandon a batch that would have succeeded a second later.
+    """
+    header = response.headers.get("retry-after")
+    if header:
+        try:
+            return float(header)
+        except ValueError:
+            pass
+    return float(2**attempt)
 
 
 def client() -> httpx.Client:

@@ -15,6 +15,9 @@
 
 [tool.uv.workspace]
 members = ["apps/*", "packages/*"]
+# apps/web (Next.js) and apps/extension (MV3) are JS, not Python — no pyproject.toml,
+# so the glob above matches them without excluding them here.
+exclude = ["apps/web", "apps/extension"]
 
 [tool.uv.sources]
 db = { workspace = true }

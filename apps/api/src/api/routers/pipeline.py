@@ -29,9 +29,11 @@ from api.settings import get_settings
 
 router = APIRouter(tags=["pipeline"])
 
-# The event the tailoring stage writes its counters on. A string rather than an import:
+# The events the tailoring and matching stages write. Strings rather than an import:
 # `apps/api` may not import `apps/workers` (§3.1), and the event type is the contract.
 _TAILOR_GENERATED = "tailor.generated"
+_TAILOR_BLOCKED = "tailor.blocked"
+_MATCH_SCORED = "match.scored"
 
 
 @router.get("/users/{user_id}/pipeline", response_model=Page[PipelineRow])
@@ -68,7 +70,7 @@ async def read_pipeline(
 
     match_ids = [match.id for match, _ in rows]
     documents = await _documents(session, match_ids)
-    keywords = await _keywords(session, match_ids)
+    tailor_status = await _tailor_status(session, match_ids)
 
     return Page[PipelineRow](
         items=[
@@ -81,7 +83,7 @@ async def read_pipeline(
                 reasons_json=match.reasons_json,
                 job=PipelineJob.model_validate(job),
                 documents=documents.get(match.id, []),
-                **keywords.get(match.id, {}),
+                **tailor_status.get(match.id, {}),
             )
             for match, job in rows
         ],
@@ -110,13 +112,15 @@ async def _documents(
     return found
 
 
-async def _keywords(session: SessionDep, match_ids: list[UUID]) -> dict[UUID, dict[str, int]]:
-    """The latest `tailor.generated` counters per match, if it has been tailored.
+async def _tailor_status(session: SessionDep, match_ids: list[UUID]) -> dict[UUID, dict]:
+    """The latest tailoring outcome per match — either `tailor.generated`'s keyword
+    counters, or `tailor.blocked`'s reason.
 
-    Read from `events` rather than a column because these are a report and not state:
-    §6.2 says changing a column's meaning is a new column plus a backfill, and a number
-    that only exists to be looked at has not earned one. The stage already writes it here
-    beside the bullet counts.
+    Read from `events` rather than a column for the same reason as before: these are a
+    report, not state, and a re-tailor is not a schema change. The two event types are
+    mutually exclusive per attempt, so each replaces the running dict entry outright
+    (never merges) — a later successful retry must clear an earlier block, and vice
+    versa, not leave stale fields sitting beside the new ones.
     """
     if not match_ids:
         return {}
@@ -124,21 +128,63 @@ async def _keywords(session: SessionDep, match_ids: list[UUID]) -> dict[UUID, di
     wanted = {str(value) for value in match_ids}
     rows = await session.scalars(
         select(Event)
-        .where(Event.type == _TAILOR_GENERATED)
+        .where(Event.type.in_([_TAILOR_GENERATED, _TAILOR_BLOCKED]))
         .where(Event.payload_json["match_id"].astext.in_(wanted))
         # Ascending, so a re-tailor's later event overwrites the earlier one below.
         .order_by(Event.id)
     )
 
-    found: dict[UUID, dict[str, int]] = {}
+    found: dict[UUID, dict] = {}
     for row in rows:
         payload = row.payload_json
+        match_id = UUID(payload["match_id"])
+        if row.type == _TAILOR_BLOCKED:
+            found[match_id] = {"blocked_reason": payload["reason"]}
+            continue
         if "keywords_total" not in payload:
             # Written before the counters existed. Absent reads as "not measured", which
             # is the truth; zero would read as "measured, and nothing matched".
             continue
-        found[UUID(payload["match_id"])] = {
+        found[match_id] = {
             "keywords_matched": payload["keywords_matched"],
             "keywords_total": payload["keywords_total"],
+            "bullets_kept": payload.get("bullets_kept"),
+            "bullets_stripped": payload.get("bullets_stripped"),
+            "skills_kept": payload.get("skills_kept"),
+            "fabricated_skills": payload.get("fabricated_skills"),
+            "generated_at": row.created_at,
         }
     return found
+
+
+@router.get("/users/{user_id}/pipeline/summary")
+async def read_pipeline_summary(user_id: UUID, session: SessionDep) -> dict:
+    """The latest `match.scored` run for this user — the funnel a scored list came
+    from, and when it last ran. Not part of `PipelineRow`: this is one number per user,
+    not one per row, and `Page` is a shared envelope every CRUD router also returns —
+    it should not carry a field only this endpoint understands.
+    """
+    row = await session.scalar(
+        select(Event)
+        .where(Event.user_id == user_id, Event.type == _MATCH_SCORED)
+        .order_by(Event.id.desc())
+        .limit(1)
+    )
+    if row is None:
+        return {
+            "last_run_at": None,
+            "candidates": None,
+            "embedded_new": None,
+            "shortlisted": None,
+            "above_threshold": None,
+            "skipped_below": None,
+        }
+    payload = row.payload_json
+    return {
+        "last_run_at": row.created_at,
+        "candidates": payload.get("candidates"),
+        "embedded_new": payload.get("embedded_new"),
+        "shortlisted": payload.get("shortlisted"),
+        "above_threshold": payload.get("above_threshold"),
+        "skipped_below": payload.get("skipped_below"),
+    }

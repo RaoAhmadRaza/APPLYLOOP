@@ -21,6 +21,8 @@ from api.settings import get_settings
 # `tests/integration/test_profile_upload.py` asserts it matches the registered task.
 PARSE_PROFILE = "workers.tasks.profiles.parse_profile"
 TAILOR_MATCH = "workers.tasks.tailoring.tailor_match"
+MATCH_PROFILE = "workers.tasks.matching.match_profile"
+SUGGEST_PREFS = "workers.tasks.profiles.suggest_prefs"
 
 _client: Celery | None = None
 

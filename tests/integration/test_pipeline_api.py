@@ -345,3 +345,140 @@ async def test_no_storage_and_no_mirror_is_a_503_not_a_crash(
 
 async def test_downloading_an_unknown_document_is_404(client: AsyncClient) -> None:
     assert (await client.get(f"/documents/{uuid4()}/download")).status_code == 404
+
+
+# ---- tailoring counters on a row ----------------------------------------------------
+
+
+async def _event(
+    client: AsyncClient, event_type: str, payload: dict[str, Any], user_id: str | None = None
+) -> dict[str, Any]:
+    response = await client.post(
+        "/events", json={"type": event_type, "payload_json": payload, "user_id": user_id}
+    )
+    assert response.status_code == 201, response.text
+    body: dict[str, Any] = response.json()
+    return body
+
+
+async def test_a_generated_row_carries_the_full_tailoring_report(client: AsyncClient) -> None:
+    """Every counter `tailor.generated` writes, not just the keyword pair — this is
+    what Screen 4's side panel reads."""
+    user_id = await _user(client)
+    job = await _job(client, "Tailored")
+    match = await _match(client, user_id, job["id"], score=82, status="tailored")
+    await _event(
+        client,
+        "tailor.generated",
+        {
+            "match_id": match["id"],
+            "keywords_matched": 3,
+            "keywords_total": 5,
+            "bullets_kept": 4,
+            "bullets_stripped": 1,
+            "skills_kept": 6,
+            "fabricated_skills": 0,
+        },
+    )
+
+    body = (await client.get(f"/users/{user_id}/pipeline")).json()
+    row = body["items"][0]
+
+    assert row["keywords_matched"] == 3
+    assert row["keywords_total"] == 5
+    assert row["bullets_kept"] == 4
+    assert row["bullets_stripped"] == 1
+    assert row["skills_kept"] == 6
+    assert row["fabricated_skills"] == 0
+    assert row["generated_at"] is not None
+
+
+async def test_a_blocked_row_carries_the_reason_and_no_counters(client: AsyncClient) -> None:
+    user_id = await _user(client)
+    job = await _job(client, "Blocked")
+    match = await _match(client, user_id, job["id"], score=82, status="discovered")
+    await _event(
+        client,
+        "tailor.blocked",
+        {"match_id": match["id"], "reason": "100% of bullets were untraceable, ceiling 30%"},
+    )
+
+    body = (await client.get(f"/users/{user_id}/pipeline")).json()
+    row = body["items"][0]
+
+    assert row["blocked_reason"] == "100% of bullets were untraceable, ceiling 30%"
+    assert row["keywords_matched"] is None
+    assert row["bullets_kept"] is None
+
+
+async def test_a_later_retry_clears_an_earlier_block(client: AsyncClient) -> None:
+    """A block is a finished, rejected attempt, not permanent — a later success must
+    replace it outright, not sit beside it."""
+    user_id = await _user(client)
+    job = await _job(client, "Retried")
+    match = await _match(client, user_id, job["id"], score=82, status="tailored")
+    await _event(client, "tailor.blocked", {"match_id": match["id"], "reason": "first try failed"})
+    await _event(
+        client,
+        "tailor.generated",
+        {
+            "match_id": match["id"],
+            "keywords_matched": 2,
+            "keywords_total": 4,
+            "bullets_kept": 3,
+            "bullets_stripped": 0,
+            "skills_kept": 5,
+            "fabricated_skills": 0,
+        },
+    )
+
+    body = (await client.get(f"/users/{user_id}/pipeline")).json()
+    row = body["items"][0]
+
+    assert row["blocked_reason"] is None
+    assert row["keywords_matched"] == 2
+
+
+# ---- the funnel summary --------------------------------------------------------------
+
+
+async def test_pipeline_summary_reads_the_latest_match_scored_event(client: AsyncClient) -> None:
+    user_id = await _user(client)
+    await _event(
+        client,
+        "match.scored",
+        {
+            "candidates": 952,
+            "embedded_new": 952,
+            "shortlisted": 40,
+            "above_threshold": 12,
+            "skipped_below": 28,
+        },
+        user_id=user_id,
+    )
+
+    body = (await client.get(f"/users/{user_id}/pipeline/summary")).json()
+
+    assert body["candidates"] == 952
+    assert body["above_threshold"] == 12
+    assert body["skipped_below"] == 28
+    assert body["last_run_at"] is not None
+
+
+async def test_pipeline_summary_with_no_runs_returns_nulls(client: AsyncClient) -> None:
+    user_id = await _user(client)
+
+    body = (await client.get(f"/users/{user_id}/pipeline/summary")).json()
+
+    assert body["last_run_at"] is None
+    assert body["candidates"] is None
+
+
+async def test_pipeline_summary_ignores_another_users_run(client: AsyncClient) -> None:
+    mine = await _user(client)
+    yours = await _user(client)
+    await _event(client, "match.scored", {"candidates": 10}, user_id=yours)
+
+    body = (await client.get(f"/users/{mine}/pipeline/summary")).json()
+
+    assert body["candidates"] is None

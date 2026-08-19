@@ -70,6 +70,16 @@ def test_the_tasks_are_registered_under_their_dotted_names(celery_app: Any, name
     assert name in celery_app.tasks
 
 
+def test_the_api_constant_matches_the_registered_name(celery_app: Any) -> None:
+    """`POST /profiles/{id}/match` enqueues by this string, same as `PARSE_PROFILE` and
+    `TAILOR_MATCH` — a rename that misses `api.queue.MATCH_PROFILE` leaves the manual
+    trigger button queuing a message no worker will ever pick up."""
+    from api.queue import MATCH_PROFILE
+
+    assert MATCH_PROFILE == "workers.tasks.matching.match_profile"
+    assert MATCH_PROFILE in celery_app.tasks
+
+
 def test_matching_is_on_the_schedule(celery_app: Any) -> None:
     """Unlike parsing, this one is periodic: new jobs arrive on a clock, so matches do."""
     scheduled = {entry["task"] for entry in celery_app.conf.beat_schedule.values()}

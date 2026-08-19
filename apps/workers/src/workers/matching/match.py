@@ -62,7 +62,13 @@ class MatchResult:
 def match_profile(
     session: Session, profile: Profile, *, threshold: int, top_n: int, company_cap: int
 ) -> MatchResult:
-    """Score one profile against the pool. Commits nothing.
+    """Score one profile against the pool. Writes matches for the caller to commit.
+
+    The one exception is `embed.ensure`, which commits each batch of vectors as it buys
+    them so a refused provider cannot roll back the ones already paid for. Nothing it
+    commits is a match — the scoring loop below has not run yet — so a run that dies in
+    the middle leaves vectors and no verdicts, which is the state the next run resumes
+    from rather than one it has to repair.
 
     `threshold` is a required argument rather than a setting read here, so that the
     Part 14 interlock lives in exactly one place — the task — and this function cannot

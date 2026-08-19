@@ -24,14 +24,23 @@ from typing import Annotated
 from uuid import UUID
 
 import storage
-from db.models import Profile
+from db.models import Event, Match, Profile
 from fastapi import APIRouter, File, HTTPException, UploadFile, status
+from schemas.enums import MatchStatus
 from schemas.profile import ProfileRead
+from sqlalchemy import select, update
 
 from api import queue
 from api.deps import SessionDep
 
 router = APIRouter(prefix="/profiles", tags=["profiles"])
+
+# Written by workers.tasks.profiles.parse_profile on a genuine per-profile failure
+# (not workers.tasks.profiles.parse_profile's "no LLM key" skip, which carries no
+# user_id and would show every profile the same global state). A string rather than
+# an import: `apps/api` may not import `apps/workers` (§3.1).
+_PARSE_FAILED = "profile.parse_failed"
+_PREFS_SUGGESTED = "profile.prefs_suggested"
 
 # Only what `extract.to_markdown` can actually read. Rejecting at the boundary means a
 # .pages file fails in a request with a clear message, rather than an hour later in a
@@ -102,3 +111,108 @@ async def upload_resume(
     # call time — an import-bound reference cannot be substituted by a test.
     queue.enqueue(queue.PARSE_PROFILE, str(profile.id))
     return profile
+
+
+@router.get("/{profile_id}/parse-status")
+async def parse_status(profile_id: UUID, session: SessionDep) -> dict:
+    """Whether the last résumé parse for this profile failed, and why.
+
+    `profile.parse_failed` is written on the row's own audit trail (§3.7) precisely so
+    a profile whose parse failed does not look like one with an empty résumé. This is
+    that record surfacing on the dashboard: `parsed_json` alone cannot tell "never
+    uploaded" from "uploaded, and the parse blew up" apart.
+    """
+    profile = await session.get(Profile, profile_id)
+    if profile is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="not found")
+
+    row = await session.scalar(
+        select(Event)
+        .where(Event.user_id == profile.user_id, Event.type == _PARSE_FAILED)
+        .order_by(Event.id.desc())
+        .limit(1)
+    )
+    if row is None:
+        return {"failed": False, "error": None, "at": None}
+    return {"failed": True, "error": row.payload_json.get("error"), "at": row.created_at}
+
+
+@router.post("/{profile_id}/match", status_code=status.HTTP_202_ACCEPTED)
+async def trigger_match(profile_id: UUID, session: SessionDep) -> dict[str, str]:
+    """Ask a worker to score this profile against the pool right now, instead of
+    waiting for the next scheduled tick. Same shape as `POST /matches/{id}/tailor`:
+    202, no status guard — `match_profile` already no-ops on its own if the threshold
+    isn't set (Part 14), so a second press or a mistimed one just costs a queue
+    message, never a wrong write.
+
+    First retires this user's current `discovered` matches to `skipped`. Without this,
+    a match `match_profile` doesn't reconsider this run (dropped by a hard filter, or
+    simply outside the shortlist) keeps whatever score and status it had from a
+    *previous* profile's content, forever — the live case that found this: a résumé
+    swapped for a different person, and Portland/Python-flavoured matches at score 100
+    kept outranking every genuinely relevant one indefinitely, because nothing had
+    ever asked the matcher to reconsider them.
+
+    Safe rather than destructive: `match.py`'s own `_upsert` already treats
+    `discovered` and `skipped` as the two statuses a rescore is free to overwrite
+    (`_OVERWRITABLE`, matching/match.py) — a job this run reconsiders and still clears
+    the bar for is written straight back to `discovered` with a fresh score. Only a job
+    the run genuinely doesn't reconsider stays retired. Never touches `tailored`,
+    `queued`, `approved` or `applied` — those are real progress, not a stale score.
+    """
+    profile = await session.get(Profile, profile_id)
+    if profile is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="not found")
+
+    await session.execute(
+        update(Match)
+        .where(Match.user_id == profile.user_id, Match.status == MatchStatus.DISCOVERED.value)
+        .values(status=MatchStatus.SKIPPED.value)
+    )
+    await session.commit()
+
+    queue.enqueue(queue.MATCH_PROFILE, str(profile.id))
+    return {"profile_id": str(profile.id), "status": "queued"}
+
+
+@router.post("/{profile_id}/suggest-prefs", status_code=status.HTTP_202_ACCEPTED)
+async def trigger_suggest_prefs(profile_id: UUID, session: SessionDep) -> dict[str, str]:
+    """Ask a model to propose starting values for the preferences form, from the
+    résumé just parsed. Same 202/no-guard shape as the other two triggers above —
+    `suggest_prefs` no-ops on its own if there's no parsed résumé yet or no key."""
+    profile = await session.get(Profile, profile_id)
+    if profile is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="not found")
+
+    queue.enqueue(queue.SUGGEST_PREFS, str(profile.id))
+    return {"profile_id": str(profile.id), "status": "queued"}
+
+
+@router.get("/{profile_id}/suggested-prefs")
+async def suggested_prefs(profile_id: UUID, session: SessionDep) -> dict:
+    """The latest `profile.prefs_suggested` event for this profile's user, if any.
+
+    Never written to `prefs_json` here or anywhere but the user's own `PATCH` — this
+    is a proposal for the form to pre-fill, not a save.
+    """
+    profile = await session.get(Profile, profile_id)
+    if profile is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="not found")
+
+    row = await session.scalar(
+        select(Event)
+        .where(Event.user_id == profile.user_id, Event.type == _PREFS_SUGGESTED)
+        .order_by(Event.id.desc())
+        .limit(1)
+    )
+    if row is None:
+        return {
+            "titles": [],
+            "locations": [],
+            "remote_modes": [],
+            "must_have_keywords": [],
+            "exclude_keywords": [],
+            "at": None,
+        }
+    payload = row.payload_json
+    return {**payload, "at": row.created_at}

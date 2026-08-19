@@ -40,3 +40,26 @@ class Prefs(Schema):
     # Target roles in the user's own words. M4 embeds these alongside the résumé: what
     # someone wants next is often not what their last job title says.
     titles: list[str] = Field(default_factory=list)
+
+
+class PrefsSuggestion(Schema):
+    """A model's best guess at starting values for the form above, from a résumé that
+    was just parsed. Never auto-saved — `GET /profiles/{id}/suggested-prefs` only
+    fills the dashboard's inputs; the user's own `PATCH` (unchanged) is still what
+    writes `prefs_json`. Deliberately not `Prefs` itself: `titles` here means "what to
+    search for", not a claim about the candidate, so it may rephrase toward a target
+    role in a way `parsed_json` extraction never may (§3.3 is about claims shown to an
+    employer; this is a search filter the candidate can freely edit or ignore).
+    """
+
+    titles: list[str] = Field(default_factory=list)
+    locations: list[str] = Field(default_factory=list)
+    remote_modes: list[RemoteMode] = Field(default_factory=list)
+    # An AND filter (`Prefs.must_have_keywords`'s own docstring: "a job must mention
+    # all of these"). Capped at 1 in the schema, not just the prompt — a model that
+    # "helpfully" lists 3 real skills together over-constrains the search to almost
+    # nothing, since few postings happen to name all three. The validator is the
+    # guardrail here, same reasoning as §3.3's fabrication check: a prompt asking
+    # nicely is not enough to trust alone.
+    must_have_keywords: list[str] = Field(default_factory=list, max_length=1)
+    exclude_keywords: list[str] = Field(default_factory=list)
