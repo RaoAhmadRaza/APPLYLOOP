@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "ApplyLoop Autofill",
+  "version": "0.1.0",
+  "description": "Fills an approved match's Greenhouse application. Never submits.",
+  "action": { "default_popup": "popup.html" },
+  "permissions": ["activeTab", "scripting", "storage"],
+  "host_permissions": [
+    "http://localhost:8000/*",
+    "http://localhost:9000/*",
+    "https://job-boards.greenhouse.io/*",
+    "https://boards.greenhouse.io/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://job-boards.greenhouse.io/*/jobs/*",
+        "https://boards.greenhouse.io/*/jobs/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
