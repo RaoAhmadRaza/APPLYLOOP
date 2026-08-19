@@ -15,11 +15,12 @@ from uuid import UUID
 
 from db.events import record
 from db.models import Profile
+from schemas.resume import ParsedResume
 from storage import StorageError
 
 from workers import llm
 from workers.app import SessionLocal, app
-from workers.profiles import extract, parse
+from workers.profiles import extract, parse, suggest_prefs
 
 
 @app.task(
@@ -66,3 +67,46 @@ def parse_profile(profile_id: str) -> dict[str, Any] | None:
 
         session.commit()
         return asdict(result)
+
+
+@app.task(name="workers.tasks.profiles.suggest_prefs")
+def suggest_prefs_task(profile_id: str) -> dict[str, Any] | None:
+    """Ask a model for starting search-preference values from a just-parsed résumé.
+
+    Not on the critical path M4 depends on — `prefs_json` is only ever written by the
+    user's own `PATCH` (unchanged). This just proposes values for that form. No retry:
+    a paid call failing twice for a nice-to-have is a reason to show the user an empty
+    form, not to spend a third time trying to avoid one.
+    """
+    if not llm.is_configured():
+        with SessionLocal() as session:
+            record(
+                session,
+                "profile.prefs_suggestion_skipped",
+                {"reason": "no LLM API key configured"},
+            )
+            session.commit()
+        return None
+
+    with SessionLocal() as session:
+        profile = session.get(Profile, UUID(profile_id))
+        if profile is None or not profile.parsed_json:
+            return None
+
+        resume = ParsedResume.model_validate(profile.parsed_json)
+        try:
+            suggestion = suggest_prefs.suggest(resume)
+        except llm.LlmError as error:
+            record(
+                session,
+                "profile.prefs_suggestion_failed",
+                {"error": str(error)[:500]},
+                user_id=profile.user_id,
+            )
+            session.commit()
+            return None
+
+        payload = suggestion.model_dump(mode="json")
+        record(session, "profile.prefs_suggested", payload, user_id=profile.user_id)
+        session.commit()
+        return payload

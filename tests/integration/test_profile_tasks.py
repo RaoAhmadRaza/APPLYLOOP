@@ -48,6 +48,45 @@ def test_the_task_is_registered_under_its_dotted_name(celery_app: Any) -> None:
     assert PARSE_PROFILE in celery_app.tasks
 
 
+def test_the_suggest_prefs_task_is_registered_under_its_dotted_name(celery_app: Any) -> None:
+    from api.queue import SUGGEST_PREFS
+
+    assert SUGGEST_PREFS == "workers.tasks.profiles.suggest_prefs"
+    assert SUGGEST_PREFS in celery_app.tasks
+
+
+def test_suggest_prefs_no_ops_without_an_api_key(celery_app: Any, session: Session) -> None:
+    import workers.tasks.profiles as tasks
+
+    assert tasks.suggest_prefs_task(str(uuid4())) is None
+
+    skipped = session.scalars(
+        select(Event)
+        .where(Event.type == "profile.prefs_suggestion_skipped")
+        .order_by(Event.id.desc())
+    ).first()
+    assert skipped is not None
+    assert skipped.payload_json["reason"] == "no LLM API key configured"
+
+
+def test_suggest_prefs_no_ops_without_a_parsed_resume(
+    celery_app: Any, session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No parsed résumé, nothing to suggest from — cheaper and more honest than
+    calling a model over an empty profile."""
+    import workers.tasks.profiles as tasks
+
+    monkeypatch.setattr(tasks.llm, "is_configured", lambda: True)
+
+    # A random id stands in for "not found"; the check is the same either way —
+    # `session.get` returns None, or a real row's `parsed_json` is empty. The
+    # full-row case needs a row a *separate* connection can see (SessionLocal opens
+    # its own), which the rollback-wrapped `session` fixture deliberately can't give
+    # it — see its docstring. The plain function this delegates to is unit-tested
+    # directly in test_suggest_prefs.py instead.
+    assert tasks.suggest_prefs_task(str(uuid4())) is None
+
+
 def test_parsing_has_no_beat_entry(celery_app: Any) -> None:
     """Deliberate. Parsing fires on upload, not on a clock — a schedule here would
     re-parse every profile forever, spending a model call each time to write the rows
