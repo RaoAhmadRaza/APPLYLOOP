@@ -86,9 +86,12 @@ def profile_vector(profile: ProfileRead, prefs: Prefs, resume: str) -> tuple[lis
 def ensure(session: Session, job_ids: list[uuid.UUID]) -> tuple[int, int]:
     """Embed whichever of these jobs has no vector yet. Returns (written, tokens).
 
-    Commits nothing. The missing-set query runs **before** the provider call, so a second
-    run over an unchanged pool spends nothing — which is also what makes the warm and
-    cold cost figures the gate reports mean different things.
+    **Commits once per batch**, unlike every other function in this stage — a vector that
+    has been paid for is not something to hold hostage to the rest of the run finishing.
+    See the loop below. The missing-set query runs **before** the provider call, so a
+    second run over an unchanged pool spends nothing — which is also what makes the warm
+    and cold cost figures the gate reports mean different things, and is what lets a
+    resumed run pick up where a refused one stopped.
     """
     if not job_ids:
         return 0, 0
@@ -126,8 +129,15 @@ def ensure(session: Session, job_ids: list[uuid.UUID]) -> tuple[int, int]:
                 .returning(JobEmbedding.job_id)
             ).all()
         )
+        # Each batch is durable before the next one is asked for. A provider refusing
+        # batch twelve must not throw away the eleven already paid for — and on a cold
+        # pool that refusal is the ordinary case, not the exception: 8,871 candidates
+        # need ~7.3M tokens against a ceiling of 1M per minute. Under the task's single
+        # trailing commit the whole run rolled back, so Celery's retry restarted from
+        # zero, was refused at the same batch, and three attempts made no progress at
+        # all. Committing per batch is what turns those retries into convergence.
+        session.commit()
 
-    session.flush()
     return written, tokens
 
 

@@ -227,6 +227,39 @@ def test_a_second_run_embeds_nothing_and_costs_nothing(
     assert len(_model["embedded"]) <= 1
 
 
+def test_a_provider_failure_keeps_the_batches_already_paid_for(
+    session: Session, _model: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A rate limit partway through a cold pool must not discard the vectors already
+    bought.
+
+    The live case: 8,871 candidates need ~7.3M embedding tokens and the provider's
+    ceiling is 1M per minute, so `ensure` is refused around the twelfth batch every
+    time. While every batch shared one transaction the task committed at the very end,
+    that raise rolled back all of them — and Celery's retry restarted from zero, hit the
+    same ceiling at the same place, and left the run with nothing to show on any of its
+    three attempts. Progress has to survive the failure or the retry is theatre.
+    """
+    job_ids = [_job(session).id for _ in range(embed.BATCH + 1)]
+    stub = llm.embed
+    calls = {"n": 0}
+
+    def refused_after_the_first_batch(texts: list[str]) -> tuple[list[list[float]], int]:
+        calls["n"] += 1
+        if calls["n"] > 1:
+            raise llm.LlmError("429 rate limit exceeded")
+        return stub(texts)
+
+    monkeypatch.setattr(llm, "embed", refused_after_the_first_batch)
+
+    with pytest.raises(llm.LlmError):
+        embed.ensure(session, job_ids)
+
+    # Rollback is what a failed task does. The first batch has to outlive it.
+    session.rollback()
+    assert session.scalar(select(func.count()).select_from(JobEmbedding)) == embed.BATCH
+
+
 def test_a_job_already_scored_is_not_paid_for_twice(
     session: Session, _model: dict[str, Any]
 ) -> None:
