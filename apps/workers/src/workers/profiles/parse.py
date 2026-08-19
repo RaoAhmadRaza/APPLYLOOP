@@ -138,38 +138,53 @@ def _resume_text(profile: Profile) -> str:
 
 
 def _promote(profile: Profile, resume: ParsedResume, years: float | None) -> list[str]:
-    """Fill the columns M4 filters on, without overwriting anything a user set.
+    """Fill the columns M4 filters on, from the résumé that was just parsed.
+
+    Always overwrites, on purpose: this function only ever runs in direct response to
+    a résumé upload (`parse_profile` has no beat entry and nothing else calls it), so
+    every run *is* the user deliberately handing over a new source document — a
+    stronger, fresher signal than whatever was on the row before. The earlier version
+    filled a column only if it was empty, to protect a value a user set by hand from
+    an unrelated re-parse clobbering it — but there is no unrelated re-parse here to
+    protect against, and the guard's real effect was that a genuine résumé swap (a new
+    person entirely, in this repo's own live test) left every hard filter — location,
+    seniority, work auth — permanently pinned to whoever uploaded first, silently
+    scoring every match against the wrong person from then on.
+
+    ponytail: what this gives up is a manual edit (locations/work_auth/salary_floor
+    via `PATCH /profiles/{id}`, e.g. through the dashboard's Preferences form)
+    surviving a later résumé re-upload. Given parse_profile fires only on upload, the
+    upload itself is the more authoritative, more recent signal — but a real user who
+    wants "keep my hand-set work auth even after I re-upload" needs the fix the
+    original comment named: track which fields were user-set (vs parser-set) and skip
+    only those. Revisit if a real user hits *that* edge instead.
 
     Returns the names actually written, so the event says what this run decided rather
     than what it looked at.
     """
     promoted: list[str] = []
 
-    if profile.seniority is None:
-        band = derive.seniority(resume, years)
-        if band is not None:
-            profile.seniority = band.value
-            promoted.append("seniority")
+    band = derive.seniority(resume, years)
+    if band is not None:
+        profile.seniority = band.value
+        promoted.append("seniority")
 
-    if profile.work_auth is None:
-        auth = derive.work_auth(resume)
-        if auth is not None:
-            profile.work_auth = auth.value
-            promoted.append("work_auth")
+    auth = derive.work_auth(resume)
+    if auth is not None:
+        profile.work_auth = auth.value
+        promoted.append("work_auth")
 
-    if profile.work_auth_regions is None:
-        regions = derive.work_auth_regions(resume)
-        if regions is not None:
-            # `[]` is a real answer — authorisation stated, and it resolves nowhere — so
-            # this writes it, unlike the columns above where falsy means "nothing found".
-            profile.work_auth_regions = regions
-            promoted.append("work_auth_regions")
+    regions = derive.work_auth_regions(resume)
+    if regions is not None:
+        # `[]` is a real answer — authorisation stated, and it resolves nowhere — so
+        # this writes it, unlike the columns above where falsy means "nothing found".
+        profile.work_auth_regions = regions
+        promoted.append("work_auth_regions")
 
-    if not profile.locations:
-        places = derive.locations(resume)
-        if places:
-            profile.locations = places
-            promoted.append("locations")
+    places = derive.locations(resume)
+    if places:
+        profile.locations = places
+        promoted.append("locations")
 
     # `salary_floor` is deliberately absent. A résumé does not state one, and inferring
     # it from a title would be exactly the invented value this stage exists to prevent.
