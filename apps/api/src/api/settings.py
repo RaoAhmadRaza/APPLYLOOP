@@ -38,6 +38,11 @@ class Settings(BaseSettings):
     # footgun the moment M1 lands 100k rows.
     max_page_size: int = 100
 
+    # M8's dashboard (`apps/web`) is a browser app on its own origin, so every fetch
+    # it makes is a CORS request. The extension is exempt (host_permissions bypasses
+    # CORS for extension-context fetches), so this is only for the dashboard.
+    cors_origins: list[str] = ["http://localhost:3000"]
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
