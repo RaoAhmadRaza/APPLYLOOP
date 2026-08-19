@@ -557,3 +557,61 @@ def test_embedding_nothing_makes_no_request(monkeypatch: pytest.MonkeyPatch) -> 
     _patch(monkeypatch, httpx.MockTransport(explode))
 
     assert llm.embed([]) == ([], 0)
+
+
+def test_a_rate_limited_batch_waits_the_provider_s_own_delay_and_succeeds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A TPM refusal is a wait, not a failure — and the provider says how long to wait.
+
+    Measured against the live endpoint 2026-08-19: `Limit 1000000, Used 878603,
+    Requested 138109. Please try again in 1.002s`, code `rate_limit_exceeded`. A cold
+    pool crosses a per-minute ceiling by arithmetic, so this is the ordinary path
+    through a first run rather than an incident. Retrying is what makes one pass finish
+    the backlog instead of seven.
+    """
+    attempts: list[float] = []
+    slept: list[float] = []
+    monkeypatch.setattr(llm.time, "sleep", lambda seconds: slept.append(seconds))
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        attempts.append(1.0)
+        if len(attempts) == 1:
+            return httpx.Response(
+                429,
+                headers={"retry-after": "2"},
+                json={"error": {"code": "rate_limit_exceeded", "message": "TPM"}},
+            )
+        return httpx.Response(
+            200,
+            json={
+                "data": [{"index": 0, "embedding": [1.0, 2.0]}],
+                "usage": {"prompt_tokens": 7},
+            },
+        )
+
+    _patch(monkeypatch, httpx.MockTransport(handler))
+
+    vectors, tokens = llm.embed(["a"])
+
+    assert vectors == [[1.0, 2.0]]
+    assert tokens == 7
+    assert len(attempts) == 2
+    assert slept == [2.0], "the provider's own retry-after is what to honour, not a guess"
+
+
+def test_a_rate_limit_that_never_clears_still_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Bounded, so a genuinely capped key fails loudly instead of sleeping forever."""
+    attempts: list[float] = []
+    monkeypatch.setattr(llm.time, "sleep", lambda seconds: None)
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        attempts.append(1.0)
+        return httpx.Response(429, json={"error": {"code": "rate_limit_exceeded"}})
+
+    _patch(monkeypatch, httpx.MockTransport(handler))
+
+    with pytest.raises(llm.LlmError, match="429"):
+        llm.embed(["a"])
+
+    assert len(attempts) == llm.RATE_LIMIT_ATTEMPTS
